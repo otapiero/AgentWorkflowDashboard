@@ -1,0 +1,42 @@
+{
+  "name": "mission-control",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal local task cockpit for driving AI coding agents through the Acme pipeline",
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "tsx watch src/server/index.ts",
+    "dev:web": "vite",
+    "build": "vite build",
+    "start": "tsx src/server/index.ts",
+    "mc": "tsx src/orchestrator/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/static": "^8.2.0",
+    "execa": "^9.6.0",
+    "fastify": "^5.4.0",
+    "js-yaml": "^4.1.0",
+    "zod": "^4.0.5"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^24.0.10",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "concurrently": "^9.2.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.4"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  }
+}

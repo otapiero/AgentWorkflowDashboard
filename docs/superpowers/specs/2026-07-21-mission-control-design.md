@@ -20,13 +20,22 @@ Everything in this section was confirmed by running the command, not assumed. `p
 | `gh` identity | — | authenticated as **`otapiero`** (scopes: repo, workflow, read:org, gist, read:packages) |
 | Branch prefix | `ouriel` | `ouriel` ✓ — a personal convention, *not* the GitHub login |
 | Copilot review bot login | "verify it" | **`copilot-pull-request-reviewer`** (`__typename: Bot`) |
-| `copilot` CLI | assumed present | **not installed** |
+| `copilot` CLI | assumed present | not installed at design time; **installed 2026-07-21, v1.0.73** |
 | `claude` CLI | — | 2.1.183 |
 | `pwsh` | — | 7.6.0 |
 | `wt` | — | present at `%LOCALAPPDATA%\Microsoft\WindowsApps\wt.exe` |
 | Node / npm | — | v24.18.0 / 11.18.0 |
 
 **Confirmed `claude` flags:** positional `prompt`, `--append-system-prompt <prompt>`, `--model`, `-p/--print`, `--session-id <uuid>`, `-r/--resume`, `-n/--name`. There is **no** `--append-system-prompt-file` in this version — the instruction string must be passed inline.
+
+**Confirmed `copilot` flags (v1.0.73):** `-i, --interactive <prompt>` starts an interactive session and auto-submits the prompt — this is the spawn path. `-p, --prompt <text>` is the non-interactive path. `--model <model>`, `-n/--name`, `--resume`, `-C <directory>` all exist. **There is no `--append-system-prompt` equivalent**, so standing rules must be prepended into the prompt text for this agent.
+
+This makes the two agents differ in two dimensions that the config must express rather than hard-code:
+
+| | `claude` | `copilot` |
+|---|---|---|
+| Prompt delivery | positional argument | `-i <prompt>` flag |
+| Standing rules | `--append-system-prompt <text>` | none — prepend into prompt body |
 
 **Confirmed `gh` shapes:**
 - `gh issue list --assignee @me --state open --json number,title` works.
