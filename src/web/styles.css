@@ -1,0 +1,573 @@
+/*
+  Mission Control — an instrument panel, not a task board.
+
+  The palette follows control-room convention rather than decoration: amber is
+  "operator action required", which is exactly what needsYou means; red is a
+  fault; green is nominal; cyan is a live process. Scanning the status rails
+  down the left edge of each card is meant to answer "what needs me" without
+  reading a word.
+
+  Instrumentation is set in Cascadia Mono — the same face as the Windows
+  Terminal tabs this tool spawns. Human prose is set in Segoe.
+*/
+
+:root {
+  --bg: #12161c;
+  --panel: #1a212a;
+  --panel-hi: #212a35;
+  --line: #2b3542;
+  --line-soft: #222b36;
+
+  --ink: #ccd6e2;
+  --ink-strong: #f2f6fa;
+  --dim: #6d7d90;
+  --dimmer: #4a5768;
+
+  --attention: #f0a830; /* needs you */
+  --nominal: #4fb286; /* green / satisfied */
+  --fault: #e2574c; /* failure */
+  --live: #3fa7d6; /* a session is running */
+
+  --mono: "Cascadia Mono", "Cascadia Code", ui-monospace, Consolas, monospace;
+  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+
+  --rail: 3px;
+  --radius: 3px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--live);
+  outline-offset: 2px;
+}
+
+/* ---------- shell ---------- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  flex-wrap: wrap;
+}
+
+.statusbar-brand {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-strong);
+}
+
+.statusbar-repo {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.statusbar-spacer {
+  flex: 1;
+}
+
+.statusbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* connection lamp — a real indicator, so it is literal about its state */
+.lamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.lamp::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dimmer);
+}
+
+.lamp.is-on::before {
+  background: var(--nominal);
+  box-shadow: 0 0 6px var(--nominal);
+}
+
+.lamp.is-off::before {
+  background: var(--fault);
+}
+
+/* ---------- controls ---------- */
+
+.btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 11px;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--panel-hi);
+  border-color: var(--dimmer);
+}
+
+.btn:disabled {
+  color: var(--dimmer);
+  cursor: not-allowed;
+}
+
+.btn.is-primary {
+  border-color: var(--attention);
+  color: var(--attention);
+}
+
+.btn.is-primary:hover:not(:disabled) {
+  background: rgba(240, 168, 48, 0.12);
+}
+
+.btn.is-active {
+  background: var(--attention);
+  border-color: var(--attention);
+  color: #1a1206;
+}
+
+.btn.is-danger:hover:not(:disabled) {
+  border-color: var(--fault);
+  color: var(--fault);
+  background: rgba(226, 87, 76, 0.1);
+}
+
+.field {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 9px;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.field::placeholder {
+  color: var(--dimmer);
+}
+
+/* ---------- board ---------- */
+
+.board {
+  flex: 1;
+  display: flex;
+  gap: 1px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--line-soft);
+}
+
+/*
+  Lanes share the viewport rather than taking a fixed width: the whole point of
+  the screen is seeing every phase at once, so the full pipeline must fit
+  without horizontal scrolling until the window is genuinely too narrow.
+*/
+.lane {
+  flex: 1 1 0;
+  min-width: 152px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  min-height: 0;
+}
+
+.lane-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 11px 12px 9px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.lane-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.lane-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dimmer);
+  margin-left: auto;
+}
+
+/* a lane holding work that needs you announces itself in the header */
+.lane.has-attention .lane-name {
+  color: var(--attention);
+}
+
+.lane-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lane-empty {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dimmer);
+  padding: 6px 4px;
+}
+
+/* ---------- card ---------- */
+
+.card {
+  position: relative;
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 10px 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.card:hover {
+  background: var(--panel-hi);
+  border-color: var(--line);
+}
+
+.card.is-selected {
+  border-color: var(--live);
+}
+
+/* the signature: one rail encodes the card's whole state */
+.card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--rail);
+  border-radius: var(--radius) 0 0 var(--radius);
+  background: var(--dimmer);
+}
+
+.card.state-attention::before {
+  background: var(--attention);
+}
+
+.card.state-fault::before {
+  background: var(--fault);
+}
+
+.card.state-nominal::before {
+  background: var(--nominal);
+}
+
+.card.state-live::before {
+  background: var(--live);
+  animation: rail-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes rail-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.32;
+  }
+}
+
+.card-issue {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.card-title {
+  margin: 3px 0 8px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ink-strong);
+}
+
+.card-reason {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--attention);
+  margin-bottom: 7px;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  padding: 2px 5px;
+  border-radius: 2px;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.badge.tone-good {
+  color: var(--nominal);
+  border-color: rgba(79, 178, 134, 0.4);
+}
+
+.badge.tone-warn {
+  color: var(--attention);
+  border-color: rgba(240, 168, 48, 0.4);
+}
+
+.badge.tone-bad {
+  color: var(--fault);
+  border-color: rgba(226, 87, 76, 0.45);
+}
+
+.badge.tone-busy {
+  color: var(--live);
+  border-color: rgba(63, 167, 214, 0.45);
+}
+
+/* ---------- drawer ---------- */
+
+.drawer-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 9, 13, 0.6);
+  border: 0;
+  padding: 0;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(460px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+}
+
+.drawer-head {
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+}
+
+.drawer-issue {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.drawer-title {
+  margin: 6px 0 0;
+  font-size: 17px;
+  line-height: 1.3;
+  color: var(--ink-strong);
+  font-weight: 600;
+}
+
+.drawer-branch {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dimmer);
+  margin-top: 7px;
+  word-break: break-all;
+}
+
+.drawer-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.drawer-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+  margin-bottom: 9px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.row > .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 66px;
+  resize: vertical;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.plan {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 11px;
+  background: var(--bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.7;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.meta-row dt {
+  color: var(--dimmer);
+}
+
+.meta-row dd {
+  margin: 0;
+  text-align: right;
+  word-break: break-all;
+}
+
+.link {
+  color: var(--live);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.note {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--dim);
+}
+
+.error {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fault);
+  padding: 8px 10px;
+  border: 1px solid rgba(226, 87, 76, 0.4);
+  border-radius: var(--radius);
+  background: rgba(226, 87, 76, 0.08);
+}
+
+.history {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .lane {
+    flex-basis: 200px;
+  }
+}
