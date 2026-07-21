@@ -1,0 +1,96 @@
+# Mission Control configuration.
+#
+# Copied to %USERPROFILE%\.mc\config.yaml by scripts/install.ps1.
+# Everything workflow-shaped lives here so it can change without code edits.
+
+repo:
+  # Absolute path to the local clone. Note the folder name differs from the
+  # GitHub repo name on this machine.
+  path: 'C:\src\widgets'
+  owner: 'acme'
+  name: 'widgets'
+  baseBranch: 'dev'
+  # Branch prefix is a personal convention and is NOT the GitHub login
+  # (gh is authenticated as otapiero).
+  branchPrefix: 'ouriel'
+
+github:
+  auth: gh-cli
+  pollIntervalSeconds: 30
+  # Verified against real review threads on this repo.
+  copilotReviewerLogin: 'copilot-pull-request-reviewer'
+
+agents:
+  # Verified against claude 2.1.183: prompt is positional, and standing rules
+  # go through --append-system-prompt.
+  claude:
+    launch: 'claude'
+    promptMode: positional
+    modelFlag: '--model'
+    instructionMode: flag
+    instructionFlag: '--append-system-prompt'
+    model: default
+
+  # Verified against copilot 1.0.73: -i starts an interactive session with the
+  # prompt preloaded, and there is no system-prompt flag, so standing rules
+  # have to be prepended into the prompt body instead.
+  copilot:
+    launch: 'copilot'
+    promptMode: flag
+    promptFlag: '-i'
+    modelFlag: '--model'
+    instructionMode: inline
+    model: default
+
+pipeline:
+  - id: plan
+    label: Plan
+    actor: claude
+    command: mc-planner
+    spawnable: true
+    gate: { type: manual }
+
+  - id: implement
+    label: Implement
+    actor: claude
+    command: mc-implementer
+    spawnable: true
+    repeatable: true
+    gate: { type: manual }
+
+  - id: publish
+    label: Publish
+    actor: claude
+    command: mc-publish
+    spawnable: true
+    gate: { type: auto, signal: pr_exists }
+
+  - id: ci
+    label: CI
+    actor: none
+    gate: { type: auto, signal: checks_green }
+    onFail: { offerSpawnPhase: ci_fix }
+
+  - id: copilot_review
+    label: Copilot review
+    actor: claude
+    command: mc-fix-review
+    spawnable: true
+    repeatable: true
+    gate: { type: auto, signal: copilot_comments_resolved }
+
+  - id: dev_review
+    label: Dev review
+    actor: claude
+    command: mc-fix-review
+    spawnable: true
+    repeatable: true
+    gate: { type: auto, signal: approved_and_threads_resolved }
+
+  - id: merge
+    label: Merge
+    actor: you
+    gate: { type: manual }
+
+server:
+  port: 4317
