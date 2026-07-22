@@ -1,7 +1,24 @@
 import { gatherFacts } from './facts.ts';
 import { reconcile } from './reconcile.ts';
-import { listTasks, upsertTask } from './state.ts';
-import type { Config, TaskWithDerived } from '../shared/types.ts';
+import { getPhaseDefaults, listTasks, upsertTask } from './state.ts';
+import { resolveAgentModel } from './agents.ts';
+import type { Config, DerivedState, TaskRecord, TaskWithDerived } from '../shared/types.ts';
+
+/**
+ * The agent + model to show on a card: what a spawn at the card's current phase
+ * would use. Only agent phases carry a chip; resting phases like CI or Merge do
+ * not, so the board stays uncluttered.
+ */
+function pinnedFor(
+  config: Config,
+  task: TaskRecord,
+  derived: DerivedState,
+): { agent: string | null; model: string | null } {
+  const phase = config.pipeline.find((p) => p.id === derived.displayPhase);
+  const isAgentPhase = phase?.actor === 'claude' || phase?.actor === 'copilot';
+  if (!isAgentPhase) return { agent: null, model: null };
+  return resolveAgentModel(config, task, derived.displayPhase, getPhaseDefaults());
+}
 
 /**
  * Recompute the whole board from durable facts.
@@ -31,12 +48,13 @@ export async function reconcileAll(config: Config): Promise<TaskWithDerived[]> {
         ) {
           upsertTask(updated);
         }
-        return { ...updated, derived };
+        return { ...updated, derived, pinned: pinnedFor(config, updated, derived) };
       } catch (err) {
         // One unreachable task must not blank the whole board.
         console.error(`[mc] reconcile failed for #${task.issue}:`, err);
         return {
           ...task,
+          pinned: { agent: null, model: null },
           derived: reconcile(
             {
               issue: task.issue,

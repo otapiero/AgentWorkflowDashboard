@@ -4,6 +4,8 @@ import { execa } from 'execa';
 
 import { promptPath, runPhaseScript, taskDir, worktreePath } from './paths.ts';
 import { buildPrompt, writePromptFile } from './prompt.ts';
+import { resolveAgentModel } from './agents.ts';
+import { getPhaseDefaults } from './state.ts';
 import type {
   AgentProfile,
   Config,
@@ -138,16 +140,23 @@ export async function spawnPhase(
   phase: PhaseConfig,
   options: SpawnOptions = {},
 ): Promise<SpawnRecord> {
-  const agentName = options.agent ?? task.overrides?.agent ?? phase.actor;
-  const profile = config.agents[agentName];
-  if (!profile) {
-    throw new Error(
-      `Phase '${phase.id}' wants agent '${agentName}', which has no profile in config.yaml.`,
-    );
-  }
   if (!phase.command) {
     throw new Error(`Phase '${phase.id}' has no command to render a prompt from.`);
   }
+
+  const { agent, model } = resolveAgentModel(
+    config,
+    task,
+    phase.id,
+    getPhaseDefaults(),
+    { agent: options.agent, model: options.model },
+  );
+  if (!agent) {
+    throw new Error(
+      `Phase '${phase.id}' has no agent to spawn. Pin one on the task or set a phase default.`,
+    );
+  }
+  const profile = config.agents[agent]!;
 
   const promptText = buildPrompt(phase.command, task, {
     customInstructions:
@@ -169,7 +178,7 @@ export async function spawnPhase(
     exe: profile.launch,
     args: buildAgentArgs(profile, {
       instructions: STANDING_RULES,
-      model: options.model ?? task.overrides?.model,
+      model: model ?? undefined,
     }),
     promptToken: PROMPT_TOKEN,
   };
@@ -196,7 +205,7 @@ export async function spawnPhase(
 
   return {
     phase: phase.id,
-    agent: agentName,
+    agent: model ? `${agent} (${model})` : agent,
     startedAt: new Date().toISOString(),
     command: `wt ${wtArgs.join(' ')}`,
   };

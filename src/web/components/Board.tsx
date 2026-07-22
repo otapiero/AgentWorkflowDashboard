@@ -1,24 +1,26 @@
 import { Lane } from './Lane.tsx';
+import type { BoardConfig } from '../api.ts';
 import type { PhaseConfig, Phase, TaskWithDerived } from '../../shared/types.ts';
 
 interface Props {
-  pipeline: PhaseConfig[];
+  config: BoardConfig;
   tasks: TaskWithDerived[];
   selectedIssue: number | null;
   onOpen: (issue: number) => void;
+  onEditDefault: (phaseId: string) => void;
 }
 
 /**
  * Lanes are phases; a card sits in the lane of its displayPhase.
  *
  * Inbox and Done bracket the configured pipeline: they are states rather than
- * steps, so they are not in config.yaml, but a task has to be able to rest in
+ * steps, so they are not in config.yaml, but a task must be able to rest in
  * either of them.
  */
-export function Board({ pipeline, tasks, selectedIssue, onOpen }: Props) {
+export function Board({ config, tasks, selectedIssue, onOpen, onEditDefault }: Props) {
   const lanes: PhaseConfig[] = [
     { id: 'inbox', label: 'Inbox', actor: 'you', gate: { type: 'manual' } },
-    ...pipeline,
+    ...config.pipeline,
     { id: 'done', label: 'Done', actor: 'none', gate: { type: 'manual' } },
   ];
 
@@ -35,8 +37,10 @@ export function Board({ pipeline, tasks, selectedIssue, onOpen }: Props) {
           key={phase.id}
           phase={phase}
           tasks={byPhase.get(phase.id) ?? []}
+          config={config}
           selectedIssue={selectedIssue}
           onOpen={onOpen}
+          onEditDefault={onEditDefault}
         />
       ))}
     </div>

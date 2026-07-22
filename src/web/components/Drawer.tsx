@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 
 import { api } from '../api.ts';
 import type { BoardConfig } from '../api.ts';
+import { AgentPicker } from './AgentPicker.tsx';
+import { AgentChip, IconPlay } from './bits.tsx';
 import type { Phase, TaskWithDerived } from '../../shared/types.ts';
 
 interface Props {
@@ -12,18 +14,27 @@ interface Props {
 }
 
 /**
- * Everything about one task, and every action available on it.
+ * Everything about one task, and every action on it.
  *
- * Actions are deliberately never disabled purely because a phase is not the
- * current one — the human is the manager and may re-run any step. What is
- * disabled is what genuinely cannot work, such as spawning a phase whose
- * prompt has no command configured.
+ * Actions are not disabled merely because a phase is not the current one — the
+ * human is the manager and may re-run any step. What is disabled is what
+ * genuinely cannot work.
  */
 export function Drawer({ task, config, onClose, onChanged }: Props) {
   const [instructions, setInstructions] = useState('');
   const [plan, setPlan] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // per-task pin
+  const [pinAgent, setPinAgent] = useState(task.overrides?.agent ?? '');
+  const [pinModel, setPinModel] = useState(task.overrides?.model ?? '');
+
+  // one-time override for the next spawn
+  const [onceOpen, setOnceOpen] = useState(false);
+  const [onceAgent, setOnceAgent] = useState('');
+  const [onceModel, setOnceModel] = useState('');
+
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -41,10 +52,17 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
   useEffect(() => {
     setPlan(null);
     setInstructions('');
+    setPinAgent(task.overrides?.agent ?? '');
+    setPinModel(task.overrides?.model ?? '');
+    setOnceOpen(false);
+    setOnceAgent('');
+    setOnceModel('');
     api
       .plan(task.issue)
       .then((r) => setPlan(r.content))
       .catch(() => setPlan(null));
+    // Reset only when switching to a different task.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.issue]);
 
   async function run(label: string, action: () => Promise<unknown>) {
@@ -60,15 +78,27 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
     }
   }
 
+  function spawn(phase: Phase) {
+    return run(phase, () =>
+      api.spawn(task.issue, phase, {
+        customInstructions: instructions.trim() || undefined,
+        agent: onceOpen ? onceAgent || undefined : undefined,
+        model: onceOpen ? onceModel || undefined : undefined,
+      }),
+    );
+  }
+
   const spawnable = config.pipeline.filter((p) => p.spawnable && p.command);
   const issueUrl = `https://github.com/${config.repo.owner}/${config.repo.name}/issues/${task.issue}`;
+  const pinDirty =
+    pinAgent !== (task.overrides?.agent ?? '') || pinModel !== (task.overrides?.model ?? '');
 
   return (
     <>
-      <button className="drawer-scrim" onClick={onClose} aria-label="Close details" />
+      <button className="scrim" onClick={onClose} aria-label="Close details" />
       <aside className="drawer" role="dialog" aria-label={`Issue ${task.issue}`}>
         <header className="drawer-head">
-          <div className="drawer-issue">
+          <div className="drawer-eyebrow">
             <span>#{task.issue}</span>
             <a className="link" href={issueUrl} target="_blank" rel="noreferrer">
               issue
@@ -79,7 +109,7 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
               </a>
             )}
             <span style={{ marginLeft: 'auto' }}>
-              <button ref={closeRef} className="btn" onClick={onClose}>
+              <button ref={closeRef} className="btn is-sm is-ghost" onClick={onClose}>
                 Close
               </button>
             </span>
@@ -89,15 +119,18 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
         </header>
 
         {error && (
-          <div className="drawer-section">
+          <div className="section">
             <p className="error">{error}</p>
           </div>
         )}
 
-        <section className="drawer-section">
-          <div className="drawer-label">Status</div>
+        <section className="section">
+          <div className="section-label">Status</div>
           <div className="badges">
-            {task.derived.badges.length === 0 ? (
+            {task.pinned.agent && (
+              <AgentChip agent={task.pinned.agent} model={task.pinned.model} />
+            )}
+            {task.derived.badges.length === 0 && !task.pinned.agent ? (
               <span className="badge">not started</span>
             ) : (
               task.derived.badges.map((b) => (
@@ -108,14 +141,14 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
             )}
           </div>
           {task.derived.needsYouReason && (
-            <p className="card-reason" style={{ marginTop: 10, marginBottom: 0 }}>
+            <p className="card-status status-attention" style={{ marginTop: 11, marginBottom: 0 }}>
               {task.derived.needsYouReason}
             </p>
           )}
         </section>
 
-        <section className="drawer-section">
-          <div className="drawer-label">Run a phase</div>
+        <section className="section">
+          <div className="section-label">Run a phase</div>
           <div className="stack">
             <textarea
               className="field textarea"
@@ -127,29 +160,81 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
               {spawnable.map((phase) => (
                 <button
                   key={phase.id}
-                  className={`btn${
+                  className={`btn is-sm${
                     phase.id === task.derived.derivedPhase ? ' is-primary' : ''
                   }`}
                   disabled={busy !== null}
-                  onClick={() =>
-                    run(phase.id, () =>
-                      api.spawn(task.issue, phase.id, instructions.trim() || undefined),
-                    )
-                  }
+                  onClick={() => spawn(phase.id)}
                 >
-                  {busy === phase.id ? 'Opening…' : phase.label}
+                  <IconPlay /> {busy === phase.id ? 'Opening…' : phase.label}
                 </button>
               ))}
             </div>
-            <p className="note">
+
+            {!onceOpen ? (
+              <button className="disclose" onClick={() => setOnceOpen(true)}>
+                Run once with a different agent…
+              </button>
+            ) : (
+              <div className="stack">
+                <AgentPicker
+                  agents={config.agents}
+                  agent={onceAgent}
+                  model={onceModel}
+                  onAgent={setOnceAgent}
+                  onModel={setOnceModel}
+                  inheritLabel="Use pinned agent"
+                  compact
+                />
+                <p className="hint">
+                  Applies to the next phase you launch only. Nothing is saved.
+                </p>
+              </div>
+            )}
+
+            <p className="hint">
               Opens a Windows Terminal tab and hands the session over. The tab keeps
               running if you close Mission Control.
             </p>
           </div>
         </section>
 
-        <section className="drawer-section">
-          <div className="drawer-label">Mark progress</div>
+        <section className="section">
+          <div className="section-label">Pinned agent &amp; model</div>
+          <div className="stack">
+            <AgentPicker
+              agents={config.agents}
+              agent={pinAgent}
+              model={pinModel}
+              onAgent={setPinAgent}
+              onModel={setPinModel}
+              inheritLabel="Use phase default"
+            />
+            <div className="actions">
+              <button
+                className="btn is-sm"
+                disabled={busy !== null || !pinDirty}
+                onClick={() =>
+                  run('pin', () =>
+                    api.overrides(task.issue, {
+                      agent: pinAgent || undefined,
+                      model: pinModel || undefined,
+                      instructions: task.overrides?.instructions,
+                    }),
+                  )
+                }
+              >
+                {busy === 'pin' ? 'Saving…' : 'Save pin'}
+              </button>
+            </div>
+            <p className="hint">
+              Applies to every run of this task, unless overridden for a single run above.
+            </p>
+          </div>
+        </section>
+
+        <section className="section">
+          <div className="section-label">Mark progress</div>
           <div className="actions">
             {config.pipeline
               .filter((p) => p.gate.type === 'manual' && p.id !== 'merge')
@@ -158,7 +243,7 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
                 return (
                   <button
                     key={phase.id}
-                    className="btn"
+                    className="btn is-sm"
                     disabled={busy !== null}
                     onClick={() =>
                       run(`mark-${phase.id}`, () =>
@@ -175,49 +260,45 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
           </div>
         </section>
 
-        <section className="drawer-section">
-          <div className="drawer-label">Placement</div>
-          <div className="row">
-            <select
-              className="field"
-              value={task.manualPhase ?? ''}
-              onChange={(e) =>
-                run('move', () =>
-                  api.move(task.issue, (e.target.value || null) as Phase | null),
-                )
-              }
-            >
-              <option value="">Follow real status</option>
-              {['inbox', ...config.pipeline.map((p) => p.id), 'done'].map((id) => (
-                <option key={id} value={id}>
-                  Pin to {id}
-                </option>
-              ))}
-            </select>
-          </div>
+        <section className="section">
+          <div className="section-label">Placement</div>
+          <select
+            className="field"
+            style={{ width: '100%' }}
+            value={task.manualPhase ?? ''}
+            onChange={(e) =>
+              run('move', () => api.move(task.issue, (e.target.value || null) as Phase | null))
+            }
+          >
+            <option value="">Follow real status</option>
+            {['inbox', ...config.pipeline.map((p) => p.id), 'done'].map((id) => (
+              <option key={id} value={id}>
+                Pin to {id}
+              </option>
+            ))}
+          </select>
           {task.manualPhase && (
-            <p className="note" style={{ marginTop: 8 }}>
-              Pinned to {task.manualPhase}. Badges still show real status —
-              derived phase is {task.derived.derivedPhase}.
+            <p className="hint">
+              Pinned to {task.manualPhase}; badges still show real status (derived:{' '}
+              {task.derived.derivedPhase}).
             </p>
           )}
         </section>
 
-        <section className="drawer-section">
-          <div className="drawer-label">Plan</div>
+        <section className="section">
+          <div className="section-label">Plan</div>
           {plan ? (
             <pre className="plan">{plan}</pre>
           ) : (
             <p className="note">
-              No plan attached. Run Plan to have an agent write one to the task
-              workspace.
+              No plan attached. Run Plan to have an agent write one to the task workspace.
             </p>
           )}
         </section>
 
         {task.spawnHistory.length > 0 && (
-          <section className="drawer-section">
-            <div className="drawer-label">Sessions</div>
+          <section className="section">
+            <div className="section-label">Sessions</div>
             <div className="history">
               {[...task.spawnHistory].reverse().map((s, i) => (
                 <div key={`${s.startedAt}-${i}`}>
@@ -228,8 +309,8 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
           </section>
         )}
 
-        <section className="drawer-section">
-          <div className="drawer-label">Workspace</div>
+        <section className="section">
+          <div className="section-label">Workspace</div>
           <dl className="meta">
             <div className="meta-row">
               <dt>Derived phase</dt>
@@ -246,14 +327,14 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
           </dl>
           <div className="actions" style={{ marginTop: 12 }}>
             <button
-              className="btn"
+              className="btn is-sm"
               disabled={busy !== null}
               onClick={() => run('cleanup', () => api.cleanup(task.issue))}
             >
               Remove worktree
             </button>
             <button
-              className="btn is-danger"
+              className="btn is-sm is-danger"
               disabled={busy !== null}
               onClick={() =>
                 run('forget', async () => {
@@ -265,9 +346,9 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
               Remove from board
             </button>
           </div>
-          <p className="note" style={{ marginTop: 8 }}>
-            Removing from the board forgets the card only. Your branch, PR and
-            commits are untouched.
+          <p className="hint">
+            Removing from the board forgets the card only. Your branch, PR and commits
+            are untouched.
           </p>
         </section>
       </aside>

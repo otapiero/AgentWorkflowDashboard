@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 
 import { mcHome, statePath } from './paths.ts';
 import { branchName, slugify } from './slug.ts';
-import type { StateFile, TaskRecord } from '../shared/types.ts';
+import type { PhaseDefaults, StateFile, TaskRecord } from '../shared/types.ts';
 
 /**
  * The persisted board.
@@ -65,6 +65,30 @@ export function upsertTask(task: TaskRecord): void {
 export function removeTask(issue: number): void {
   const state = loadState();
   saveState({ ...state, tasks: state.tasks.filter((t) => t.issue !== issue) });
+}
+
+export function getPhaseDefaults(): PhaseDefaults {
+  return loadState().phaseDefaults ?? {};
+}
+
+/**
+ * Set (or clear) the default agent/model for a phase. Empty values clear the
+ * field so the phase falls back to its configured actor.
+ */
+export function setPhaseDefault(
+  phase: string,
+  value: { agent?: string; model?: string },
+): void {
+  const state = loadState();
+  const defaults = { ...(state.phaseDefaults ?? {}) };
+  const entry: { agent?: string; model?: string } = {};
+  if (value.agent) entry.agent = value.agent;
+  if (value.model) entry.model = value.model;
+
+  if (Object.keys(entry).length === 0) delete defaults[phase];
+  else defaults[phase] = entry;
+
+  saveState({ ...state, phaseDefaults: defaults });
 }
 
 export function newTask(

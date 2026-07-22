@@ -1,38 +1,44 @@
 /*
-  Mission Control — an instrument panel, not a task board.
+  Mission Control.
 
-  The palette follows control-room convention rather than decoration: amber is
-  "operator action required", which is exactly what needsYou means; red is a
-  fault; green is nominal; cyan is a live process. Scanning the status rails
-  down the left edge of each card is meant to answer "what needs me" without
-  reading a word.
-
-  Instrumentation is set in Cascadia Mono — the same face as the Windows
-  Terminal tabs this tool spawns. Human prose is set in Segoe.
+  A calm, warm control surface rather than a generic kanban. Each card wears its
+  whole state on a coloured border and one status line, so the board answers
+  "what needs me" at a glance. The two agents are shown in their own product
+  colours — Claude in coral, Copilot in indigo — so a pinned agent reads
+  instantly. Instrumentation (issue numbers, badges, chips) is monospace; prose
+  is a clean sans.
 */
 
 :root {
-  --bg: #12161c;
-  --panel: #1a212a;
-  --panel-hi: #212a35;
-  --line: #2b3542;
-  --line-soft: #222b36;
+  --bg: #0e121b;
+  --bg-soft: #121826;
+  --lane: #0e121b;
+  --lane-head: #141b29;
+  --card: #182031;
+  --card-hi: #1e2739;
+  --line: #263149;
+  --line-soft: #1c2536;
 
-  --ink: #ccd6e2;
-  --ink-strong: #f2f6fa;
-  --dim: #6d7d90;
-  --dimmer: #4a5768;
+  --ink: #dbe3f0;
+  --ink-strong: #f4f7fb;
+  --dim: #8593ab;
+  --dimmer: #59667e;
 
-  --attention: #f0a830; /* needs you */
-  --nominal: #4fb286; /* green / satisfied */
-  --fault: #e2574c; /* failure */
-  --live: #3fa7d6; /* a session is running */
+  --attention: #f2a13c; /* needs you */
+  --nominal: #47c08a; /* ready / satisfied */
+  --fault: #ef5f6b; /* failure / changes requested */
+  --live: #4bb4e0; /* a session is running */
 
-  --mono: "Cascadia Mono", "Cascadia Code", ui-monospace, Consolas, monospace;
-  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --claude: #d97757; /* Claude coral */
+  --claude-ink: #1c0f09;
+  --copilot: #7c74ff; /* Copilot indigo */
+  --copilot-ink: #0f0d24;
 
-  --rail: 3px;
-  --radius: 3px;
+  --mono: "Cascadia Mono", "Cascadia Code", ui-monospace, "SF Mono", Consolas, monospace;
+  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  --radius: 10px;
+  --radius-sm: 7px;
 }
 
 * {
@@ -58,11 +64,14 @@ button {
   font: inherit;
   color: inherit;
   cursor: pointer;
+  background: none;
+  border: none;
 }
 
 :focus-visible {
   outline: 2px solid var(--live);
   outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* ---------- shell ---------- */
@@ -73,41 +82,54 @@ button {
   height: 100%;
 }
 
-.statusbar {
+.topbar {
   display: flex;
   align-items: center;
-  gap: 18px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
-  flex-wrap: wrap;
+  gap: 14px;
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  background: linear-gradient(180deg, #141b29, #10151f);
 }
 
-.statusbar-brand {
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  color: var(--live);
+  flex-shrink: 0;
+}
+
+.brand-name {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   color: var(--ink-strong);
 }
 
-.statusbar-repo {
+.brand-repo {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--dim);
+  padding-left: 12px;
+  margin-left: 2px;
+  border-left: 1px solid var(--line);
 }
 
-.statusbar-spacer {
+.topbar-spacer {
   flex: 1;
 }
 
-.statusbar-group {
+.topbar-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-/* connection lamp — a real indicator, so it is literal about its state */
 .lamp {
   display: inline-flex;
   align-items: center;
@@ -115,6 +137,7 @@ button {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--dim);
+  padding-left: 4px;
 }
 
 .lamp::before {
@@ -123,34 +146,37 @@ button {
   height: 7px;
   border-radius: 50%;
   background: var(--dimmer);
+  transition: background 200ms ease;
 }
 
 .lamp.is-on::before {
   background: var(--nominal);
-  box-shadow: 0 0 6px var(--nominal);
+  box-shadow: 0 0 7px var(--nominal);
 }
 
 .lamp.is-off::before {
   background: var(--fault);
 }
 
-/* ---------- controls ---------- */
+/* ---------- buttons ---------- */
 
 .btn {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 6px 11px;
-  background: transparent;
+  font-size: 12.5px;
+  font-weight: 550;
+  padding: 7px 13px;
   color: var(--ink);
+  background: var(--card);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  transition: background 120ms ease, border-color 120ms ease;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  white-space: nowrap;
 }
 
 .btn:hover:not(:disabled) {
-  background: var(--panel-hi);
+  background: var(--card-hi);
   border-color: var(--dimmer);
 }
 
@@ -160,38 +186,77 @@ button {
 }
 
 .btn.is-primary {
+  background: var(--attention);
+  border-color: var(--attention);
+  color: #1c1206;
+  font-weight: 600;
+}
+
+.btn.is-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  background: var(--attention);
+}
+
+.btn.is-on {
+  background: rgba(242, 161, 60, 0.14);
   border-color: var(--attention);
   color: var(--attention);
 }
 
-.btn.is-primary:hover:not(:disabled) {
-  background: rgba(240, 168, 48, 0.12);
+.btn.is-ghost {
+  background: transparent;
+  border-color: transparent;
 }
 
-.btn.is-active {
-  background: var(--attention);
-  border-color: var(--attention);
-  color: #1a1206;
+.btn.is-ghost:hover:not(:disabled) {
+  background: var(--card);
+  border-color: var(--line);
 }
 
 .btn.is-danger:hover:not(:disabled) {
   border-color: var(--fault);
   color: var(--fault);
-  background: rgba(226, 87, 76, 0.1);
+  background: rgba(239, 95, 107, 0.1);
 }
+
+.btn.is-sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+/* ---------- form controls ---------- */
 
 .field {
   font-family: var(--mono);
   font-size: 12px;
-  padding: 6px 9px;
+  padding: 7px 9px;
   background: var(--bg);
   color: var(--ink);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
 }
 
 .field::placeholder {
   color: var(--dimmer);
+}
+
+select.field {
+  cursor: pointer;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 62px;
+  resize: vertical;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 /* ---------- board ---------- */
@@ -205,125 +270,126 @@ button {
   background: var(--line-soft);
 }
 
-/*
-  Lanes share the viewport rather than taking a fixed width: the whole point of
-  the screen is seeing every phase at once, so the full pipeline must fit
-  without horizontal scrolling until the window is genuinely too narrow.
-*/
 .lane {
   flex: 1 1 0;
-  min-width: 152px;
+  min-width: 150px;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background: var(--lane);
   min-height: 0;
 }
 
 .lane-head {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 11px 12px 9px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  align-items: center;
+  gap: 7px;
+  padding: 10px 11px;
+  min-height: 46px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--lane-head);
 }
 
 .lane-name {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--dim);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.lane.has-attention .lane-name {
+  color: var(--attention);
 }
 
 .lane-count {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--dimmer);
-  margin-left: auto;
 }
 
-/* a lane holding work that needs you announces itself in the header */
-.lane.has-attention .lane-name {
-  color: var(--attention);
+.lane-default {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dimmer);
+  padding: 2px 6px;
+  border: 1px dashed var(--line);
+  border-radius: 20px;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.lane-default:hover {
+  color: var(--ink);
+  border-color: var(--dimmer);
 }
 
 .lane-body {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 9px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
 
 .lane-empty {
   font-family: var(--mono);
-  font-size: 11px;
-  color: var(--dimmer);
-  padding: 6px 4px;
+  font-size: 16px;
+  color: var(--line);
+  text-align: center;
+  padding: 10px 0 4px;
+  user-select: none;
 }
 
 /* ---------- card ---------- */
 
 .card {
-  position: relative;
   display: block;
   width: 100%;
   text-align: left;
-  padding: 10px 10px 10px 14px;
-  background: var(--panel);
+  padding: 11px 12px 12px;
+  background: var(--card);
   border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--dimmer);
   border-radius: var(--radius);
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
 
 .card:hover {
-  background: var(--panel-hi);
-  border-color: var(--line);
+  background: var(--card-hi);
+  transform: translateY(-1px);
 }
 
 .card.is-selected {
-  border-color: var(--live);
+  box-shadow: 0 0 0 1px var(--live);
 }
 
-/* the signature: one rail encodes the card's whole state */
-.card::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: var(--rail);
-  border-radius: var(--radius) 0 0 var(--radius);
-  background: var(--dimmer);
+/* the border carries the whole state; precedence matches triage urgency */
+.card.state-live {
+  border-left-color: var(--live);
 }
 
-.card.state-attention::before {
-  background: var(--attention);
+.card.state-fault {
+  border-color: rgba(239, 95, 107, 0.35);
+  border-left-color: var(--fault);
 }
 
-.card.state-fault::before {
-  background: var(--fault);
+.card.state-attention {
+  border-color: rgba(242, 161, 60, 0.3);
+  border-left-color: var(--attention);
 }
 
-.card.state-nominal::before {
-  background: var(--nominal);
+.card.state-nominal {
+  border-color: rgba(71, 192, 138, 0.32);
+  border-left-color: var(--nominal);
 }
 
-.card.state-live::before {
-  background: var(--live);
-  animation: rail-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes rail-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.32;
-  }
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
 }
 
 .card-issue {
@@ -333,31 +399,91 @@ button {
 }
 
 .card-title {
-  margin: 3px 0 8px;
-  font-size: 13px;
-  line-height: 1.35;
+  margin: 0 0 9px;
+  font-size: 13.5px;
+  font-weight: 550;
+  line-height: 1.34;
   color: var(--ink-strong);
 }
 
-.card-reason {
-  font-size: 11px;
-  line-height: 1.4;
+.card-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+
+.card-status .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.status-attention {
   color: var(--attention);
-  margin-bottom: 7px;
+}
+
+.status-fault {
+  color: var(--fault);
+}
+
+.status-live {
+  color: var(--live);
+}
+
+.status-nominal {
+  color: var(--nominal);
+}
+
+.status-idle {
+  color: var(--dim);
 }
 
 .badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 5px;
+  align-items: center;
+}
+
+/* ---------- chips & badges ---------- */
+
+.chip {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 2px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.chip.agent-claude {
+  background: var(--claude);
+  color: var(--claude-ink);
+}
+
+.chip.agent-copilot {
+  background: var(--copilot);
+  color: #fff;
+}
+
+.chip-model {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
 }
 
 .badge {
   font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 0.03em;
-  padding: 2px 5px;
-  border-radius: 2px;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 5px;
   border: 1px solid var(--line);
   color: var(--dim);
   white-space: nowrap;
@@ -365,32 +491,35 @@ button {
 
 .badge.tone-good {
   color: var(--nominal);
-  border-color: rgba(79, 178, 134, 0.4);
+  border-color: rgba(71, 192, 138, 0.4);
 }
 
 .badge.tone-warn {
   color: var(--attention);
-  border-color: rgba(240, 168, 48, 0.4);
+  border-color: rgba(242, 161, 60, 0.4);
 }
 
 .badge.tone-bad {
   color: var(--fault);
-  border-color: rgba(226, 87, 76, 0.45);
+  border-color: rgba(239, 95, 107, 0.45);
+  background: rgba(239, 95, 107, 0.08);
 }
 
 .badge.tone-busy {
   color: var(--live);
-  border-color: rgba(63, 167, 214, 0.45);
+  border-color: rgba(75, 180, 224, 0.45);
 }
 
 /* ---------- drawer ---------- */
 
-.drawer-scrim {
+.scrim {
   position: fixed;
   inset: 0;
-  background: rgba(6, 9, 13, 0.6);
+  background: rgba(6, 9, 14, 0.62);
+  backdrop-filter: blur(1.5px);
   border: 0;
   padding: 0;
+  cursor: default;
 }
 
 .drawer {
@@ -398,76 +527,78 @@ button {
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(460px, 100vw);
+  width: min(480px, 100vw);
   display: flex;
   flex-direction: column;
-  background: var(--panel);
+  background: var(--bg-soft);
   border-left: 1px solid var(--line);
   overflow-y: auto;
+  box-shadow: -24px 0 60px rgba(0, 0, 0, 0.4);
 }
 
 .drawer-head {
-  padding: 16px;
-  border-bottom: 1px solid var(--line);
+  padding: 17px 18px;
+  border-bottom: 1px solid var(--line-soft);
   position: sticky;
   top: 0;
-  background: var(--panel);
+  background: var(--bg-soft);
+  z-index: 1;
 }
 
-.drawer-issue {
+.drawer-eyebrow {
+  display: flex;
+  gap: 12px;
+  align-items: center;
   font-family: var(--mono);
   font-size: 11px;
   color: var(--dim);
-  display: flex;
-  gap: 10px;
-  align-items: center;
 }
 
 .drawer-title {
-  margin: 6px 0 0;
-  font-size: 17px;
-  line-height: 1.3;
+  margin: 8px 0 0;
+  font-size: 18px;
+  line-height: 1.28;
   color: var(--ink-strong);
-  font-weight: 600;
+  font-weight: 620;
 }
 
 .drawer-branch {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--dimmer);
-  margin-top: 7px;
+  margin-top: 8px;
   word-break: break-all;
 }
 
-.drawer-section {
-  padding: 14px 16px;
+.section {
+  padding: 15px 18px;
   border-bottom: 1px solid var(--line-soft);
 }
 
-.drawer-label {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.16em;
+.section-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--dimmer);
-  margin-bottom: 9px;
+  color: var(--dim);
+  margin-bottom: 11px;
 }
 
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 7px;
 }
 
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
 }
 
 .row {
   display: flex;
-  gap: 6px;
+  gap: 7px;
   align-items: center;
 }
 
@@ -476,23 +607,20 @@ button {
   min-width: 0;
 }
 
-.textarea {
-  width: 100%;
-  min-height: 66px;
-  resize: vertical;
-  font-family: var(--sans);
-  font-size: 12.5px;
-  line-height: 1.45;
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
 }
 
 .plan {
   margin: 0;
-  max-height: 320px;
+  max-height: 340px;
   overflow: auto;
-  padding: 11px;
+  padding: 12px;
   background: var(--bg);
   border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   font-family: var(--mono);
   font-size: 11.5px;
   line-height: 1.55;
@@ -505,13 +633,13 @@ button {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--dim);
-  line-height: 1.7;
 }
 
 .meta-row {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  padding: 2px 0;
 }
 
 .meta-row dt {
@@ -534,19 +662,26 @@ button {
 }
 
 .note {
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--dim);
 }
 
+.hint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--dimmer);
+  margin-top: 8px;
+}
+
 .error {
-  font-size: 12px;
+  font-size: 12.5px;
   line-height: 1.45;
   color: var(--fault);
-  padding: 8px 10px;
-  border: 1px solid rgba(226, 87, 76, 0.4);
-  border-radius: var(--radius);
-  background: rgba(226, 87, 76, 0.08);
+  padding: 9px 11px;
+  border: 1px solid rgba(239, 95, 107, 0.4);
+  border-radius: var(--radius-sm);
+  background: rgba(239, 95, 107, 0.08);
 }
 
 .history {
@@ -558,6 +693,38 @@ button {
   gap: 5px;
 }
 
+/* collapsible one-time override */
+.disclose {
+  font-size: 12px;
+  color: var(--live);
+  padding: 3px 0;
+  align-self: flex-start;
+}
+
+.disclose:hover {
+  text-decoration: underline;
+}
+
+/* settings rows */
+.settings-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 7px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-phase {
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--ink);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.001ms !important;
@@ -566,8 +733,8 @@ button {
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 760px) {
   .lane {
-    flex-basis: 200px;
+    flex-basis: 210px;
   }
 }

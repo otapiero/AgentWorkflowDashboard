@@ -1,12 +1,13 @@
 import type { TaskWithDerived } from '../../shared/types.ts';
+import { AgentChip, IconAlert, IconCheck, IconDot, IconSpinner } from './bits.tsx';
 
 /**
  * One task.
  *
- * The left rail carries the card's whole state in a single stripe so the board
- * can be triaged by scanning colour, not by reading. Precedence matters: a live
- * session outranks everything (an agent is already on it), then a fault, then
- * a request for the operator.
+ * The card's left border and its single status line carry its whole state, so
+ * the board is triaged by scanning colour, not by reading. Precedence follows
+ * urgency: a live session outranks everything (an agent is already on it), then
+ * a fault, then a request for the operator.
  */
 export type CardState = 'live' | 'fault' | 'attention' | 'nominal' | 'idle';
 
@@ -19,6 +20,39 @@ export function cardState(task: TaskWithDerived): CardState {
   return 'nominal';
 }
 
+function StatusLine({ task, state }: { task: TaskWithDerived; state: CardState }) {
+  const { derived } = task;
+  if (state === 'live') {
+    const live = derived.badges.find((b) => b.kind === 'live');
+    return (
+      <div className="card-status status-live">
+        <IconSpinner /> {live?.label ?? 'session running'}
+      </div>
+    );
+  }
+  if (derived.needsYouReason) {
+    return (
+      <div className={`card-status status-${state === 'fault' ? 'fault' : 'attention'}`}>
+        <IconAlert /> {derived.needsYouReason}
+      </div>
+    );
+  }
+  if (state === 'nominal') {
+    const gateOpen = derived.gates[derived.displayPhase];
+    return (
+      <div className="card-status status-nominal">
+        {gateOpen ? <IconCheck /> : <IconDot />}{' '}
+        {gateOpen ? 'ready to advance' : 'in progress'}
+      </div>
+    );
+  }
+  return (
+    <div className="card-status status-idle">
+      <IconDot /> not started
+    </div>
+  );
+}
+
 interface Props {
   task: TaskWithDerived;
   selected: boolean;
@@ -27,6 +61,8 @@ interface Props {
 
 export function Card({ task, selected, onOpen }: Props) {
   const state = cardState(task);
+  // Secondary badges only — the status line already states the primary thing.
+  const badges = task.derived.badges.filter((b) => b.kind !== 'live');
 
   return (
     <button
@@ -34,19 +70,23 @@ export function Card({ task, selected, onOpen }: Props) {
       className={`card state-${state}${selected ? ' is-selected' : ''}`}
       onClick={() => onOpen(task.issue)}
       aria-label={`Issue ${task.issue}, ${task.title}${
-        task.derived.needsYouReason ? `. Needs you: ${task.derived.needsYouReason}` : ''
+        task.derived.needsYouReason ? `. ${task.derived.needsYouReason}` : ''
       }`}
     >
-      <div className="card-issue">#{task.issue}</div>
+      <div className="card-top">
+        <span className="card-issue">#{task.issue}</span>
+        {task.pinned.agent && (
+          <AgentChip agent={task.pinned.agent} model={task.pinned.model} />
+        )}
+      </div>
+
       <div className="card-title">{task.title}</div>
 
-      {task.derived.needsYouReason && (
-        <div className="card-reason">{task.derived.needsYouReason}</div>
-      )}
+      <StatusLine task={task} state={state} />
 
-      {task.derived.badges.length > 0 && (
+      {badges.length > 0 && (
         <div className="badges">
-          {task.derived.badges.map((badge) => (
+          {badges.map((badge) => (
             <span key={`${badge.kind}-${badge.label}`} className={`badge tone-${badge.tone}`}>
               {badge.label}
             </span>

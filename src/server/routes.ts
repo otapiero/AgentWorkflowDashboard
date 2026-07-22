@@ -8,9 +8,11 @@ import { writeMarker, clearMarker } from '../orchestrator/markers.ts';
 import { reconcileAll } from '../orchestrator/poller.ts';
 import { spawnPhase } from '../orchestrator/spawn.ts';
 import {
+  getPhaseDefaults,
   getTask,
   newTask,
   removeTask,
+  setPhaseDefault,
   upsertTask,
 } from '../orchestrator/state.ts';
 import { removeWorktree, resolveBranch } from '../orchestrator/worktree.ts';
@@ -41,8 +43,29 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
   app.get('/api/config', async () => ({
     repo: config.repo,
     pipeline: config.pipeline,
-    agents: Object.keys(config.agents),
+    // Each agent with its configured default model, for the pickers.
+    agents: Object.entries(config.agents).map(([name, profile]) => ({
+      name,
+      model: profile.model && profile.model !== 'default' ? profile.model : null,
+    })),
+    phaseDefaults: getPhaseDefaults(),
   }));
+
+  app.post<{ Body: { phase?: string; agent?: string; model?: string } }>(
+    '/api/phase-defaults',
+    async (req, reply) => {
+      const phase = req.body?.phase;
+      if (!phase || !config.pipeline.some((p) => p.id === phase)) {
+        return reply.code(400).send({ error: `unknown phase '${phase}'` });
+      }
+      const agent = req.body?.agent;
+      if (agent && !config.agents[agent]) {
+        return reply.code(400).send({ error: `unknown agent '${agent}'` });
+      }
+      setPhaseDefault(phase, { agent: agent || undefined, model: req.body?.model || undefined });
+      return refreshAndBroadcast();
+    },
+  );
 
   app.get('/api/tasks', async () => refresh());
 

@@ -1,9 +1,15 @@
-import type { Phase, PhaseConfig, TaskWithDerived } from '../shared/types.ts';
+import type { Phase, PhaseConfig, PhaseDefaults, TaskWithDerived } from '../shared/types.ts';
+
+export interface AgentInfo {
+  name: string;
+  model: string | null;
+}
 
 export interface BoardConfig {
   repo: { path: string; owner: string; name: string; baseBranch: string; branchPrefix: string };
   pipeline: PhaseConfig[];
-  agents: string[];
+  agents: AgentInfo[];
+  phaseDefaults: PhaseDefaults;
 }
 
 export interface OpenIssue {
@@ -35,18 +41,22 @@ export const api = {
   import: (issue: number) => post<TaskWithDerived[]>('/api/tasks/import', { issue }),
   reconcile: () => post<TaskWithDerived[]>('/api/reconcile'),
 
-  spawn: (issue: number, phase: Phase, customInstructions?: string, agent?: string) =>
-    post<{ spawned: unknown }>(`/api/tasks/${issue}/spawn`, {
-      phase,
-      customInstructions,
-      agent,
-    }),
+  spawn: (
+    issue: number,
+    phase: Phase,
+    opts: { customInstructions?: string; agent?: string; model?: string } = {},
+  ) => post<{ spawned: unknown }>(`/api/tasks/${issue}/spawn`, { phase, ...opts }),
+
   markDone: (issue: number, phase: Phase) =>
     post<TaskWithDerived[]>(`/api/tasks/${issue}/mark-done`, { phase }),
   unmarkDone: (issue: number, phase: Phase) =>
     post<TaskWithDerived[]>(`/api/tasks/${issue}/unmark-done`, { phase }),
   move: (issue: number, phase: Phase | null) =>
     post<TaskWithDerived[]>(`/api/tasks/${issue}/move`, { phase }),
+  overrides: (issue: number, o: { agent?: string; model?: string; instructions?: string }) =>
+    post<TaskWithDerived[]>(`/api/tasks/${issue}/overrides`, o),
+  phaseDefault: (phase: string, o: { agent?: string; model?: string }) =>
+    post<TaskWithDerived[]>('/api/phase-defaults', { phase, ...o }),
   cleanup: (issue: number) => post<TaskWithDerived[]>(`/api/tasks/${issue}/cleanup`),
   forget: (issue: number) =>
     request<TaskWithDerived[]>(`/api/tasks/${issue}`, { method: 'DELETE' }),

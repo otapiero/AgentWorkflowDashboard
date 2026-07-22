@@ -139,12 +139,18 @@ export interface TaskRecord {
 
 export interface TaskWithDerived extends TaskRecord {
   derived: DerivedState;
+  /** Agent + model that a spawn at the current phase would use (for the card). */
+  pinned: { agent: string | null; model: string | null };
 }
+
+/** Per-phase default agent/model, layered over config.yaml rather than editing it. */
+export type PhaseDefaults = Record<string, { agent?: string; model?: string }>;
 
 /** The persisted cache. Deleting this file loses board membership, nothing more. */
 export interface StateFile {
   version: 1;
   tasks: TaskRecord[];
+  phaseDefaults?: PhaseDefaults;
 }
 
 // --- config.yaml ---------------------------------------------------------
