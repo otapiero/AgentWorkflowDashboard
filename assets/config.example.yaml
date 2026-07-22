@@ -53,7 +53,7 @@ agents:
     model: default
     # Edit this list to match the models your copilot CLI actually offers
     # (run /model in an interactive `copilot` session to see them).
-    models: [auto, gpt-5.6, sol-5.6, luna-5.6, terra-5.6]
+    models: [auto, claude-sonnet-5, gpt-5.6-luna, gpt-5.6-sol, gpt-5.6-terra]
     efforts: [none, minimal, low, medium, high, xhigh, max]
 
 pipeline:

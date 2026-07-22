@@ -91,7 +91,11 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
 
   app.get('/api/tasks', async () => refresh());
 
-  app.get('/api/issues', async () => listOpenIssues(config));
+  app.get<{ Querystring: { scope?: string } }>('/api/issues', async (req) =>
+    // Default to the current user's issues; that is the common case and keeps
+    // the picker short. scope=all lists every open issue.
+    listOpenIssues(config, { mine: req.query?.scope !== 'all' }),
+  );
 
   app.post<{ Body: { issue?: number } }>('/api/tasks/import', async (req, reply) => {
     const issue = Number(req.body?.issue);

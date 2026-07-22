@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { api, subscribe } from './api.ts';
-import type { BoardConfig, OpenIssue } from './api.ts';
+import type { BoardConfig } from './api.ts';
 import { Board } from './components/Board.tsx';
 import { Drawer } from './components/Drawer.tsx';
+import { ImportDrawer } from './components/ImportDrawer.tsx';
 import { Settings } from './components/Settings.tsx';
 import { BrandMark } from './components/bits.tsx';
 import type { TaskWithDerived } from '../shared/types.ts';
@@ -14,7 +15,6 @@ export function App() {
   const [connected, setConnected] = useState(false);
   const [onlyNeedsYou, setOnlyNeedsYou] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
-  const [issues, setIssues] = useState<OpenIssue[] | null>(null);
   const [importing, setImporting] = useState(false);
   const [settingsPhase, setSettingsPhase] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -41,26 +41,6 @@ export function App() {
 
   const visible = onlyNeedsYou ? tasks.filter((t) => t.derived.needsYou) : tasks;
   const selectedTask = tasks.find((t) => t.issue === selected) ?? null;
-
-  async function openImport() {
-    setImporting(true);
-    setIssues(null);
-    setError(null);
-    try {
-      setIssues(await api.issues());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  async function addIssue(issue: number) {
-    try {
-      setTasks(await api.import(issue));
-      setImporting(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
 
   function editDefault(phaseId: string) {
     setSettingsPhase(phaseId);
@@ -106,7 +86,7 @@ export function App() {
           >
             Needs you{needsYouCount > 0 ? ` · ${needsYouCount}` : ''}
           </button>
-          <button className="btn is-sm is-primary" onClick={openImport}>
+          <button className="btn is-sm is-primary" onClick={() => setImporting(true)}>
             + New from issue
           </button>
           <button
@@ -142,42 +122,11 @@ export function App() {
       />
 
       {importing && (
-        <>
-          <button className="scrim" onClick={() => setImporting(false)} aria-label="Cancel" />
-          <aside className="drawer" role="dialog" aria-label="Add a task">
-            <header className="drawer-head">
-              <div className="drawer-eyebrow">
-                <span>Add task</span>
-                <span style={{ marginLeft: 'auto' }}>
-                  <button className="btn is-sm is-ghost" onClick={() => setImporting(false)}>
-                    Close
-                  </button>
-                </span>
-              </div>
-              <h2 className="drawer-title">Open issues</h2>
-            </header>
-            <section className="section stack">
-              {issues === null && <p className="note">Reading issues from GitHub…</p>}
-              {issues?.length === 0 && <p className="note">No open issues found.</p>}
-              {issues?.map((issue) => (
-                <button
-                  key={issue.number}
-                  className="card"
-                  disabled={onBoard.has(issue.number)}
-                  onClick={() => void addIssue(issue.number)}
-                >
-                  <div className="card-issue">
-                    #{issue.number}
-                    {onBoard.has(issue.number) ? ' · already on board' : ''}
-                  </div>
-                  <div className="card-title" style={{ marginBottom: 0 }}>
-                    {issue.title}
-                  </div>
-                </button>
-              ))}
-            </section>
-          </aside>
-        </>
+        <ImportDrawer
+          onBoard={onBoard}
+          onImported={setTasks}
+          onClose={() => setImporting(false)}
+        />
       )}
 
       {settingsOpen && (

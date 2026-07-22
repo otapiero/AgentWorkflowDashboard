@@ -129,15 +129,38 @@ export async function fetchIssueTitle(
 export interface OpenIssue {
   number: number;
   title: string;
+  assignees: string[];
 }
 
-export async function listOpenIssues(config: Config): Promise<OpenIssue[]> {
+interface RawIssue {
+  number: number;
+  title: string;
+  assignees?: Array<{ login?: string }>;
+}
+
+export async function listOpenIssues(
+  config: Config,
+  opts: { mine?: boolean } = {},
+): Promise<OpenIssue[]> {
   try {
-    const out = await gh(
-      ['issue', 'list', '--state', 'open', '--limit', '100', '--json', 'number,title'],
-      config.repo.path,
-    );
-    return JSON.parse(out) as OpenIssue[];
+    const args = [
+      'issue',
+      'list',
+      '--state',
+      'open',
+      '--limit',
+      '300',
+      '--json',
+      'number,title,assignees',
+    ];
+    if (opts.mine) args.push('--assignee', '@me');
+
+    const raw = JSON.parse(await gh(args, config.repo.path)) as RawIssue[];
+    return raw.map((i) => ({
+      number: i.number,
+      title: i.title,
+      assignees: (i.assignees ?? []).map((a) => a.login ?? '').filter(Boolean),
+    }));
   } catch {
     return [];
   }

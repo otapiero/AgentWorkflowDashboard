@@ -24,7 +24,10 @@ export interface BoardConfig {
 export interface OpenIssue {
   number: number;
   title: string;
+  assignees: string[];
 }
+
+export type IssueScope = 'mine' | 'all';
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -44,7 +47,8 @@ const post = <T>(url: string, body?: unknown) =>
 export const api = {
   config: () => request<BoardConfig>('/api/config'),
   tasks: () => request<TaskWithDerived[]>('/api/tasks'),
-  issues: () => request<OpenIssue[]>('/api/issues'),
+  issues: (scope: IssueScope = 'mine') =>
+    request<OpenIssue[]>(`/api/issues?scope=${scope}`),
   plan: (issue: number) => request<{ content: string }>(`/api/tasks/${issue}/plan`),
 
   import: (issue: number) => post<TaskWithDerived[]>('/api/tasks/import', { issue }),

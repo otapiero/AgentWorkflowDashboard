@@ -34,7 +34,7 @@ const BUILT_IN: Record<
     effortFlag: '--effort',
   },
   copilot: {
-    models: ['auto', 'gpt-5.6', 'sol-5.6', 'luna-5.6', 'terra-5.6'],
+    models: ['auto', 'claude-sonnet-5', 'gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra'],
     efforts: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
     effortFlag: '--effort',
   },
