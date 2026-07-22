@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'vitest';
-import { resolveAgentModel } from '../src/orchestrator/agents.ts';
-import type { Config, TaskRecord } from '../src/shared/types.ts';
+import {
+  resolveAgent,
+  agentCapabilities,
+} from '../src/orchestrator/agents.ts';
+import type { AgentProfile, Config, TaskRecord } from '../src/shared/types.ts';
 
 const config = {
   agents: {
@@ -41,84 +44,113 @@ function task(overrides?: TaskRecord['overrides']): TaskRecord {
   };
 }
 
-describe('resolveAgentModel', () => {
+describe('resolveAgent — agent precedence', () => {
   test('falls back to the phase actor when nothing is pinned', () => {
-    const r = resolveAgentModel(config, task(), 'plan', {});
-    expect(r.agent).toBe('claude');
-  });
-
-  test("normalises a model of 'default' to null", () => {
-    expect(resolveAgentModel(config, task(), 'plan', {}).model).toBeNull();
+    expect(resolveAgent(config, task(), 'plan', {}).agent).toBe('claude');
   });
 
   test('a phase default overrides the phase actor', () => {
-    const r = resolveAgentModel(config, task(), 'plan', {
-      plan: { agent: 'copilot' },
-    });
-    expect(r.agent).toBe('copilot');
+    expect(resolveAgent(config, task(), 'plan', { plan: { agent: 'copilot' } }).agent).toBe(
+      'copilot',
+    );
   });
 
   test('a per-task pin overrides the phase default', () => {
-    const r = resolveAgentModel(config, task({ agent: 'claude' }), 'plan', {
-      plan: { agent: 'copilot' },
-    });
-    expect(r.agent).toBe('claude');
+    expect(
+      resolveAgent(config, task({ agent: 'claude' }), 'plan', { plan: { agent: 'copilot' } })
+        .agent,
+    ).toBe('claude');
   });
 
   test('a one-time choice overrides everything', () => {
-    const r = resolveAgentModel(
-      config,
-      task({ agent: 'claude' }),
-      'plan',
-      { plan: { agent: 'claude' } },
-      { agent: 'copilot' },
-    );
-    expect(r.agent).toBe('copilot');
+    expect(
+      resolveAgent(config, task({ agent: 'claude' }), 'plan', { plan: { agent: 'claude' } }, {
+        agent: 'copilot',
+      }).agent,
+    ).toBe('copilot');
   });
 
-  test('the model resolves through the same precedence', () => {
+  test('a non-agent phase resolves to no agent', () => {
+    expect(resolveAgent(config, task(), 'ci', {}).agent).toBeNull();
+  });
+
+  test('a pin naming an unconfigured agent is ignored', () => {
+    expect(resolveAgent(config, task({ agent: 'gemini' }), 'plan', {}).agent).toBe('claude');
+  });
+});
+
+describe('resolveAgent — model', () => {
+  test("normalises a model of 'default' to null", () => {
+    expect(resolveAgent(config, task(), 'plan', {}).model).toBeNull();
+  });
+
+  test('resolves through the same precedence', () => {
+    expect(resolveAgent(config, task({ model: 'opus' }), 'plan', {}).model).toBe('opus');
     expect(
-      resolveAgentModel(config, task({ model: 'opus' }), 'plan', {}).model,
-    ).toBe('opus');
-    expect(
-      resolveAgentModel(config, task(), 'plan', { plan: { model: 'haiku' } }).model,
+      resolveAgent(config, task(), 'plan', { plan: { model: 'haiku' } }).model,
     ).toBe('haiku');
     expect(
-      resolveAgentModel(config, task({ model: 'opus' }), 'plan', {}, { model: 'sonnet' })
-        .model,
+      resolveAgent(config, task({ model: 'opus' }), 'plan', {}, { model: 'sonnet' }).model,
     ).toBe('sonnet');
   });
 
-  test('a model pin can accompany a different agent pin', () => {
-    const r = resolveAgentModel(config, task(), 'plan', {
-      plan: { agent: 'copilot', model: 'gpt-5' },
+  test('a non-agent phase has no model', () => {
+    expect(resolveAgent(config, task(), 'ci', {}).model).toBeNull();
+  });
+});
+
+describe('resolveAgent — effort', () => {
+  test('is null when nothing sets it', () => {
+    expect(resolveAgent(config, task(), 'plan', {}).effort).toBeNull();
+  });
+
+  test('resolves through the same precedence as model', () => {
+    expect(resolveAgent(config, task({ effort: 'high' }), 'plan', {}).effort).toBe('high');
+    expect(
+      resolveAgent(config, task(), 'plan', { plan: { effort: 'low' } }).effort,
+    ).toBe('low');
+    expect(
+      resolveAgent(config, task({ effort: 'high' }), 'plan', {}, { effort: 'max' }).effort,
+    ).toBe('max');
+  });
+
+  test('agent, model and effort can all be pinned together', () => {
+    const r = resolveAgent(config, task(), 'plan', {
+      plan: { agent: 'copilot', model: 'gpt-5.4', effort: 'high' },
     });
-    expect(r).toEqual({ agent: 'copilot', model: 'gpt-5' });
+    expect(r).toEqual({ agent: 'copilot', model: 'gpt-5.4', effort: 'high' });
+  });
+});
+
+describe('agentCapabilities', () => {
+  test('supplies built-in models and efforts when the profile omits them', () => {
+    const caps = agentCapabilities('claude', config.agents.claude as AgentProfile);
+    expect(caps.models.length).toBeGreaterThan(0);
+    expect(caps.efforts).toContain('high');
+    expect(caps.effortFlag).toBe('--effort');
   });
 
-  test('a non-agent phase resolves to no agent and no model', () => {
-    // CI has no actor to spawn, so there is nothing to pin.
-    expect(resolveAgentModel(config, task(), 'ci', {})).toEqual({
-      agent: null,
-      model: null,
+  test("copilot's built-in effort list includes its extra levels", () => {
+    const caps = agentCapabilities('copilot', config.agents.copilot as AgentProfile);
+    expect(caps.efforts).toContain('minimal');
+    expect(caps.hasEffort).toBe(true);
+  });
+
+  test('a profile-provided list overrides the built-in one', () => {
+    const caps = agentCapabilities('claude', {
+      ...(config.agents.claude as AgentProfile),
+      models: ['only-this'],
     });
+    expect(caps.models).toEqual(['only-this']);
   });
 
-  test('an unknown phase id resolves to no agent', () => {
-    expect(resolveAgentModel(config, task(), 'inbox', {}).agent).toBeNull();
-  });
-
-  test('a pin naming an unconfigured agent is ignored in favour of the actor', () => {
-    // Defensive: stale state must not select an agent that no longer exists.
-    const r = resolveAgentModel(config, task({ agent: 'gemini' }), 'plan', {});
-    expect(r.agent).toBe('claude');
-  });
-
-  test('a task pinned to an agent still resolves that agent at a you-phase', () => {
-    // The pin is explicit intent and should surface even where the phase
-    // itself has no default agent.
-    expect(resolveAgentModel(config, task({ agent: 'copilot' }), 'merge', {}).agent).toBe(
-      'copilot',
-    );
+  test('an unknown agent with no lists reports no effort support', () => {
+    const caps = agentCapabilities('mystery', {
+      launch: 'mystery',
+      promptMode: 'positional',
+      instructionMode: 'flag',
+    } as AgentProfile);
+    expect(caps.hasEffort).toBe(false);
+    expect(caps.models).toEqual([]);
   });
 });

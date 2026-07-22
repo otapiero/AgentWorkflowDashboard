@@ -9,12 +9,15 @@ import { reconcileAll } from '../orchestrator/poller.ts';
 import { spawnPhase } from '../orchestrator/spawn.ts';
 import {
   getPhaseDefaults,
+  getSettings,
   getTask,
   newTask,
   removeTask,
   setPhaseDefault,
+  setSettings,
   upsertTask,
 } from '../orchestrator/state.ts';
+import { agentCapabilities } from '../orchestrator/agents.ts';
 import { removeWorktree, resolveBranch } from '../orchestrator/worktree.ts';
 import { PHASES } from '../shared/types.ts';
 import type { Config, Phase, TaskWithDerived } from '../shared/types.ts';
@@ -43,15 +46,21 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
   app.get('/api/config', async () => ({
     repo: config.repo,
     pipeline: config.pipeline,
-    // Each agent with its configured default model, for the pickers.
-    agents: Object.entries(config.agents).map(([name, profile]) => ({
-      name,
-      model: profile.model && profile.model !== 'default' ? profile.model : null,
-    })),
+    // Each agent with the models and efforts to offer in the pickers.
+    agents: Object.entries(config.agents).map(([name, profile]) => {
+      const caps = agentCapabilities(name, profile);
+      return {
+        name,
+        models: caps.models,
+        efforts: caps.efforts,
+        hasEffort: caps.hasEffort,
+      };
+    }),
     phaseDefaults: getPhaseDefaults(),
+    launcher: getSettings().launcher ?? config.launcher ?? 'wt',
   }));
 
-  app.post<{ Body: { phase?: string; agent?: string; model?: string } }>(
+  app.post<{ Body: { phase?: string; agent?: string; model?: string; effort?: string } }>(
     '/api/phase-defaults',
     async (req, reply) => {
       const phase = req.body?.phase;
@@ -62,10 +71,23 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
       if (agent && !config.agents[agent]) {
         return reply.code(400).send({ error: `unknown agent '${agent}'` });
       }
-      setPhaseDefault(phase, { agent: agent || undefined, model: req.body?.model || undefined });
+      setPhaseDefault(phase, {
+        agent: agent || undefined,
+        model: req.body?.model || undefined,
+        effort: req.body?.effort || undefined,
+      });
       return refreshAndBroadcast();
     },
   );
+
+  app.post<{ Body: { launcher?: string } }>('/api/settings', async (req, reply) => {
+    const launcher = req.body?.launcher;
+    if (launcher !== 'wt' && launcher !== 'vscode') {
+      return reply.code(400).send({ error: "launcher must be 'wt' or 'vscode'" });
+    }
+    setSettings({ launcher });
+    return refreshAndBroadcast();
+  });
 
   app.get('/api/tasks', async () => refresh());
 
@@ -95,7 +117,13 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
 
   app.post<{
     Params: { issue: string };
-    Body: { phase?: string; customInstructions?: string; agent?: string; model?: string };
+    Body: {
+      phase?: string;
+      customInstructions?: string;
+      agent?: string;
+      model?: string;
+      effort?: string;
+    };
   }>('/api/tasks/:issue/spawn', async (req, reply) => {
     const task = getTask(Number(req.params.issue));
     if (!task) return reply.code(404).send({ error: 'task not on the board' });
@@ -111,6 +139,7 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
         customInstructions: req.body?.customInstructions,
         agent: req.body?.agent,
         model: req.body?.model,
+        effort: req.body?.effort,
       });
       upsertTask({ ...task, spawnHistory: [...task.spawnHistory, record] });
       // The tab needs a moment to write its running marker before we re-derive.
@@ -167,7 +196,7 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
 
   app.post<{
     Params: { issue: string };
-    Body: { agent?: string; model?: string; instructions?: string };
+    Body: { agent?: string; model?: string; effort?: string; instructions?: string };
   }>('/api/tasks/:issue/overrides', async (req, reply) => {
     const task = getTask(Number(req.params.issue));
     if (!task) return reply.code(404).send({ error: 'task not on the board' });
@@ -181,6 +210,7 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
       overrides: {
         agent: agent || undefined,
         model: req.body?.model || undefined,
+        effort: req.body?.effort || undefined,
         instructions: req.body?.instructions || undefined,
       },
     });

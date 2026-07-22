@@ -76,7 +76,11 @@ export function Card({ task, selected, onOpen }: Props) {
       <div className="card-top">
         <span className="card-issue">#{task.issue}</span>
         {task.pinned.agent && (
-          <AgentChip agent={task.pinned.agent} model={task.pinned.model} />
+          <AgentChip
+            agent={task.pinned.agent}
+            model={task.pinned.model}
+            effort={task.pinned.effort}
+          />
         )}
       </div>
 

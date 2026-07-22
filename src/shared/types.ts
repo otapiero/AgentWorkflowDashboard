@@ -119,6 +119,7 @@ export interface SpawnRecord {
 export interface TaskOverrides {
   agent?: string;
   model?: string;
+  effort?: string;
   instructions?: string;
 }
 
@@ -139,18 +140,29 @@ export interface TaskRecord {
 
 export interface TaskWithDerived extends TaskRecord {
   derived: DerivedState;
-  /** Agent + model that a spawn at the current phase would use (for the card). */
-  pinned: { agent: string | null; model: string | null };
+  /** Agent + model + effort that a spawn at the current phase would use. */
+  pinned: { agent: string | null; model: string | null; effort: string | null };
 }
 
-/** Per-phase default agent/model, layered over config.yaml rather than editing it. */
-export type PhaseDefaults = Record<string, { agent?: string; model?: string }>;
+/** Per-phase default agent/model/effort, layered over config.yaml, not editing it. */
+export type PhaseDefaults = Record<
+  string,
+  { agent?: string; model?: string; effort?: string }
+>;
+
+export type LauncherKind = 'wt' | 'vscode';
+
+/** UI-adjustable preferences that layer over config.yaml. */
+export interface Settings {
+  launcher?: LauncherKind;
+}
 
 /** The persisted cache. Deleting this file loses board membership, nothing more. */
 export interface StateFile {
   version: 1;
   tasks: TaskRecord[];
   phaseDefaults?: PhaseDefaults;
+  settings?: Settings;
 }
 
 // --- config.yaml ---------------------------------------------------------
@@ -167,6 +179,13 @@ export interface AgentProfile {
   promptFlag?: string;
   modelFlag?: string;
   model?: string;
+  /** Models offered in the picker. Falls back to a built-in list per agent. */
+  models?: string[];
+  /** Flag that sets reasoning effort, e.g. '--effort'. Omit if unsupported. */
+  effortFlag?: string;
+  /** Effort levels offered in the picker. Falls back to a built-in list. */
+  efforts?: string[];
+  effort?: string;
   /** 'flag' => pass via instructionFlag; 'inline' => prepend into the prompt body. */
   instructionMode: 'flag' | 'inline';
   instructionFlag?: string;
@@ -202,4 +221,6 @@ export interface Config {
   agents: Record<string, AgentProfile>;
   pipeline: PhaseConfig[];
   server: { port: number };
+  /** How a spawn opens its terminal. Default 'wt'. */
+  launcher?: LauncherKind;
 }

@@ -1,15 +1,23 @@
 ---
-description: Open the pull request for the current branch using the repo's own publish-pr skill.
+description: Open the pull request for the current branch, the Acme way.
 ---
-Use the `publish-pr` skill to open the pull request for branch `{{branch}}`
-(GitHub issue #$ARGUMENTS).
+Open the pull request for branch `{{branch}}` (GitHub issue #$ARGUMENTS)
+against the `dev` base branch of `acme/widgets`.
 
-That skill is committed in this repository and is the project's own way of
-publishing: it syncs with `dev` first, generates the description from the real
-commits and diff, opens the PR against `dev`, and assigns you. Follow it as
-written rather than reimplementing any of it here.
+If a `publish-pr` skill is available to you, use it — it is the project's own
+way of publishing and does all of the below. Otherwise, do these steps yourself:
 
-If it stops because the working tree is dirty, show me what is uncommitted and
-ask before committing anything.
+1. Sync with `dev` first (fetch, merge `origin/dev` into this branch, resolve
+   any conflicts). Do not open a PR on an unmerged branch.
+2. Make sure the work is committed. If the tree is dirty, show me what is
+   uncommitted and ask before committing anything.
+3. Push the branch and set upstream.
+4. Write the PR description from the real history — `git log origin/dev..HEAD`
+   and `git diff origin/dev --stat` — as a Summary and a Changes list, with
+   `Closes #$ARGUMENTS` on the first line.
+5. Open the PR with `gh pr create --base dev --head {{branch}}` and assign me
+   (`gh pr edit <n> --add-assignee @me`). Do not add yourself as a reviewer.
+
+Report the PR number and URL when done.
 
 {{customInstructions}}

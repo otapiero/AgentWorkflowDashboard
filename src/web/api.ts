@@ -1,8 +1,16 @@
-import type { Phase, PhaseConfig, PhaseDefaults, TaskWithDerived } from '../shared/types.ts';
+import type {
+  LauncherKind,
+  Phase,
+  PhaseConfig,
+  PhaseDefaults,
+  TaskWithDerived,
+} from '../shared/types.ts';
 
 export interface AgentInfo {
   name: string;
-  model: string | null;
+  models: string[];
+  efforts: string[];
+  hasEffort: boolean;
 }
 
 export interface BoardConfig {
@@ -10,6 +18,7 @@ export interface BoardConfig {
   pipeline: PhaseConfig[];
   agents: AgentInfo[];
   phaseDefaults: PhaseDefaults;
+  launcher: LauncherKind;
 }
 
 export interface OpenIssue {
@@ -44,7 +53,12 @@ export const api = {
   spawn: (
     issue: number,
     phase: Phase,
-    opts: { customInstructions?: string; agent?: string; model?: string } = {},
+    opts: {
+      customInstructions?: string;
+      agent?: string;
+      model?: string;
+      effort?: string;
+    } = {},
   ) => post<{ spawned: unknown }>(`/api/tasks/${issue}/spawn`, { phase, ...opts }),
 
   markDone: (issue: number, phase: Phase) =>
@@ -53,10 +67,14 @@ export const api = {
     post<TaskWithDerived[]>(`/api/tasks/${issue}/unmark-done`, { phase }),
   move: (issue: number, phase: Phase | null) =>
     post<TaskWithDerived[]>(`/api/tasks/${issue}/move`, { phase }),
-  overrides: (issue: number, o: { agent?: string; model?: string; instructions?: string }) =>
-    post<TaskWithDerived[]>(`/api/tasks/${issue}/overrides`, o),
-  phaseDefault: (phase: string, o: { agent?: string; model?: string }) =>
+  overrides: (
+    issue: number,
+    o: { agent?: string; model?: string; effort?: string; instructions?: string },
+  ) => post<TaskWithDerived[]>(`/api/tasks/${issue}/overrides`, o),
+  phaseDefault: (phase: string, o: { agent?: string; model?: string; effort?: string }) =>
     post<TaskWithDerived[]>('/api/phase-defaults', { phase, ...o }),
+  setLauncher: (launcher: LauncherKind) =>
+    post<TaskWithDerived[]>('/api/settings', { launcher }),
   cleanup: (issue: number) => post<TaskWithDerived[]>(`/api/tasks/${issue}/cleanup`),
   forget: (issue: number) =>
     request<TaskWithDerived[]>(`/api/tasks/${issue}`, { method: 'DELETE' }),

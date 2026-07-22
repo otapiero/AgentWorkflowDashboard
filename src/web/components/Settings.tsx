@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { api } from '../api.ts';
 import type { BoardConfig } from '../api.ts';
 import { AgentPicker } from './AgentPicker.tsx';
+import type { AgentSelection } from './AgentPicker.tsx';
+import type { LauncherKind } from '../../shared/types.ts';
 
 interface Props {
   config: BoardConfig;
@@ -12,9 +14,11 @@ interface Props {
 }
 
 /**
- * Per-phase default agent and model — the single place to change "who runs this
- * step by default." Stored as an override layer, so config.yaml (and its
- * comments) is never rewritten, and clearing a row restores the configured
+ * Global preferences: how a spawn opens its terminal, and the default agent /
+ * model / effort per phase.
+ *
+ * Phase defaults are stored as an override layer, so config.yaml (and its
+ * comments) is never rewritten and clearing a row restores the configured
  * actor.
  */
 export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
@@ -22,13 +26,14 @@ export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
     (p) => p.actor === 'claude' || p.actor === 'copilot',
   );
 
-  const [draft, setDraft] = useState<Record<string, { agent: string; model: string }>>(() =>
+  const [draft, setDraft] = useState<Record<string, AgentSelection>>(() =>
     Object.fromEntries(
       agentPhases.map((p) => [
         p.id,
         {
           agent: config.phaseDefaults[p.id]?.agent ?? '',
           model: config.phaseDefaults[p.id]?.model ?? '',
+          effort: config.phaseDefaults[p.id]?.effort ?? '',
         },
       ]),
     ),
@@ -36,15 +41,11 @@ export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function save(phaseId: string) {
-    setBusy(phaseId);
+  async function act(label: string, action: () => Promise<unknown>) {
+    setBusy(label);
     setError(null);
     try {
-      const d = draft[phaseId]!;
-      await api.phaseDefault(phaseId, {
-        agent: d.agent || undefined,
-        model: d.model || undefined,
-      });
+      await action();
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -56,7 +57,7 @@ export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
   return (
     <>
       <button className="scrim" onClick={onClose} aria-label="Close settings" />
-      <aside className="drawer" role="dialog" aria-label="Phase defaults">
+      <aside className="drawer" role="dialog" aria-label="Settings">
         <header className="drawer-head">
           <div className="drawer-eyebrow">
             <span>Settings</span>
@@ -66,11 +67,7 @@ export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
               </button>
             </span>
           </div>
-          <h2 className="drawer-title">Phase defaults</h2>
-          <p className="hint">
-            The agent and model each step uses by default. A task can pin its own, and
-            any single run can override once.
-          </p>
+          <h2 className="drawer-title">Agents &amp; launch</h2>
         </header>
 
         {error && (
@@ -79,48 +76,78 @@ export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
           </div>
         )}
 
-        <section className="section stack">
-          {agentPhases.map((phase) => (
-            <div
-              key={phase.id}
-              className="stack"
-              style={{
-                paddingBottom: 12,
-                borderBottom: '1px solid var(--line-soft)',
-                ...(phase.id === focusPhase
-                  ? { boxShadow: '0 0 0 1px var(--live)', borderRadius: 8, padding: 10 }
-                  : {}),
-              }}
-            >
-              <div className="row" style={{ justifyContent: 'space-between' }}>
-                <span className="settings-phase">{phase.label}</span>
-                <span className="note" style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>
-                  actor: {phase.actor}
-                </span>
-              </div>
-              <AgentPicker
-                agents={config.agents}
-                agent={draft[phase.id]?.agent ?? ''}
-                model={draft[phase.id]?.model ?? ''}
-                onAgent={(agent) =>
-                  setDraft((d) => ({ ...d, [phase.id]: { ...d[phase.id]!, agent } }))
+        <section className="section">
+          <div className="section-label">Where agents open</div>
+          <div className="actions">
+            {(['wt', 'vscode'] as LauncherKind[]).map((kind) => (
+              <button
+                key={kind}
+                className={`btn is-sm${config.launcher === kind ? ' is-on' : ''}`}
+                disabled={busy !== null}
+                onClick={() => act('launcher', () => api.setLauncher(kind))}
+              >
+                {kind === 'wt' ? 'Windows Terminal' : 'VS Code'}
+              </button>
+            ))}
+          </div>
+          {config.launcher === 'vscode' && (
+            <p className="hint">
+              Opens the task's worktree in VS Code and runs the agent in the integrated
+              terminal. The first time, VS Code asks to allow automatic tasks — say yes.
+            </p>
+          )}
+        </section>
+
+        <section className="section">
+          <div className="section-label">Phase defaults</div>
+          <p className="hint" style={{ marginTop: -4, marginBottom: 12 }}>
+            The agent, model and effort each step uses by default. A task can pin its own,
+            and any single run can override once.
+          </p>
+          <div className="stack">
+            {agentPhases.map((phase) => (
+              <div
+                key={phase.id}
+                className="default-row"
+                style={
+                  phase.id === focusPhase
+                    ? { boxShadow: '0 0 0 1px var(--live)', borderRadius: 8, padding: 10 }
+                    : undefined
                 }
-                onModel={(model) =>
-                  setDraft((d) => ({ ...d, [phase.id]: { ...d[phase.id]!, model } }))
-                }
-                inheritLabel={`Default (${phase.actor})`}
-              />
-              <div className="actions">
-                <button
-                  className="btn is-sm"
-                  disabled={busy !== null}
-                  onClick={() => save(phase.id)}
-                >
-                  {busy === phase.id ? 'Saving…' : 'Save'}
-                </button>
+              >
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <span className="settings-phase">{phase.label}</span>
+                  <span className="meta" style={{ fontSize: 11 }}>
+                    actor: {phase.actor}
+                  </span>
+                </div>
+                <AgentPicker
+                  agents={config.agents}
+                  value={draft[phase.id]!}
+                  onChange={(value) => setDraft((d) => ({ ...d, [phase.id]: value }))}
+                  inheritedAgent={phase.actor}
+                  inheritAgentLabel={`Default (${phase.actor})`}
+                />
+                <div className="actions">
+                  <button
+                    className="btn is-sm"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      act(phase.id, () =>
+                        api.phaseDefault(phase.id, {
+                          agent: draft[phase.id]!.agent || undefined,
+                          model: draft[phase.id]!.model || undefined,
+                          effort: draft[phase.id]!.effort || undefined,
+                        }),
+                      )
+                    }
+                  >
+                    {busy === phase.id ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </section>
       </aside>
     </>

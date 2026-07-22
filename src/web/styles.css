@@ -613,6 +613,34 @@ select.field {
   gap: 7px;
 }
 
+.picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 7px;
+}
+
+.field-disabled {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dimmer);
+  font-size: 11px;
+  background: var(--bg);
+  cursor: default;
+}
+
+.default-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.default-row:last-child {
+  border-bottom: none;
+}
+
 .plan {
   margin: 0;
   max-height: 340px;

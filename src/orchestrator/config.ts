@@ -19,6 +19,10 @@ const agentProfileSchema = z
     promptFlag: z.string().min(1).optional(),
     modelFlag: z.string().min(1).optional(),
     model: z.string().min(1).optional(),
+    models: z.array(z.string()).optional(),
+    effortFlag: z.string().min(1).optional(),
+    efforts: z.array(z.string()).optional(),
+    effort: z.string().min(1).optional(),
     instructionMode: z.enum(['flag', 'inline']),
     instructionFlag: z.string().min(1).optional(),
     extraArgs: z.array(z.string()).optional(),
@@ -81,6 +85,7 @@ const configSchema = z
     agents: z.record(z.string(), agentProfileSchema),
     pipeline: z.array(phaseSchema).min(1),
     server: z.object({ port: z.number().int().positive() }),
+    launcher: z.enum(['wt', 'vscode']).optional(),
   })
   .superRefine((cfg, ctx) => {
     const seen = new Set<string>();

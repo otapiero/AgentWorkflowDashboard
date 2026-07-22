@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 
 import { mcHome, statePath } from './paths.ts';
 import { branchName, slugify } from './slug.ts';
-import type { PhaseDefaults, StateFile, TaskRecord } from '../shared/types.ts';
+import type { PhaseDefaults, Settings, StateFile, TaskRecord } from '../shared/types.ts';
 
 /**
  * The persisted board.
@@ -77,18 +77,28 @@ export function getPhaseDefaults(): PhaseDefaults {
  */
 export function setPhaseDefault(
   phase: string,
-  value: { agent?: string; model?: string },
+  value: { agent?: string; model?: string; effort?: string },
 ): void {
   const state = loadState();
   const defaults = { ...(state.phaseDefaults ?? {}) };
-  const entry: { agent?: string; model?: string } = {};
+  const entry: { agent?: string; model?: string; effort?: string } = {};
   if (value.agent) entry.agent = value.agent;
   if (value.model) entry.model = value.model;
+  if (value.effort) entry.effort = value.effort;
 
   if (Object.keys(entry).length === 0) delete defaults[phase];
   else defaults[phase] = entry;
 
   saveState({ ...state, phaseDefaults: defaults });
+}
+
+export function getSettings(): Settings {
+  return loadState().settings ?? {};
+}
+
+export function setSettings(patch: Partial<Settings>): void {
+  const state = loadState();
+  saveState({ ...state, settings: { ...(state.settings ?? {}), ...patch } });
 }
 
 export function newTask(

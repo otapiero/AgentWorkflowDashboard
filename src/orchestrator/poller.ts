@@ -1,23 +1,23 @@
 import { gatherFacts } from './facts.ts';
 import { reconcile } from './reconcile.ts';
 import { getPhaseDefaults, listTasks, upsertTask } from './state.ts';
-import { resolveAgentModel } from './agents.ts';
+import { resolveAgent } from './agents.ts';
 import type { Config, DerivedState, TaskRecord, TaskWithDerived } from '../shared/types.ts';
 
 /**
- * The agent + model to show on a card: what a spawn at the card's current phase
- * would use. Only agent phases carry a chip; resting phases like CI or Merge do
- * not, so the board stays uncluttered.
+ * The agent + model + effort to show on a card: what a spawn at the card's
+ * current phase would use. Only agent phases carry a chip; resting phases like
+ * CI or Merge do not, so the board stays uncluttered.
  */
 function pinnedFor(
   config: Config,
   task: TaskRecord,
   derived: DerivedState,
-): { agent: string | null; model: string | null } {
+): { agent: string | null; model: string | null; effort: string | null } {
   const phase = config.pipeline.find((p) => p.id === derived.displayPhase);
   const isAgentPhase = phase?.actor === 'claude' || phase?.actor === 'copilot';
-  if (!isAgentPhase) return { agent: null, model: null };
-  return resolveAgentModel(config, task, derived.displayPhase, getPhaseDefaults());
+  if (!isAgentPhase) return { agent: null, model: null, effort: null };
+  return resolveAgent(config, task, derived.displayPhase, getPhaseDefaults());
 }
 
 /**
@@ -54,7 +54,7 @@ export async function reconcileAll(config: Config): Promise<TaskWithDerived[]> {
         console.error(`[mc] reconcile failed for #${task.issue}:`, err);
         return {
           ...task,
-          pinned: { agent: null, model: null },
+          pinned: { agent: null, model: null, effort: null },
           derived: reconcile(
             {
               issue: task.issue,

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   buildAgentArgs,
   buildWtArgs,
+  buildCodeWorkspace,
   PROMPT_TOKEN,
 } from '../src/orchestrator/spawn.ts';
 import type { AgentProfile } from '../src/shared/types.ts';
@@ -10,6 +11,7 @@ const claude: AgentProfile = {
   launch: 'claude',
   promptMode: 'positional',
   modelFlag: '--model',
+  effortFlag: '--effort',
   instructionMode: 'flag',
   instructionFlag: '--append-system-prompt',
 };
@@ -19,6 +21,7 @@ const copilot: AgentProfile = {
   promptMode: 'flag',
   promptFlag: '-i',
   modelFlag: '--model',
+  effortFlag: '--effort',
   instructionMode: 'inline',
 };
 
@@ -49,6 +52,22 @@ describe('buildAgentArgs — claude', () => {
   test("treats a model of 'default' as no pin", () => {
     const args = buildAgentArgs(claude, { instructions: RULES, model: 'default' });
     expect(args).not.toContain('--model');
+  });
+
+  test('includes the reasoning effort when one is set', () => {
+    const args = buildAgentArgs(claude, { instructions: RULES, effort: 'high' });
+    expect(args[args.indexOf('--effort') + 1]).toBe('high');
+  });
+
+  test('omits the effort flag when none is set', () => {
+    expect(buildAgentArgs(claude, { instructions: RULES })).not.toContain('--effort');
+  });
+
+  test('does not emit an effort flag for an agent that lacks one', () => {
+    const noEffort = { ...claude, effortFlag: undefined };
+    expect(buildAgentArgs(noEffort, { instructions: RULES, effort: 'high' })).not.toContain(
+      '--effort',
+    );
   });
 });
 
@@ -131,5 +150,40 @@ describe('buildWtArgs', () => {
     for (const arg of buildWtArgs(opts)) {
       expect(arg).not.toBe(';');
     }
+  });
+});
+
+describe('buildCodeWorkspace', () => {
+  const opts = {
+    issue: 3060,
+    phase: 'plan',
+    worktree: 'C:\\Users\\ouriel\\.mc\\worktrees\\issue-3060',
+    script: 'C:\\Users\\ouriel\\.mc\\scripts\\run-phase.ps1',
+    specFile: 'C:\\Users\\ouriel\\.mc\\tasks\\3060\\spawn.json',
+  };
+
+  test('opens VS Code on the worktree so the code is visible', () => {
+    const ws = buildCodeWorkspace(opts);
+    expect(ws.folders).toEqual([{ path: opts.worktree }]);
+  });
+
+  test('defines the phase run as a folder-open task in the workspace file', () => {
+    // The task lives in the workspace file, never in the worktree's .vscode,
+    // so opening in VS Code stays zero-footprint.
+    const task = buildCodeWorkspace(opts).tasks.tasks[0]!;
+    expect(task.runOptions.runOn).toBe('folderOpen');
+    expect(task.command).toBe('pwsh');
+    expect(task.args).toContain('-File');
+    expect(task.args).toContain(opts.script);
+    expect(task.args).toContain(opts.specFile);
+  });
+
+  test('names the task for the issue and phase', () => {
+    expect(buildCodeWorkspace(opts).tasks.tasks[0]!.label).toContain('3060');
+    expect(buildCodeWorkspace(opts).tasks.tasks[0]!.label).toContain('plan');
+  });
+
+  test('serialises to valid JSON', () => {
+    expect(() => JSON.stringify(buildCodeWorkspace(opts))).not.toThrow();
   });
 });

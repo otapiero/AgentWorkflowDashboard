@@ -42,10 +42,41 @@ PATH, `gh` authenticated, repo path valid). Edit
 ## Running
 
 ```powershell
-npm run dev     # Vite dev server + Fastify with live reload
-# or
 npm start       # serves the built UI from Fastify on http://127.0.0.1:4317
+# or, for UI development with live reload:
+npm run dev     # Vite dev server + Fastify
 ```
+
+Then open http://127.0.0.1:4317. Stop the app with Ctrl+C — it loses nothing,
+because state is re-derived from git/GitHub and the workspace on the next start.
+Agent terminals opened by a spawn run independently and keep going after the app
+closes.
+
+## Choosing agent, model and effort
+
+Every spawn resolves an agent, a model and a reasoning-effort level, strongest
+wins:
+
+1. **One-time** — in a task's drawer, "Run once with a different agent" applies
+   to the next launch only.
+2. **Per-task pin** — the drawer's "Pinned agent, model & effort" persists for
+   that task.
+3. **Per-phase default** — the **Agents** panel (top bar), or the chip on each
+   lane header.
+
+Model and effort choices are dropdowns driven by each agent's capabilities. Edit
+the `models:` / `efforts:` lists under an agent in `config.yaml` if the CLI's
+options change.
+
+## Where agents open
+
+The **Agents** panel also picks the launcher:
+
+- **Windows Terminal** (default) — one titled tab per task.
+- **VS Code** — opens the task's worktree in VS Code and runs the agent in the
+  integrated terminal. The first time, VS Code asks to allow automatic tasks;
+  say yes. The task lives in a generated `.code-workspace` under `~/.mc`,
+  never in the repo checkout.
 
 ## Headless orchestrator
 

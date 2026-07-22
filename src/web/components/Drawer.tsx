@@ -3,8 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import type { BoardConfig } from '../api.ts';
 import { AgentPicker } from './AgentPicker.tsx';
+import type { AgentSelection } from './AgentPicker.tsx';
 import { AgentChip, IconPlay } from './bits.tsx';
 import type { Phase, TaskWithDerived } from '../../shared/types.ts';
+
+const EMPTY: AgentSelection = { agent: '', model: '', effort: '' };
 
 interface Props {
   task: TaskWithDerived;
@@ -27,13 +30,11 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   // per-task pin
-  const [pinAgent, setPinAgent] = useState(task.overrides?.agent ?? '');
-  const [pinModel, setPinModel] = useState(task.overrides?.model ?? '');
+  const [pin, setPin] = useState<AgentSelection>(EMPTY);
 
   // one-time override for the next spawn
   const [onceOpen, setOnceOpen] = useState(false);
-  const [onceAgent, setOnceAgent] = useState('');
-  const [onceModel, setOnceModel] = useState('');
+  const [once, setOnce] = useState<AgentSelection>(EMPTY);
 
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -52,11 +53,13 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
   useEffect(() => {
     setPlan(null);
     setInstructions('');
-    setPinAgent(task.overrides?.agent ?? '');
-    setPinModel(task.overrides?.model ?? '');
+    setPin({
+      agent: task.overrides?.agent ?? '',
+      model: task.overrides?.model ?? '',
+      effort: task.overrides?.effort ?? '',
+    });
     setOnceOpen(false);
-    setOnceAgent('');
-    setOnceModel('');
+    setOnce(EMPTY);
     api
       .plan(task.issue)
       .then((r) => setPlan(r.content))
@@ -82,8 +85,9 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
     return run(phase, () =>
       api.spawn(task.issue, phase, {
         customInstructions: instructions.trim() || undefined,
-        agent: onceOpen ? onceAgent || undefined : undefined,
-        model: onceOpen ? onceModel || undefined : undefined,
+        agent: onceOpen ? once.agent || undefined : undefined,
+        model: onceOpen ? once.model || undefined : undefined,
+        effort: onceOpen ? once.effort || undefined : undefined,
       }),
     );
   }
@@ -91,7 +95,9 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
   const spawnable = config.pipeline.filter((p) => p.spawnable && p.command);
   const issueUrl = `https://github.com/${config.repo.owner}/${config.repo.name}/issues/${task.issue}`;
   const pinDirty =
-    pinAgent !== (task.overrides?.agent ?? '') || pinModel !== (task.overrides?.model ?? '');
+    pin.agent !== (task.overrides?.agent ?? '') ||
+    pin.model !== (task.overrides?.model ?? '') ||
+    pin.effort !== (task.overrides?.effort ?? '');
 
   return (
     <>
@@ -128,7 +134,11 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
           <div className="section-label">Status</div>
           <div className="badges">
             {task.pinned.agent && (
-              <AgentChip agent={task.pinned.agent} model={task.pinned.model} />
+              <AgentChip
+                agent={task.pinned.agent}
+                model={task.pinned.model}
+                effort={task.pinned.effort}
+              />
             )}
             {task.derived.badges.length === 0 && !task.pinned.agent ? (
               <span className="badge">not started</span>
@@ -179,12 +189,10 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
               <div className="stack">
                 <AgentPicker
                   agents={config.agents}
-                  agent={onceAgent}
-                  model={onceModel}
-                  onAgent={setOnceAgent}
-                  onModel={setOnceModel}
-                  inheritLabel="Use pinned agent"
-                  compact
+                  value={once}
+                  onChange={setOnce}
+                  inheritedAgent={task.pinned.agent}
+                  inheritAgentLabel="Use pinned agent"
                 />
                 <p className="hint">
                   Applies to the next phase you launch only. Nothing is saved.
@@ -200,15 +208,14 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
         </section>
 
         <section className="section">
-          <div className="section-label">Pinned agent &amp; model</div>
+          <div className="section-label">Pinned agent, model &amp; effort</div>
           <div className="stack">
             <AgentPicker
               agents={config.agents}
-              agent={pinAgent}
-              model={pinModel}
-              onAgent={setPinAgent}
-              onModel={setPinModel}
-              inheritLabel="Use phase default"
+              value={pin}
+              onChange={setPin}
+              inheritedAgent={task.pinned.agent}
+              inheritAgentLabel="Use phase default"
             />
             <div className="actions">
               <button
@@ -217,8 +224,9 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
                 onClick={() =>
                   run('pin', () =>
                     api.overrides(task.issue, {
-                      agent: pinAgent || undefined,
-                      model: pinModel || undefined,
+                      agent: pin.agent || undefined,
+                      model: pin.model || undefined,
+                      effort: pin.effort || undefined,
                       instructions: task.overrides?.instructions,
                     }),
                   )

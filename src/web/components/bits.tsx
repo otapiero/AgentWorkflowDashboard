@@ -1,10 +1,19 @@
 /** Small shared presentational bits: agent chip and inline icons. */
 
-export function AgentChip({ agent, model }: { agent: string; model?: string | null }) {
+export function AgentChip({
+  agent,
+  model,
+  effort,
+}: {
+  agent: string;
+  model?: string | null;
+  effort?: string | null;
+}) {
   return (
     <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
       <span className={`chip agent-${agent}`}>{agent}</span>
       {model && <span className="chip-model">{model}</span>}
+      {effort && <span className="chip-model">effort: {effort}</span>}
     </span>
   );
 }

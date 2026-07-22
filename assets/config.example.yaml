@@ -20,27 +20,41 @@ github:
   # Verified against real review threads on this repo.
   copilotReviewerLogin: 'copilot-pull-request-reviewer'
 
+# How a spawn opens its terminal: 'wt' (Windows Terminal, default) or 'vscode'
+# (opens the worktree in VS Code and runs the agent in the integrated terminal).
+# Also switchable live from the Agents settings panel.
+launcher: wt
+
 agents:
-  # Verified against claude 2.1.183: prompt is positional, and standing rules
-  # go through --append-system-prompt.
+  # Verified against claude 2.1.x: prompt is positional, standing rules go
+  # through --append-system-prompt, and --effort sets reasoning effort.
+  # models/efforts populate the pickers; edit them if the CLI's options change.
   claude:
     launch: 'claude'
     promptMode: positional
     modelFlag: '--model'
+    effortFlag: '--effort'
     instructionMode: flag
     instructionFlag: '--append-system-prompt'
     model: default
+    models: [default, opus, sonnet, haiku]
+    efforts: [low, medium, high, xhigh, max]
 
   # Verified against copilot 1.0.73: -i starts an interactive session with the
-  # prompt preloaded, and there is no system-prompt flag, so standing rules
-  # have to be prepended into the prompt body instead.
+  # prompt preloaded, there is no system-prompt flag (standing rules are
+  # prepended into the prompt body), and --effort sets reasoning effort.
   copilot:
     launch: 'copilot'
     promptMode: flag
     promptFlag: '-i'
     modelFlag: '--model'
+    effortFlag: '--effort'
     instructionMode: inline
     model: default
+    # Edit this list to match the models your copilot CLI actually offers
+    # (run /model in an interactive `copilot` session to see them).
+    models: [auto, gpt-5.6, sol-5.6, luna-5.6, terra-5.6]
+    efforts: [none, minimal, low, medium, high, xhigh, max]
 
 pipeline:
   - id: plan
