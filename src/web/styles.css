@@ -389,7 +389,22 @@ select.field {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* When the agent/model/effort chips don't fit, wrap them onto a new line so
+     the card grows downward instead of overflowing its lane sideways. */
+  flex-wrap: wrap;
+  row-gap: 5px;
   margin-bottom: 5px;
+}
+
+/* The agent + model + effort cluster: allow it to shrink below its content and
+   wrap its chips, so a long combo (e.g. "claude opus effort: high") stacks
+   rather than pushing the card wider than the lane. */
+.agent-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
 }
 
 .card-issue {

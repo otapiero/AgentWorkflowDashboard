@@ -10,7 +10,7 @@ export function AgentChip({
   effort?: string | null;
 }) {
   return (
-    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+    <span className="agent-chip">
       <span className={`chip agent-${agent}`}>{agent}</span>
       {model && <span className="chip-model">{model}</span>}
       {effort && <span className="chip-model">effort: {effort}</span>}

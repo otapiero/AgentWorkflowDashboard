@@ -30,63 +30,74 @@ const RULES = 'You are in a prepared worktree.';
 describe('buildAgentArgs — claude', () => {
   test('passes the prompt positionally as the first argument', () => {
     // Verified: `claude` takes its prompt as a positional argument.
-    const args = buildAgentArgs(claude, { instructions: RULES });
+    const args = buildAgentArgs('claude', claude, { instructions: RULES });
     expect(args[0]).toBe(PROMPT_TOKEN);
   });
 
   test('passes standing rules via the system-prompt flag', () => {
-    const args = buildAgentArgs(claude, { instructions: RULES });
+    const args = buildAgentArgs('claude', claude, { instructions: RULES });
     expect(args).toContain('--append-system-prompt');
     expect(args[args.indexOf('--append-system-prompt') + 1]).toBe(RULES);
   });
 
   test('includes the model when one is pinned', () => {
-    const args = buildAgentArgs(claude, { instructions: RULES, model: 'opus' });
+    const args = buildAgentArgs('claude', claude, { instructions: RULES, model: 'opus' });
     expect(args[args.indexOf('--model') + 1]).toBe('opus');
   });
 
   test('omits the model flag entirely when no model is pinned', () => {
-    expect(buildAgentArgs(claude, { instructions: RULES })).not.toContain('--model');
+    expect(buildAgentArgs('claude', claude, { instructions: RULES })).not.toContain('--model');
   });
 
   test("treats a model of 'default' as no pin", () => {
-    const args = buildAgentArgs(claude, { instructions: RULES, model: 'default' });
+    const args = buildAgentArgs('claude', claude, { instructions: RULES, model: 'default' });
     expect(args).not.toContain('--model');
   });
 
   test('includes the reasoning effort when one is set', () => {
-    const args = buildAgentArgs(claude, { instructions: RULES, effort: 'high' });
+    const args = buildAgentArgs('claude', claude, { instructions: RULES, effort: 'high' });
     expect(args[args.indexOf('--effort') + 1]).toBe('high');
   });
 
   test('omits the effort flag when none is set', () => {
-    expect(buildAgentArgs(claude, { instructions: RULES })).not.toContain('--effort');
+    expect(buildAgentArgs('claude', claude, { instructions: RULES })).not.toContain('--effort');
   });
 
   test('does not emit an effort flag for an agent that lacks one', () => {
+    // A custom agent that is neither built-in nor declares an effort flag, so
+    // there is no flag to fall back to.
     const noEffort = { ...claude, effortFlag: undefined };
-    expect(buildAgentArgs(noEffort, { instructions: RULES, effort: 'high' })).not.toContain(
-      '--effort',
-    );
+    expect(
+      buildAgentArgs('custom', noEffort, { instructions: RULES, effort: 'high' }),
+    ).not.toContain('--effort');
+  });
+
+  test('falls back to the built-in effort flag when the profile omits it', () => {
+    // Regression: a claude profile with no effortFlag must still emit --effort
+    // (via the built-in fallback), otherwise the CLI uses its own default.
+    const noFlag = { ...claude, effortFlag: undefined };
+    const args = buildAgentArgs('claude', noFlag, { instructions: RULES, effort: 'high' });
+    expect(args[args.indexOf('--effort') + 1]).toBe('high');
   });
 });
 
 describe('buildAgentArgs — copilot', () => {
   test('passes the prompt behind its -i flag rather than positionally', () => {
     // Verified: `copilot` has no positional prompt; -i starts interactive.
-    const args = buildAgentArgs(copilot, { instructions: RULES });
+    const args = buildAgentArgs('copilot', copilot, { instructions: RULES });
     expect(args[0]).toBe('-i');
     expect(args[1]).toBe(PROMPT_TOKEN);
   });
 
   test('never emits a system-prompt flag, because copilot has none', () => {
-    const args = buildAgentArgs(copilot, { instructions: RULES });
+    const args = buildAgentArgs('copilot', copilot, { instructions: RULES });
     expect(args.join(' ')).not.toContain('--append-system-prompt');
     expect(args).not.toContain(RULES);
   });
 
   test('appends configured extra arguments', () => {
     const args = buildAgentArgs(
+      'copilot',
       { ...copilot, extraArgs: ['--allow-all-tools'] },
       { instructions: RULES },
     );
@@ -96,13 +107,13 @@ describe('buildAgentArgs — copilot', () => {
 
 describe('buildAgentArgs — general', () => {
   test('the prompt token appears exactly once so substitution is unambiguous', () => {
-    const args = buildAgentArgs(claude, { instructions: RULES });
+    const args = buildAgentArgs('claude', claude, { instructions: RULES });
     expect(args.filter((a) => a === PROMPT_TOKEN)).toHaveLength(1);
   });
 
   test('arguments are kept as separate array entries, never a joined string', () => {
     // Splatting an array is what keeps spaces and quotes in the prompt safe.
-    const args = buildAgentArgs(claude, { instructions: 'has spaces and "quotes"' });
+    const args = buildAgentArgs('claude', claude, { instructions: 'has spaces and "quotes"' });
     expect(args).toContain('has spaces and "quotes"');
   });
 });

@@ -4,7 +4,7 @@ import { execa } from 'execa';
 
 import { promptPath, runPhaseScript, taskDir, worktreePath } from './paths.ts';
 import { buildPrompt, writePromptFile } from './prompt.ts';
-import { resolveAgent } from './agents.ts';
+import { agentCapabilities, resolveAgent } from './agents.ts';
 import { getPhaseDefaults, getSettings } from './state.ts';
 import { ensureWorktree } from './worktree.ts';
 import type {
@@ -52,6 +52,7 @@ export interface AgentArgOptions {
  * claude 2.1.183 and copilot 1.0.73). Both accept --model and --effort.
  */
 export function buildAgentArgs(
+  name: string,
   profile: AgentProfile,
   options: AgentArgOptions,
 ): string[] {
@@ -67,14 +68,20 @@ export function buildAgentArgs(
     args.push(profile.instructionFlag!, options.instructions);
   }
 
+  // Resolve the model/effort flags through the same built-in fallback the
+  // pickers use, so a config that omits effortFlag still spawns with the flag
+  // the CLI expects. Reading profile.effortFlag directly would silently drop
+  // the effort the card shows and let the CLI fall back to its own default.
+  const caps = agentCapabilities(name, profile);
+
   const model = options.model ?? profile.model;
-  if (model && model !== 'default' && profile.modelFlag) {
-    args.push(profile.modelFlag, model);
+  if (model && model !== 'default' && caps.modelFlag) {
+    args.push(caps.modelFlag, model);
   }
 
   const effort = options.effort ?? profile.effort;
-  if (effort && profile.effortFlag) {
-    args.push(profile.effortFlag, effort);
+  if (effort && caps.effortFlag) {
+    args.push(caps.effortFlag, effort);
   }
 
   if (profile.extraArgs?.length) args.push(...profile.extraArgs);
@@ -249,7 +256,7 @@ export async function spawnPhase(
     repoPath: config.repo.path,
     promptFile: promptPath(task.issue),
     exe: profile.launch,
-    args: buildAgentArgs(profile, {
+    args: buildAgentArgs(agent, profile, {
       instructions: STANDING_RULES,
       model: model ?? undefined,
       effort: effort ?? undefined,
