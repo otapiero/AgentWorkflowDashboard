@@ -10,6 +10,7 @@ import {
   worktreePath,
 } from './paths.ts';
 import { buildPrompt, writePromptFile } from './prompt.ts';
+import { writePlanSnapshot } from './artifacts.ts';
 import { agentCapabilities, resolveAgent } from './agents.ts';
 import { getPhaseDefaults, getSettings } from './state.ts';
 import { ensureWorktree } from './worktree.ts';
@@ -268,6 +269,10 @@ export async function spawnPhase(
       profile.instructionMode === 'inline' ? STANDING_RULES : undefined,
   });
   writePromptFile(task.issue, promptText);
+
+  // Record the "before" picture so a plan run's artifacts can be attributed to
+  // it later. Only the plan phase produces the artifacts we capture.
+  if (phase.id === 'plan') writePlanSnapshot(config, task.issue);
 
   const spec: SpawnSpec = {
     issue: task.issue,

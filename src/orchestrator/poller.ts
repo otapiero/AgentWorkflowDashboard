@@ -1,5 +1,9 @@
+import { existsSync } from 'node:fs';
+
 import { applyLastGood, boardSignature, nextDelayMs } from './board.ts';
 import { gatherFacts } from './facts.ts';
+import { collectArtifacts, readArtifacts, shouldCollectPlan } from './artifacts.ts';
+import { artifactsManifestPath, planSnapshotPath } from './paths.ts';
 import { fetchBranchPrs } from './github.ts';
 import { reconcile } from './reconcile.ts';
 import { loadState, saveState } from './state.ts';
@@ -83,7 +87,26 @@ export async function reconcileAll(
   const results = await Promise.all(
     state.tasks.map(async (task): Promise<TaskWithDerived> => {
       try {
-        const facts = await gatherFacts(config, task, branches, batch);
+        let facts = await gatherFacts(config, task, branches, batch);
+        // Once a plan run has ended (or the agent signalled done) and nothing
+        // has been collected yet, gather its artifacts. This is the crash-safe
+        // floor: capture happens even if the agent never signed off.
+        if (
+          shouldCollectPlan({
+            liveSpawn: facts.liveSpawn,
+            planMdExists: facts.planMdExists,
+            planDoneMarker: facts.markers.includes('plan.done'),
+            manifestExists: existsSync(artifactsManifestPath(task.issue)),
+            snapshotExists: existsSync(planSnapshotPath(task.issue)),
+          })
+        ) {
+          try {
+            await collectArtifacts(config, task.issue, 'auto');
+          } catch (e) {
+            console.error(`[mc] artifact collection failed for #${task.issue}:`, e);
+          }
+          facts = { ...facts, artifacts: readArtifacts(task.issue) };
+        }
         const derived = reconcile(facts, task.manualPhase);
         const now = new Date().toISOString();
         const merged = mergedFields(task, facts.pr.state, now);

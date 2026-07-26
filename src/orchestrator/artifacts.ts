@@ -66,14 +66,21 @@ export function uniqueName(existing: string[], base: string): string {
  * Whether the poller should collect a plan run's artifacts now. Collect once a
  * run is finished (or the agent signalled done), and never twice — a manifest
  * already on disk is the "already collected" sentinel.
+ *
+ * A snapshot must exist: it is the baseline written at plan spawn, and only a
+ * real plan run has one. Without it, auto-collection would diff against nothing
+ * and sweep an entire dirty worktree into the manifest — so a task that predates
+ * this feature, or is deep in implementation, is correctly left alone. (The
+ * explicit `collect` CLI bypasses this guard and degrades gracefully instead.)
  */
 export function shouldCollectPlan(i: {
   liveSpawn: unknown;
   planMdExists: boolean;
   planDoneMarker: boolean;
   manifestExists: boolean;
+  snapshotExists: boolean;
 }): boolean {
-  if (i.manifestExists) return false;
+  if (i.manifestExists || !i.snapshotExists) return false;
   return i.planDoneMarker || (!i.liveSpawn && i.planMdExists);
 }
 

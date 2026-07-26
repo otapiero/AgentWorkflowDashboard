@@ -43,7 +43,13 @@ describe('uniqueName', () => {
 });
 
 describe('shouldCollectPlan', () => {
-  const base = { liveSpawn: null, planMdExists: true, planDoneMarker: false, manifestExists: false };
+  const base = {
+    liveSpawn: null,
+    planMdExists: true,
+    planDoneMarker: false,
+    manifestExists: false,
+    snapshotExists: true,
+  };
   it('collects when the plan spawn has ended and produced a plan', () => {
     expect(shouldCollectPlan(base)).toBe(true);
   });
@@ -55,6 +61,10 @@ describe('shouldCollectPlan', () => {
   });
   it('waits while a spawn is live with no done marker', () => {
     expect(shouldCollectPlan({ ...base, liveSpawn: { pid: 1 } })).toBe(false);
+  });
+  it('never auto-collects without a snapshot (guards non-plan / legacy tasks)', () => {
+    expect(shouldCollectPlan({ ...base, snapshotExists: false })).toBe(false);
+    expect(shouldCollectPlan({ ...base, snapshotExists: false, planDoneMarker: true })).toBe(false);
   });
 });
 
