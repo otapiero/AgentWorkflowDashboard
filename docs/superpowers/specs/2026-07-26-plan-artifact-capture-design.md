@@ -120,16 +120,22 @@ but collection also fails soft internally.
 ## 5. Triggers
 
 - **Belt — agent signs off.** The existing spawn prompt (same `{{planPath}}`
-  render machinery) gains one line: *"When your plan is complete, run:
-  `<mc-cli> collect <issue>`."* The issue number is baked in at render time — no
-  context-guessing. This maps to a new `collect <issue>` subcommand on the
-  existing CLI, which calls `collectArtifacts`. (A `/mc-plan-done` slash-command
-  wrapper is optional sugar over the same line; not built here.)
-- **Suspenders — agent didn't.** The poller already detects a stale plan spawn
-  (a `.running` marker with no live process — see `computeBadges`). When a plan
-  spawn ended **without** `plan.done`, the poller calls `collectArtifacts` with
-  `trigger: "auto"`. Nothing is ever lost, matching the board's crash-safe
-  design.
+  render machinery) gains one line: *"When your plan and any supporting docs are
+  complete, write an empty file at this exact path to signal done:
+  `{{donePath}}`."* `donePath` is `tasks/<issue>/markers/plan.done`, an absolute
+  path baked in at render time. This is the **same trivial file-write the agent
+  already does for `plan.md`** — deliberately *not* a CLI call, because the
+  agent's working directory is the Acme worktree, not the MC repo, so
+  `npm run mc` would fail there. The poller sees the marker and collects at once.
+  (A headless `collect <issue>` CLI subcommand still exists for the harness and
+  tests; the agent never invokes it.)
+- **Suspenders — agent didn't.** Even with no marker, the poller collects once a
+  plan spawn has ended (`planMdExists` with no `liveSpawn`) and no manifest yet
+  exists. Nothing is ever lost, matching the board's crash-safe design.
+
+Both reduce to one poller guard: collect when
+`(plan.done marker present OR (planMdExists AND no liveSpawn))` **and** no
+`artifacts.json` yet.
 
 ## 6. Facts, reconciler, badges
 
