@@ -8,6 +8,7 @@ import type {
 } from '../shared/types.ts';
 
 export type { PollMeta, RateLimit } from '../shared/types.ts';
+export type { MissionUsage, SessionUsage, TokenTotals } from '../orchestrator/usage.ts';
 
 export interface AgentInfo {
   name: string;
@@ -53,6 +54,8 @@ export const api = {
   issues: (scope: IssueScope = 'mine') =>
     request<OpenIssue[]>(`/api/issues?scope=${scope}`),
   plan: (issue: number) => request<{ content: string }>(`/api/tasks/${issue}/plan`),
+  usage: (issue: number) =>
+    request<import('../orchestrator/usage.ts').MissionUsage>(`/api/tasks/${issue}/usage`),
 
   import: (issue: number) => post<TaskWithDerived[]>('/api/tasks/import', { issue }),
   reconcile: () => post<TaskWithDerived[]>('/api/reconcile'),

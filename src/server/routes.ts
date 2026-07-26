@@ -6,6 +6,7 @@ import { fetchIssueTitle, listOpenIssues } from '../orchestrator/github.ts';
 import { planPath } from '../orchestrator/paths.ts';
 import { writeMarker, clearMarker } from '../orchestrator/markers.ts';
 import { openWorktreeInVscode, spawnPhase } from '../orchestrator/spawn.ts';
+import { missionUsage } from '../orchestrator/usage.ts';
 import {
   getPhaseDefaults,
   getSettings,
@@ -223,6 +224,12 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
     const file = planPath(issue);
     if (!existsSync(file)) return reply.code(404).send({ error: 'no plan attached yet' });
     return { content: readFileSync(file, 'utf8') };
+  });
+
+  app.get<{ Params: { issue: string } }>('/api/tasks/:issue/usage', async (req, reply) => {
+    const issue = Number(req.params.issue);
+    if (!getTask(issue)) return reply.code(404).send({ error: 'task not on the board' });
+    return missionUsage(issue);
   });
 
   app.post<{ Params: { issue: string } }>(
