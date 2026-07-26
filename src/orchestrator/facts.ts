@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 
 import { planPath } from './paths.ts';
 import { listMarkers, readLiveSpawn } from './markers.ts';
-import { fetchBranchPr } from './github.ts';
+import type { BatchedBranchPrs } from './github.ts';
 import { gatherGitFacts, worktreeExists } from './worktree.ts';
 import type { Config, Facts, TaskRecord } from '../shared/types.ts';
 
@@ -20,6 +20,7 @@ export async function gatherFacts(
   config: Config,
   task: TaskRecord,
   branches: Set<string>,
+  batch: BatchedBranchPrs,
 ): Promise<Facts> {
   const markers = listMarkers(task.issue);
   const liveSpawn = readLiveSpawn(task.issue);
@@ -60,16 +61,23 @@ export async function gatherFacts(
   // on it, and don't let network latency scale with board size.
   if (!hasBranch && !hasWorktree) return facts;
 
+  // Active task, but the batched PR request failed this cycle: throw so the
+  // poller's per-task catch holds this card at its last good place instead of
+  // showing it as PR-less.
+  if (!batch.ok) throw new Error(`branch PR batch unavailable for #${task.issue}`);
+
   const git = await gatherGitFacts(config, task.issue, task.branch);
   facts.dirtyFileCount = git.dirtyFileCount;
   facts.unpushedCommits = git.unpushedCommits;
   facts.hasPushedCommits = git.hasPushedCommits;
 
-  // One GraphQL call yields the PR plus its checks, decision and threads; the
-  // parser already blanks the gates for a merged or closed PR.
-  const branchPr = await fetchBranchPr(config, task.branch);
-  facts.pr = branchPr.pr;
-  facts.checks = branchPr.checks;
-  facts.review = branchPr.review;
+  // The PR, its checks, decision and threads come from the one batched call the
+  // poller already made this cycle. A branch with no PR simply is not in the map.
+  const branchPr = batch.byBranch.get(task.branch);
+  if (branchPr) {
+    facts.pr = branchPr.pr;
+    facts.checks = branchPr.checks;
+    facts.review = branchPr.review;
+  }
   return facts;
 }

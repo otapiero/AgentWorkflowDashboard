@@ -146,16 +146,11 @@ interface BranchPrNode {
  * review decision, and its threads. Kept pure and separate from the fetch so it
  * can be tested against recorded payloads without the network.
  */
-export function parseBranchPrResponse(
-  raw: unknown,
+/** Fold one branch's PR connection nodes into facts (shared by both parsers). */
+function foldBranchPrNodes(
+  nodes: BranchPrNode[] | null | undefined,
   copilotLogin: string,
 ): BranchPrFacts {
-  const nodes = (
-    raw as {
-      data?: { repository?: { pullRequests?: { nodes?: BranchPrNode[] } } };
-    }
-  )?.data?.repository?.pullRequests?.nodes;
-
   if (!nodes || nodes.length === 0) return noBranchPr();
 
   // Prefer an open PR; otherwise the most recent one (nodes are newest-first).
@@ -181,6 +176,34 @@ export function parseBranchPrResponse(
       ...parseReviewThreads(node.reviewThreads?.nodes, copilotLogin),
     },
   };
+}
+
+export function parseBranchPrResponse(
+  raw: unknown,
+  copilotLogin: string,
+): BranchPrFacts {
+  const nodes = (
+    raw as {
+      data?: { repository?: { pullRequests?: { nodes?: BranchPrNode[] } } };
+    }
+  )?.data?.repository?.pullRequests?.nodes;
+  return foldBranchPrNodes(nodes, copilotLogin);
+}
+
+/** Fold a batched, aliased response into a branch -> facts map. */
+export function parseBranchPrsResponse(
+  raw: unknown,
+  branches: string[],
+  copilotLogin: string,
+): Map<string, BranchPrFacts> {
+  const repo = (
+    raw as { data?: { repository?: Record<string, { nodes?: BranchPrNode[] }> } }
+  )?.data?.repository;
+  const map = new Map<string, BranchPrFacts>();
+  branches.forEach((branch, i) => {
+    map.set(branch, foldBranchPrNodes(repo?.[`b${i}`]?.nodes, copilotLogin));
+  });
+  return map;
 }
 
 /** Pull the rate-limit budget out of a `{ rateLimit }` GraphQL response. */
@@ -261,71 +284,84 @@ export async function listOpenIssues(
   }
 }
 
-/**
- * One GraphQL query for a branch's PR, its checks, its review decision and its
- * threads together — replacing the `gh pr list` + two `gh pr view` + graphql
- * calls this used to take. `statusCheckRollup` hangs off the PR's last commit;
- * `first:10` on the PRs covers a reopened branch while still preferring OPEN.
- */
-const BRANCH_PR_QUERY = `
-query($owner:String!,$name:String!,$branch:String!){
-  repository(owner:$owner,name:$name){
-    pullRequests(headRefName:$branch, first:10, orderBy:{field:CREATED_AT, direction:DESC}){
-      nodes{
-        number url state reviewDecision
-        reviewThreads(first:100){
-          nodes{ isResolved comments(first:1){ nodes{ author{ login } } } }
-        }
-        commits(last:1){
-          nodes{ commit{ statusCheckRollup{ contexts(first:100){ nodes{
-            __typename
-            ... on CheckRun{ status conclusion }
-            ... on StatusContext{ state }
-          } } } } }
-        }
-      }
-    }
-  }
-}`;
-
-export async function fetchBranchPr(
-  config: Config,
-  branch: string,
-): Promise<BranchPrFacts> {
-  try {
-    const out = await gh(
-      [
-        'api',
-        'graphql',
-        '-f',
-        `query=${BRANCH_PR_QUERY}`,
-        '-F',
-        `owner=${config.repo.owner}`,
-        '-F',
-        `name=${config.repo.name}`,
-        '-F',
-        `branch=${branch}`,
-      ],
-      config.repo.path,
-    );
-    return parseBranchPrResponse(JSON.parse(out), config.github.copilotReviewerLogin);
-  } catch {
-    return noBranchPr();
-  }
+export interface BatchedBranchPrs {
+  /** False when the whole request failed, so callers can hold at last-good. */
+  ok: boolean;
+  byBranch: Map<string, BranchPrFacts>;
+  rateLimit: RateLimit | null;
 }
 
+/** The per-branch selection, shared by every alias in the batched query. */
+const PR_FIELDS = `
+  nodes{
+    number url state reviewDecision
+    reviewThreads(first:30){
+      nodes{ isResolved comments(first:1){ nodes{ author{ login } } } }
+    }
+    commits(last:1){
+      nodes{ commit{ statusCheckRollup{ contexts(first:30){ nodes{
+        __typename
+        ... on CheckRun{ status conclusion }
+        ... on StatusContext{ state }
+      } } } } }
+    }
+  }`;
+
 /**
- * The current GraphQL rate-limit budget. Querying `rateLimit` is itself free
- * (it costs zero points), so this is a cheap once-per-poll health signal.
+ * One GraphQL query for every active branch's PR at once, using aliases
+ * (b0, b1, …) and one string variable per branch. `first:1` keeps each alias
+ * cheap; the reduced first:30 counts cut the point cost ~10x versus first:100.
+ * `rateLimit` is folded in so the budget read costs no extra round trip.
  */
-export async function fetchRateLimit(config: Config): Promise<RateLimit | null> {
-  try {
-    const out = await gh(
-      ['api', 'graphql', '-f', 'query={ rateLimit { limit remaining resetAt } }'],
-      config.repo.path,
+function buildBatchQuery(count: number): string {
+  const vars = ['$owner:String!', '$name:String!'];
+  const aliases: string[] = [];
+  for (let i = 0; i < count; i++) {
+    vars.push(`$b${i}:String!`);
+    aliases.push(
+      `b${i}: pullRequests(headRefName:$b${i}, first:1, orderBy:{field:CREATED_AT, direction:DESC}){${PR_FIELDS}\n    }`,
     );
-    return parseRateLimit(JSON.parse(out));
+  }
+  return `query(${vars.join(',')}){
+  repository(owner:$owner,name:$name){
+    ${aliases.join('\n    ')}
+  }
+  rateLimit { limit remaining resetAt }
+}`;
+}
+
+export async function fetchBranchPrs(
+  config: Config,
+  branches: string[],
+): Promise<BatchedBranchPrs> {
+  // No active branch: no network at all this poll. The heartbeat still fires;
+  // the budget simply reports null for this cycle.
+  if (branches.length === 0) {
+    return { ok: true, byBranch: new Map(), rateLimit: null };
+  }
+  try {
+    const args = [
+      'api', 'graphql',
+      '-f', `query=${buildBatchQuery(branches.length)}`,
+      '-f', `owner=${config.repo.owner}`,
+      '-f', `name=${config.repo.name}`,
+    ];
+    branches.forEach((b, i) => {
+      args.push('-f', `b${i}=${b}`);
+    });
+    const raw = JSON.parse(await gh(args, config.repo.path));
+    return {
+      ok: true,
+      byBranch: parseBranchPrsResponse(
+        raw,
+        branches,
+        config.github.copilotReviewerLogin,
+      ),
+      rateLimit: parseRateLimit(raw),
+    };
   } catch {
-    return null;
+    // The whole request failed. Report it so the poller holds active cards at
+    // last-good rather than blanking every PR at once.
+    return { ok: false, byBranch: new Map(), rateLimit: null };
   }
 }

@@ -47,3 +47,37 @@ export function applyLastGood(
 
   return { results: out, lastGood: next };
 }
+
+/** Poll cadence tiers. FAST comes from config; these two are fixed. */
+export const REST_MS = 120_000;
+export const DORMANT_MS = 600_000;
+
+/**
+ * Whether any card is doing something worth watching at the fast cadence: an
+ * agent spawn running, CI still pending, or an open PR with unresolved review
+ * threads. Read from the derived badges the board already carries.
+ */
+export function anyInFlight(tasks: TaskWithDerived[]): boolean {
+  return tasks.some((t) =>
+    t.derived.badges.some(
+      (b) =>
+        b.kind === 'live' ||
+        (b.kind === 'ci' && b.tone === 'busy') ||
+        b.kind === 'copilot' ||
+        b.kind === 'review',
+    ),
+  );
+}
+
+/**
+ * How long to wait before the next poll. No open tab: dormant (very slow). A
+ * tab is open: fast while work is in flight, otherwise rest.
+ */
+export function nextDelayMs(
+  tasks: TaskWithDerived[],
+  hasClients: boolean,
+  fastMs: number,
+): number {
+  if (!hasClients) return DORMANT_MS;
+  return anyInFlight(tasks) ? fastMs : REST_MS;
+}

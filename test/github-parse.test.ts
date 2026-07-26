@@ -4,6 +4,7 @@ import {
   normalizeReviewDecision,
   parseReviewThreads,
   parseBranchPrResponse,
+  parseBranchPrsResponse,
   parseRateLimit,
 } from '../src/orchestrator/github.ts';
 
@@ -307,6 +308,43 @@ describe('parseBranchPrResponse', () => {
       COPILOT,
     );
     expect(result.checks).toBe('none');
+  });
+});
+
+describe('parseBranchPrsResponse', () => {
+  // The batched envelope: one aliased connection per branch, keyed b0, b1, ...
+  const prNode = (state: 'OPEN' | 'CLOSED' | 'MERGED', number: number) => ({
+    number,
+    url: `https://x/pull/${number}`,
+    state,
+    reviewDecision: '',
+    reviewThreads: { nodes: [] },
+    commits: {
+      nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [] } } } }],
+    },
+  });
+
+  test('maps each aliased connection back to its branch', () => {
+    const raw = {
+      data: {
+        repository: {
+          b0: { nodes: [prNode('OPEN', 11)] },
+          b1: { nodes: [] },
+        },
+      },
+    };
+    const map = parseBranchPrsResponse(raw, ['feat-a', 'feat-b'], COPILOT);
+    expect(map.get('feat-a')?.pr).toEqual({
+      exists: true, number: 11, url: 'https://x/pull/11', state: 'OPEN',
+    });
+    expect(map.get('feat-b')?.pr).toEqual({
+      exists: false, number: null, url: null, state: null,
+    });
+  });
+
+  test('a branch missing from the response folds to no PR', () => {
+    const map = parseBranchPrsResponse({ data: { repository: {} } }, ['x'], COPILOT);
+    expect(map.get('x')?.pr.exists).toBe(false);
   });
 });
 
