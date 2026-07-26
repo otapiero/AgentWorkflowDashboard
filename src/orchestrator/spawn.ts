@@ -10,7 +10,11 @@ import {
   worktreePath,
 } from './paths.ts';
 import { buildPrompt, writePromptFile } from './prompt.ts';
-import { writePlanSnapshot } from './artifacts.ts';
+import {
+  readArtifacts,
+  resolveArtifactStoredPath,
+  writePlanSnapshot,
+} from './artifacts.ts';
 import { agentCapabilities, resolveAgent } from './agents.ts';
 import { getPhaseDefaults, getSettings } from './state.ts';
 import { ensureWorktree } from './worktree.ts';
@@ -370,6 +374,19 @@ export function openWorktreeInVscode(issue: number): void {
     throw new Error(
       `No worktree yet for issue ${issue}. Run a phase first — that is what creates the checkout.`,
     );
+  }
+  detach('code', [path]);
+}
+
+/**
+ * Open a collected artifact's stored copy in the editor. The name must be in
+ * the manifest — that lookup is the path-traversal guard, since only names MC
+ * itself wrote can resolve.
+ */
+export function openArtifactInEditor(issue: number, name: string): void {
+  const path = resolveArtifactStoredPath(issue, name, readArtifacts(issue));
+  if (!path || !existsSync(path)) {
+    throw new Error(`No collected artifact named '${name}' for issue ${issue}.`);
   }
   detach('code', [path]);
 }

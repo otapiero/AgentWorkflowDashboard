@@ -12,4 +12,10 @@ That path is deliberately outside the repository — writing it there keeps the
 checkout clean. Do not create a plan file inside the repo, and do not write or
 change implementation code in this phase.
 
+When your plan and any supporting docs (specs, design notes, diagrams) are
+complete, write an empty file at this exact absolute path to signal you are
+done — Mission Control watches for it to collect your artifacts:
+
+    {{donePath}}
+
 {{customInstructions}}

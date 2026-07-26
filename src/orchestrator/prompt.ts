@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import {
   claudeCommandPath,
   claudeCommandsDir,
+  markerPath,
   planPath,
   promptPath,
   taskDir,
@@ -77,6 +78,7 @@ export function buildPrompt(
     title: task.title,
     branch: task.branch,
     planPath: planPath(task.issue),
+    donePath: markerPath(task.issue, 'plan.done'),
     worktree: worktreePath(task.issue),
     taskDir: taskDir(task.issue),
     customInstructions: options.customInstructions ?? '',
