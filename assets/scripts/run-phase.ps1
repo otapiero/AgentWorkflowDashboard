@@ -8,7 +8,12 @@
 # it completes whether or not the Mission Control app is still alive.
 
 param(
-    [Parameter(Mandatory)][string]$SpecFile
+    [Parameter(Mandatory)][string]$SpecFile,
+    # Set by the VS Code launcher only. The workspace's folderOpen task fires on
+    # every open, so this file is how we run the agent exactly once: create it on
+    # the first run, bail out on any later open. Mission Control deletes it when
+    # it deliberately launches the phase again.
+    [string]$GuardFile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,6 +31,18 @@ Write-Host ""
 Write-Host "  Mission Control - issue #$issue - $phase" -ForegroundColor Green
 Write-Host "  branch: $($spec.branch)" -ForegroundColor DarkGray
 Write-Host ""
+
+# One-shot guard for the VS Code launcher. If the guard file already exists this
+# is a re-open (or VS Code restoring the window), so do nothing but keep the tab.
+if ($GuardFile) {
+    if (Test-Path $GuardFile) {
+        Write-Host "[mc] This phase was already launched from this workspace; not re-running." -ForegroundColor DarkGray
+        Write-Host "[mc] Relaunch it from Mission Control if you want to run it again." -ForegroundColor DarkGray
+        return
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $GuardFile) | Out-Null
+    Set-Content -Path $GuardFile -Value ((Get-Date).ToUniversalTime().ToString('o')) -NoNewline -Encoding utf8
+}
 
 # --- setup ---------------------------------------------------------------
 Ensure-Worktree -Issue $issue -Worktree $spec.worktree -Branch $spec.branch `
