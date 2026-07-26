@@ -10,6 +10,7 @@ function derived(overrides: Partial<DerivedState> = {}): DerivedState {
     displayPhase: 'plan' as Phase,
     gates: {} as DerivedState['gates'],
     badges: [],
+    artifacts: [],
     needsYou: false,
     needsYouReason: null,
     ...overrides,

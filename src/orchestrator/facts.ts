@@ -32,6 +32,7 @@ export async function gatherFacts(
     branchExists: false,
     markers,
     planMdExists: existsSync(planPath(task.issue)),
+    artifacts: [],
     hasPushedCommits: false,
     dirtyFileCount: 0,
     unpushedCommits: 0,

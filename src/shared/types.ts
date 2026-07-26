@@ -47,6 +47,28 @@ export interface LiveSpawn {
   startedAt: string;
 }
 
+/** One artifact a planning run produced, copied into the task's own folder. */
+export interface ArtifactRef {
+  name: string;
+  /** Path relative to the task dir, e.g. 'artifacts/2026-foo-design.md'. */
+  storedPath: string;
+  /** 'taskdir' = written beside plan.md; 'repo' = written into the checkout. */
+  origin: 'taskdir' | 'repo';
+  /** Absolute path the artifact was first found at. */
+  originalPath: string;
+}
+
+/** The "before" picture captured at plan spawn, used to attribute artifacts. */
+export interface PlanSnapshot {
+  takenAt: string;
+  /** File names present in the task dir (excluding MC's own bookkeeping). */
+  taskDirFiles: string[];
+  /** `git status --porcelain` paths in the worktree at spawn time. */
+  repoStatus: string[];
+  /** Extra watched roots: absolute root path -> file names present. */
+  extraRoots: Record<string, string[]>;
+}
+
 export interface Facts {
   issue: number;
   worktreeExists: boolean;
@@ -54,6 +76,8 @@ export interface Facts {
   /** Marker file names present, e.g. ['plan.done', 'implement.running']. */
   markers: string[];
   planMdExists: boolean;
+  /** Artifacts a plan run produced, from artifacts.json. Empty when none. */
+  artifacts: ArtifactRef[];
   /** Branch has commits that exist on the remote. */
   hasPushedCommits: boolean;
   /** Uncommitted files in the worktree. Surfaced as a badge, never a gate. */
@@ -87,6 +111,7 @@ export type BadgeKind =
   | 'copilot'
   | 'review'
   | 'approved'
+  | 'artifacts-in-repo'
   | 'pr';
 
 export type BadgeTone = 'neutral' | 'good' | 'warn' | 'bad' | 'busy';
@@ -103,6 +128,7 @@ export interface DerivedState {
   displayPhase: Phase;
   gates: Record<Phase, boolean>;
   badges: Badge[];
+  artifacts: ArtifactRef[];
   needsYou: boolean;
   /** Why the card needs attention, for the drawer and future notifications. */
   needsYouReason: string | null;
@@ -237,6 +263,8 @@ export interface Config {
     name: string;
     baseBranch: string;
     branchPrefix: string;
+    /** Extra absolute dirs to also diff for artifacts. Ships empty. */
+    artifactRoots?: string[];
   };
   github: {
     auth: 'gh-cli';

@@ -23,6 +23,7 @@ export function reconcile(
     displayPhase: manualPhase ?? derivedPhase,
     gates,
     badges,
+    artifacts: facts.artifacts,
     needsYou,
     needsYouReason,
   };

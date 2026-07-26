@@ -14,6 +14,7 @@ function task(
     displayPhase: 'ci' as Phase,
     gates: {} as DerivedState['gates'],
     badges: [],
+    artifacts: [],
     needsYou,
     needsYouReason: reason,
   };

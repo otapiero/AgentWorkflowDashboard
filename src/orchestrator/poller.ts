@@ -129,6 +129,7 @@ export async function reconcileAll(
               branchExists: false,
               markers: [],
               planMdExists: false,
+              artifacts: [],
               hasPushedCommits: false,
               dirtyFileCount: 0,
               unpushedCommits: 0,
