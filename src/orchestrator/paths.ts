@@ -70,6 +70,11 @@ export function claudeCommandsDir(): string {
   return process.env.MC_CLAUDE_COMMANDS ?? join(homedir(), '.claude', 'commands');
 }
 
+/** Where Claude Code writes per-session transcripts. */
+export function claudeProjectsDir(): string {
+  return process.env.MC_CLAUDE_PROJECTS ?? join(homedir(), '.claude', 'projects');
+}
+
 export function claudeCommandPath(command: string): string {
   return join(claudeCommandsDir(), `${command}.md`);
 }
