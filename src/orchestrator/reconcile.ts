@@ -182,9 +182,9 @@ function computeNeedsYou(
   if (facts.liveSpawn) return no;
   if (derivedPhase === 'done') return no;
 
-  if (facts.checks === 'failure') {
-    return { needsYou: true, needsYouReason: 'CI is failing' };
-  }
+  // Precedence mirrors derivePhase, so the reason always describes the lane the
+  // card is resting in: review feedback outranks a red CI, because a PR with
+  // outstanding review threads rests in a review lane, not at CI.
   if (facts.review.decision === 'CHANGES_REQUESTED') {
     return { needsYou: true, needsYouReason: 'Changes requested on the PR' };
   }
@@ -202,6 +202,9 @@ function computeNeedsYou(
         facts.review.copilotUnresolved === 1 ? 'comment' : 'comments'
       }`,
     };
+  }
+  if (facts.checks === 'failure') {
+    return { needsYou: true, needsYouReason: 'CI is failing' };
   }
   if (derivedPhase === 'merge') {
     return { needsYou: true, needsYouReason: 'Approved — ready for you to merge' };

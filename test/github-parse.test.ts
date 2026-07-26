@@ -3,6 +3,7 @@ import {
   parseChecksRollup,
   normalizeReviewDecision,
   parseReviewThreads,
+  parseBranchPrResponse,
 } from '../src/orchestrator/github.ts';
 
 const COPILOT = 'copilot-pull-request-reviewer';
@@ -180,5 +181,130 @@ describe('parseReviewThreads', () => {
       parseReviewThreads([thread(false, 'Copilot-Pull-Request-Reviewer')], COPILOT)
         .copilotUnresolved,
     ).toBe(1);
+  });
+});
+
+describe('parseBranchPrResponse', () => {
+  /** Build the GraphQL envelope a single `gh api graphql` call returns. */
+  const envelope = (nodes: unknown[]) => ({
+    data: { repository: { pullRequests: { nodes } } },
+  });
+
+  /** One pull-request node in the combined-query shape. */
+  const prNode = (opts: {
+    number?: number;
+    url?: string;
+    state?: 'OPEN' | 'MERGED' | 'CLOSED';
+    reviewDecision?: string | null;
+    threads?: unknown[];
+    checks?: unknown[] | null;
+  }) => ({
+    number: opts.number ?? 3119,
+    url: opts.url ?? 'https://github.com/o/r/pull/3119',
+    state: opts.state ?? 'OPEN',
+    reviewDecision: opts.reviewDecision ?? '',
+    reviewThreads: { nodes: opts.threads ?? [] },
+    commits: {
+      nodes: [
+        {
+          commit: {
+            statusCheckRollup:
+              opts.checks === null ? null : { contexts: { nodes: opts.checks ?? [] } },
+          },
+        },
+      ],
+    },
+  });
+
+  test('a branch with no associated PR reports no PR and no live gates', () => {
+    expect(parseBranchPrResponse(envelope([]), COPILOT)).toEqual({
+      pr: { exists: false, number: null, url: null, state: null },
+      checks: 'none',
+      review: { decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 },
+    });
+  });
+
+  test('an open PR carries its number, url and state', () => {
+    const result = parseBranchPrResponse(
+      envelope([prNode({ number: 3119, url: 'https://x/pull/3119', state: 'OPEN' })]),
+      COPILOT,
+    );
+    expect(result.pr).toEqual({
+      exists: true,
+      number: 3119,
+      url: 'https://x/pull/3119',
+      state: 'OPEN',
+    });
+  });
+
+  test('an open PR reports checks, decision and thread counts together', () => {
+    // The whole point of the combined query: one call yields every live gate.
+    const result = parseBranchPrResponse(
+      envelope([
+        prNode({
+          state: 'OPEN',
+          reviewDecision: 'REVIEW_REQUIRED',
+          checks: [
+            { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' },
+          ],
+          threads: [
+            { isResolved: false, comments: { nodes: [{ author: { login: COPILOT } }] } },
+            { isResolved: false, comments: { nodes: [{ author: { login: 'ouriel' } }] } },
+          ],
+        }),
+      ]),
+      COPILOT,
+    );
+    expect(result.checks).toBe('success');
+    expect(result.review).toEqual({
+      decision: 'REVIEW_REQUIRED',
+      unresolvedThreads: 2,
+      copilotUnresolved: 1,
+    });
+  });
+
+  test('a closed or merged PR reports no live checks or review', () => {
+    // Matches the old early-return: a PR that is not OPEN has no gates to poll.
+    const result = parseBranchPrResponse(
+      envelope([
+        prNode({
+          state: 'MERGED',
+          reviewDecision: 'APPROVED',
+          checks: [{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'FAILURE' }],
+          threads: [
+            { isResolved: false, comments: { nodes: [{ author: { login: 'ouriel' } }] } },
+          ],
+        }),
+      ]),
+      COPILOT,
+    );
+    expect(result.pr.state).toBe('MERGED');
+    expect(result.checks).toBe('none');
+    expect(result.review).toEqual({
+      decision: 'NONE',
+      unresolvedThreads: 0,
+      copilotUnresolved: 0,
+    });
+  });
+
+  test('an open PR is preferred over a more recent closed one', () => {
+    // gh pr list --state all could return several; the open one is the live one.
+    const result = parseBranchPrResponse(
+      envelope([
+        prNode({ number: 20, state: 'CLOSED' }),
+        prNode({ number: 19, state: 'OPEN' }),
+      ]),
+      COPILOT,
+    );
+    expect(result.pr.number).toBe(19);
+    expect(result.pr.state).toBe('OPEN');
+  });
+
+  test('a missing rollup on an open PR is treated as no checks', () => {
+    const result = parseBranchPrResponse(
+      envelope([prNode({ state: 'OPEN', checks: null })]),
+      COPILOT,
+    );
+    expect(result.checks).toBe('none');
   });
 });

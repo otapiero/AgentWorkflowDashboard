@@ -5,7 +5,6 @@ import type { FastifyInstance } from 'fastify';
 import { fetchIssueTitle, listOpenIssues } from '../orchestrator/github.ts';
 import { planPath } from '../orchestrator/paths.ts';
 import { writeMarker, clearMarker } from '../orchestrator/markers.ts';
-import { reconcileAll } from '../orchestrator/poller.ts';
 import { openWorktreeInVscode, spawnPhase } from '../orchestrator/spawn.ts';
 import {
   getPhaseDefaults,

@@ -2,13 +2,8 @@ import { existsSync } from 'node:fs';
 
 import { planPath } from './paths.ts';
 import { listMarkers, readLiveSpawn } from './markers.ts';
-import {
-  fetchChecks,
-  fetchPrForBranch,
-  fetchReviewDecision,
-  fetchReviewThreads,
-} from './github.ts';
-import { branchExists, gatherGitFacts, worktreeExists } from './worktree.ts';
+import { fetchBranchPr } from './github.ts';
+import { gatherGitFacts, worktreeExists } from './worktree.ts';
 import type { Config, Facts, TaskRecord } from '../shared/types.ts';
 
 /**
@@ -17,10 +12,14 @@ import type { Config, Facts, TaskRecord } from '../shared/types.ts';
  * This is the only place that performs I/O for reconciliation; the reconciler
  * itself stays pure. Nothing here is remembered between calls — that is what
  * makes closing or crashing the app harmless.
+ *
+ * `branches` is the repo's branch list, gathered once per reconcile and passed
+ * in so the board does not run `git branch -a` once per task.
  */
 export async function gatherFacts(
   config: Config,
   task: TaskRecord,
+  branches: Set<string>,
 ): Promise<Facts> {
   const markers = listMarkers(task.issue);
   const liveSpawn = readLiveSpawn(task.issue);
@@ -41,7 +40,7 @@ export async function gatherFacts(
     review: { decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 },
   };
 
-  const hasBranch = await branchExists(config, task.branch);
+  const hasBranch = branches.has(task.branch);
   facts.branchExists = hasBranch;
 
   // An issue that was never started has nothing to query; don't spend calls
@@ -53,21 +52,11 @@ export async function gatherFacts(
   facts.unpushedCommits = git.unpushedCommits;
   facts.hasPushedCommits = git.hasPushedCommits;
 
-  const pr = await fetchPrForBranch(config, task.branch);
-  if (!pr) return facts;
-
-  facts.pr = { exists: true, number: pr.number, url: pr.url, state: pr.state };
-
-  // A merged or closed PR has no live gates worth polling.
-  if (pr.state !== 'OPEN') return facts;
-
-  const [checks, decision, threads] = await Promise.all([
-    fetchChecks(config, pr.number),
-    fetchReviewDecision(config, pr.number),
-    fetchReviewThreads(config, pr.number),
-  ]);
-
-  facts.checks = checks;
-  facts.review = { decision, ...threads };
+  // One GraphQL call yields the PR plus its checks, decision and threads; the
+  // parser already blanks the gates for a merged or closed PR.
+  const branchPr = await fetchBranchPr(config, task.branch);
+  facts.pr = branchPr.pr;
+  facts.checks = branchPr.checks;
+  facts.review = branchPr.review;
   return facts;
 }

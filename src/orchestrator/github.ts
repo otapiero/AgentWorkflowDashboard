@@ -1,6 +1,6 @@
 import { execa } from 'execa';
 
-import type { ChecksState, Config, ReviewDecision } from '../shared/types.ts';
+import type { ChecksState, Config, PrState, ReviewDecision } from '../shared/types.ts';
 
 /**
  * All GitHub access goes through the already-authenticated `gh` CLI.
@@ -103,6 +103,80 @@ export function parseReviewThreads(
   return { unresolvedThreads, copilotUnresolved };
 }
 
+/** Everything the reconciler needs to know about a branch's PR, in one shape. */
+export interface BranchPrFacts {
+  pr: { exists: boolean; number: number | null; url: string | null; state: PrState | null };
+  checks: ChecksState;
+  review: { decision: ReviewDecision; unresolvedThreads: number; copilotUnresolved: number };
+}
+
+function noBranchPr(): BranchPrFacts {
+  return {
+    pr: { exists: false, number: null, url: null, state: null },
+    checks: 'none',
+    review: { decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 },
+  };
+}
+
+interface BranchPrNode {
+  number?: number;
+  url?: string;
+  state?: string;
+  reviewDecision?: string | null;
+  reviewThreads?: { nodes?: ThreadNode[] };
+  commits?: {
+    nodes?: Array<{
+      commit?: {
+        statusCheckRollup?: { contexts?: { nodes?: RollupEntry[] } } | null;
+      };
+    }>;
+  };
+}
+
+/**
+ * Fold the combined branch-PR GraphQL response into facts.
+ *
+ * One query now answers what four `gh` calls used to: the PR, its checks, its
+ * review decision, and its threads. Kept pure and separate from the fetch so it
+ * can be tested against recorded payloads without the network.
+ */
+export function parseBranchPrResponse(
+  raw: unknown,
+  copilotLogin: string,
+): BranchPrFacts {
+  const nodes = (
+    raw as {
+      data?: { repository?: { pullRequests?: { nodes?: BranchPrNode[] } } };
+    }
+  )?.data?.repository?.pullRequests?.nodes;
+
+  if (!nodes || nodes.length === 0) return noBranchPr();
+
+  // Prefer an open PR; otherwise the most recent one (nodes are newest-first).
+  const node = nodes.find((n) => n.state === 'OPEN') ?? nodes[0]!;
+  const state = (node.state ?? null) as PrState | null;
+  const pr = {
+    exists: true,
+    number: node.number ?? null,
+    url: node.url ?? null,
+    state,
+  };
+
+  // A merged or closed PR has no live gates worth reporting.
+  if (state !== 'OPEN') return { ...noBranchPr(), pr };
+
+  const contexts =
+    node.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes;
+  return {
+    pr,
+    checks: parseChecksRollup(contexts),
+    review: {
+      decision: normalizeReviewDecision(node.reviewDecision),
+      ...parseReviewThreads(node.reviewThreads?.nodes, copilotLogin),
+    },
+  };
+}
+
 // --- gh calls ------------------------------------------------------------
 
 async function gh(args: string[], cwd: string): Promise<string> {
@@ -166,115 +240,55 @@ export async function listOpenIssues(
   }
 }
 
-export interface PrSummary {
-  number: number;
-  url: string;
-  state: 'OPEN' | 'MERGED' | 'CLOSED';
-}
-
-export async function fetchPrForBranch(
-  config: Config,
-  branch: string,
-): Promise<PrSummary | null> {
-  try {
-    const out = await gh(
-      [
-        'pr',
-        'list',
-        '--head',
-        branch,
-        '--state',
-        'all',
-        '--json',
-        'number,url,state',
-      ],
-      config.repo.path,
-    );
-    const list = JSON.parse(out) as PrSummary[];
-    if (list.length === 0) return null;
-    // Prefer an open PR; otherwise the most recent one.
-    return list.find((p) => p.state === 'OPEN') ?? list[0] ?? null;
-  } catch {
-    return null;
-  }
-}
-
-export async function fetchChecks(
-  config: Config,
-  prNumber: number,
-): Promise<ChecksState> {
-  try {
-    const out = await gh(
-      ['pr', 'view', String(prNumber), '--json', 'statusCheckRollup'],
-      config.repo.path,
-    );
-    const parsed = JSON.parse(out) as { statusCheckRollup?: RollupEntry[] };
-    return parseChecksRollup(parsed.statusCheckRollup);
-  } catch {
-    return 'none';
-  }
-}
-
-export async function fetchReviewDecision(
-  config: Config,
-  prNumber: number,
-): Promise<ReviewDecision> {
-  try {
-    const out = await gh(
-      ['pr', 'view', String(prNumber), '--json', 'reviewDecision'],
-      config.repo.path,
-    );
-    return normalizeReviewDecision(
-      (JSON.parse(out) as { reviewDecision?: string }).reviewDecision,
-    );
-  } catch {
-    return 'NONE';
-  }
-}
-
-const THREADS_QUERY = `
-query($owner:String!,$name:String!,$pr:Int!){
+/**
+ * One GraphQL query for a branch's PR, its checks, its review decision and its
+ * threads together — replacing the `gh pr list` + two `gh pr view` + graphql
+ * calls this used to take. `statusCheckRollup` hangs off the PR's last commit;
+ * `first:10` on the PRs covers a reopened branch while still preferring OPEN.
+ */
+const BRANCH_PR_QUERY = `
+query($owner:String!,$name:String!,$branch:String!){
   repository(owner:$owner,name:$name){
-    pullRequest(number:$pr){
-      reviewThreads(first:100){
-        nodes{ isResolved comments(first:1){ nodes{ author{ login } } } }
+    pullRequests(headRefName:$branch, first:10, orderBy:{field:CREATED_AT, direction:DESC}){
+      nodes{
+        number url state reviewDecision
+        reviewThreads(first:100){
+          nodes{ isResolved comments(first:1){ nodes{ author{ login } } } }
+        }
+        commits(last:1){
+          nodes{ commit{ statusCheckRollup{ contexts(first:100){ nodes{
+            __typename
+            ... on CheckRun{ status conclusion }
+            ... on StatusContext{ state }
+          } } } } }
+        }
       }
     }
   }
 }`;
 
-export async function fetchReviewThreads(
+export async function fetchBranchPr(
   config: Config,
-  prNumber: number,
-): Promise<{ unresolvedThreads: number; copilotUnresolved: number }> {
+  branch: string,
+): Promise<BranchPrFacts> {
   try {
     const out = await gh(
       [
         'api',
         'graphql',
         '-f',
-        `query=${THREADS_QUERY}`,
+        `query=${BRANCH_PR_QUERY}`,
         '-F',
         `owner=${config.repo.owner}`,
         '-F',
         `name=${config.repo.name}`,
         '-F',
-        `pr=${prNumber}`,
+        `branch=${branch}`,
       ],
       config.repo.path,
     );
-    const parsed = JSON.parse(out) as {
-      data?: {
-        repository?: {
-          pullRequest?: { reviewThreads?: { nodes?: ThreadNode[] } };
-        };
-      };
-    };
-    return parseReviewThreads(
-      parsed.data?.repository?.pullRequest?.reviewThreads?.nodes,
-      config.github.copilotReviewerLogin,
-    );
+    return parseBranchPrResponse(JSON.parse(out), config.github.copilotReviewerLogin);
   } catch {
-    return { unresolvedThreads: 0, copilotUnresolved: 0 };
+    return noBranchPr();
   }
 }

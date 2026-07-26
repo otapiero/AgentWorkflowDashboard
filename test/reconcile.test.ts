@@ -365,6 +365,20 @@ describe('needsYou', () => {
     expect(reconcile(openPr({ checks: 'pending' })).needsYou).toBe(false);
   });
 
+  test('the reason describes the lane the card is in, not a lower gate', () => {
+    // Failing CI plus an unresolved Copilot thread: derivePhase rests the card
+    // in copilot_review, so the reason must name the review — otherwise the card
+    // sits in one lane while explaining a different one.
+    const d = reconcile(
+      openPr({
+        checks: 'failure',
+        review: { decision: 'REVIEW_REQUIRED', unresolvedThreads: 1, copilotUnresolved: 1 },
+      }),
+    );
+    expect(d.derivedPhase).toBe('copilot_review');
+    expect(d.needsYouReason).toMatch(/copilot/i);
+  });
+
   test('an attached plan awaiting your review needs you', () => {
     const d = reconcile(
       facts({ worktreeExists: true, branchExists: true, planMdExists: true }),

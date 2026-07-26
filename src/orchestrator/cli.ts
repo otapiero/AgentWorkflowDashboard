@@ -19,7 +19,7 @@ import { reconcile } from './reconcile.ts';
 import { getTask, listTasks, newTask, removeTask, upsertTask } from './state.ts';
 import { fetchIssueTitle, listOpenIssues } from './github.ts';
 import { spawnPhase } from './spawn.ts';
-import { resolveBranch } from './worktree.ts';
+import { listBranches, resolveBranch } from './worktree.ts';
 import { mcHome } from './paths.ts';
 import type { Config, TaskRecord } from '../shared/types.ts';
 
@@ -120,13 +120,15 @@ async function main(): Promise<void> {
 
     case 'facts': {
       const task = requireTask(Number(rest[0]));
-      console.log(JSON.stringify(await gatherFacts(config, task), null, 2));
+      const branches = new Set(await listBranches(config));
+      console.log(JSON.stringify(await gatherFacts(config, task, branches), null, 2));
       return;
     }
 
     case 'reconcile': {
       const task = requireTask(Number(rest[0]));
-      const facts = await gatherFacts(config, task);
+      const branches = new Set(await listBranches(config));
+      const facts = await gatherFacts(config, task, branches);
       printDerived(task, reconcile(facts, task.manualPhase));
       return;
     }
@@ -137,8 +139,9 @@ async function main(): Promise<void> {
         console.log('board is empty (run: mc import <issue>)');
         return;
       }
+      const branches = new Set(await listBranches(config));
       for (const task of tasks) {
-        const facts = await gatherFacts(config, task);
+        const facts = await gatherFacts(config, task, branches);
         printDerived(task, reconcile(facts, task.manualPhase));
         console.log('');
       }
