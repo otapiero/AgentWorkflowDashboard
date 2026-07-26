@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { reconcile } from '../src/orchestrator/reconcile.ts';
-import type { Facts } from '../src/shared/types.ts';
+import type { ArtifactRef, Facts } from '../src/shared/types.ts';
 
 /** A task that exists as an issue and nothing more. */
 function facts(overrides: Partial<Facts> = {}): Facts {
@@ -10,6 +10,7 @@ function facts(overrides: Partial<Facts> = {}): Facts {
     branchExists: false,
     markers: [],
     planMdExists: false,
+    artifacts: [],
     hasPushedCommits: false,
     dirtyFileCount: 0,
     unpushedCommits: 0,
@@ -431,6 +432,31 @@ describe('needsYou', () => {
     );
     expect(d.needsYou).toBe(true);
     expect(d.needsYouReason).toMatch(/publish/i);
+  });
+});
+
+describe('artifacts', () => {
+  const repoArtifact: ArtifactRef = {
+    name: 'design.md', storedPath: 'artifacts/design.md', origin: 'repo', originalPath: 'x',
+  };
+  const taskArtifact: ArtifactRef = {
+    name: 'spec.md', storedPath: 'artifacts/spec.md', origin: 'taskdir', originalPath: 'y',
+  };
+
+  test('passes artifacts through to derived state', () => {
+    expect(reconcile(facts({ artifacts: [taskArtifact] })).artifacts).toEqual([taskArtifact]);
+  });
+
+  test('adds an in-checkout badge counting repo-origin artifacts', () => {
+    const d = reconcile(facts({ artifacts: [repoArtifact, taskArtifact] }));
+    expect(d.badges).toContainEqual({
+      kind: 'artifacts-in-repo', label: '1 in checkout', tone: 'warn',
+    });
+  });
+
+  test('adds no badge when every artifact is in the task dir', () => {
+    const kinds = reconcile(facts({ artifacts: [taskArtifact] })).badges.map((b) => b.kind);
+    expect(kinds).not.toContain('artifacts-in-repo');
   });
 });
 

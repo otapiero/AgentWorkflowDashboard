@@ -328,6 +328,43 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
           )}
         </section>
 
+        {task.derived.artifacts.length > 0 && (
+          <section className="section">
+            <div className="section-label">Artifacts</div>
+            <div className="stack">
+              {task.derived.artifacts.map((a) => (
+                <div
+                  key={a.name}
+                  className="actions"
+                  style={{ justifyContent: 'space-between', alignItems: 'center' }}
+                >
+                  <span>
+                    {a.name}
+                    {a.origin === 'repo' && (
+                      <span className="badge tone-warn" style={{ marginLeft: 8 }}>
+                        in checkout
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    className="btn is-sm"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      run(`artifact-${a.name}`, () => api.openArtifact(task.issue, a.name))
+                    }
+                  >
+                    {busy === `artifact-${a.name}` ? 'Opening…' : 'Open'}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <p className="hint">
+              Collected from the plan run. Files marked “in checkout” were written into the
+              repo; they were copied here, not moved.
+            </p>
+          </section>
+        )}
+
         <section className="section">
           <div className="section-label">Sessions &amp; usage</div>
           {usage && usage.tracked ? (

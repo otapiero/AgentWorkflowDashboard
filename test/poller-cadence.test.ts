@@ -16,7 +16,7 @@ function card(badges: Badge[]): TaskWithDerived {
     pinned: { agent: null, model: null, effort: null },
     derived: {
       issue: 1, derivedPhase: 'ci', displayPhase: 'ci',
-      gates: {} as never, badges, needsYou: false, needsYouReason: null,
+      gates: {} as never, badges, artifacts: [], needsYou: false, needsYouReason: null,
     },
   };
 }

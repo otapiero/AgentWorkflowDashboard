@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { fetchIssueTitle, listOpenIssues } from '../orchestrator/github.ts';
 import { readPlan, writePlan } from '../orchestrator/plan.ts';
 import { writeMarker, clearMarker } from '../orchestrator/markers.ts';
-import { openWorktreeInVscode, spawnPhase } from '../orchestrator/spawn.ts';
+import { openArtifactInEditor, openWorktreeInVscode, spawnPhase } from '../orchestrator/spawn.ts';
 import { missionUsage } from '../orchestrator/usage.ts';
 import {
   getPhaseDefaults,
@@ -249,6 +249,22 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
       if (!getTask(issue)) return reply.code(404).send({ error: 'task not on the board' });
       try {
         openWorktreeInVscode(issue);
+        return { ok: true };
+      } catch (err) {
+        return reply
+          .code(400)
+          .send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    },
+  );
+
+  app.post<{ Params: { issue: string; name: string } }>(
+    '/api/tasks/:issue/artifacts/:name/open',
+    async (req, reply) => {
+      const issue = Number(req.params.issue);
+      if (!getTask(issue)) return reply.code(404).send({ error: 'task not on the board' });
+      try {
+        openArtifactInEditor(issue, decodeURIComponent(req.params.name));
         return { ok: true };
       } catch (err) {
         return reply

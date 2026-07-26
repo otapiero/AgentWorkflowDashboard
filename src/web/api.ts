@@ -91,6 +91,8 @@ export const api = {
   setLauncher: (launcher: LauncherKind) =>
     post<TaskWithDerived[]>('/api/settings', { launcher }),
   openCode: (issue: number) => post<{ ok: true }>(`/api/tasks/${issue}/open-code`),
+  openArtifact: (issue: number, name: string) =>
+    post<{ ok: true }>(`/api/tasks/${issue}/artifacts/${encodeURIComponent(name)}/open`),
   cleanup: (issue: number) => post<TaskWithDerived[]>(`/api/tasks/${issue}/cleanup`),
   forget: (issue: number) =>
     request<TaskWithDerived[]>(`/api/tasks/${issue}`, { method: 'DELETE' }),

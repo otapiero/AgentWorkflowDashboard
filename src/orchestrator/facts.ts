@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 
 import { planPath } from './paths.ts';
+import { readArtifacts } from './artifacts.ts';
 import { listMarkers, readLiveSpawn } from './markers.ts';
 import type { BatchedBranchPrs } from './github.ts';
 import { gatherGitFacts, worktreeExists } from './worktree.ts';
@@ -32,6 +33,7 @@ export async function gatherFacts(
     branchExists: false,
     markers,
     planMdExists: existsSync(planPath(task.issue)),
+    artifacts: readArtifacts(task.issue),
     hasPushedCommits: false,
     dirtyFileCount: 0,
     unpushedCommits: 0,

@@ -57,6 +57,21 @@ export function promptPath(issue: number): string {
   return join(taskDir(issue), 'prompt.txt');
 }
 
+/** The "before" picture captured at plan spawn, used to attribute artifacts. */
+export function planSnapshotPath(issue: number): string {
+  return join(taskDir(issue), 'plan.snapshot.json');
+}
+
+/** The manifest of artifacts a plan run produced. */
+export function artifactsManifestPath(issue: number): string {
+  return join(taskDir(issue), 'artifacts.json');
+}
+
+/** Where collected copies of a run's artifacts are stored, MC-owned. */
+export function artifactsDir(issue: number): string {
+  return join(taskDir(issue), 'artifacts');
+}
+
 export function worktreesDir(): string {
   return join(mcHome(), 'worktrees');
 }
