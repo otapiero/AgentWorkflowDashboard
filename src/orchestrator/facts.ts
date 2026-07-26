@@ -40,6 +40,19 @@ export async function gatherFacts(
     review: { decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 },
   };
 
+  // A merged PR is terminal: freeze the mission from the cached record and spend
+  // no git or GraphQL calls re-learning a fact that can never change.
+  if (task.prState === 'MERGED') {
+    facts.branchExists = branches.has(task.branch);
+    facts.pr = {
+      exists: true,
+      number: task.prNumber,
+      url: task.prUrl,
+      state: 'MERGED',
+    };
+    return facts;
+  }
+
   const hasBranch = branches.has(task.branch);
   facts.branchExists = hasBranch;
 

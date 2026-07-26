@@ -10,9 +10,25 @@ import type {
   DerivedState,
   PhaseDefaults,
   PollMeta,
+  PrState,
   TaskRecord,
   TaskWithDerived,
 } from '../shared/types.ts';
+
+/**
+ * The prState/mergedAt to persist given a freshly observed PR state. mergedAt is
+ * stamped once, on the first MERGED observation, and never overwritten — merge
+ * is terminal, so the first sighting is the truth we freeze on.
+ */
+export function mergedFields(
+  task: TaskRecord,
+  observed: PrState | null,
+  now: string,
+): { prState: PrState | null; mergedAt: string | null } {
+  const mergedAt =
+    observed === 'MERGED' ? (task.mergedAt ?? now) : (task.mergedAt ?? null);
+  return { prState: observed, mergedAt };
+}
 
 /**
  * The agent + model + effort to show on a card: what a spawn at the card's
@@ -51,17 +67,23 @@ export async function reconcileAll(config: Config): Promise<TaskWithDerived[]> {
       try {
         const facts = await gatherFacts(config, task, branches);
         const derived = reconcile(facts, task.manualPhase);
+        const now = new Date().toISOString();
+        const merged = mergedFields(task, facts.pr.state, now);
         const updated = {
           ...task,
           prNumber: facts.pr.number,
           prUrl: facts.pr.url,
-          lastReconciledAt: new Date().toISOString(),
+          prState: merged.prState,
+          mergedAt: merged.mergedAt,
+          lastReconciledAt: now,
         };
         // Mutate the single in-memory board; one atomic save at the end avoids
         // the lost-update race that concurrent per-task writes used to cause.
         if (
           task.prNumber !== updated.prNumber ||
           task.prUrl !== updated.prUrl ||
+          task.prState !== updated.prState ||
+          task.mergedAt !== updated.mergedAt ||
           task.lastReconciledAt === null
         ) {
           const index = state.tasks.findIndex((t) => t.issue === task.issue);
