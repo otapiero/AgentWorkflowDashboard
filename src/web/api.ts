@@ -56,6 +56,11 @@ export const api = {
   plan: (issue: number) => request<{ content: string }>(`/api/tasks/${issue}/plan`),
   usage: (issue: number) =>
     request<import('../orchestrator/usage.ts').MissionUsage>(`/api/tasks/${issue}/usage`),
+  savePlan: (issue: number, content: string) =>
+    request<{ ok: true }>(`/api/tasks/${issue}/plan`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    }),
 
   import: (issue: number) => post<TaskWithDerived[]>('/api/tasks/import', { issue }),
   reconcile: () => post<TaskWithDerived[]>('/api/reconcile'),

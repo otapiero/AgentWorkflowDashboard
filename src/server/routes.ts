@@ -1,9 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
-
 import type { FastifyInstance } from 'fastify';
 
 import { fetchIssueTitle, listOpenIssues } from '../orchestrator/github.ts';
-import { planPath } from '../orchestrator/paths.ts';
+import { readPlan, writePlan } from '../orchestrator/plan.ts';
 import { writeMarker, clearMarker } from '../orchestrator/markers.ts';
 import { openWorktreeInVscode, spawnPhase } from '../orchestrator/spawn.ts';
 import { missionUsage } from '../orchestrator/usage.ts';
@@ -220,11 +218,23 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
   });
 
   app.get<{ Params: { issue: string } }>('/api/tasks/:issue/plan', async (req, reply) => {
-    const issue = Number(req.params.issue);
-    const file = planPath(issue);
-    if (!existsSync(file)) return reply.code(404).send({ error: 'no plan attached yet' });
-    return { content: readFileSync(file, 'utf8') };
+    const content = readPlan(Number(req.params.issue));
+    if (content === null) return reply.code(404).send({ error: 'no plan attached yet' });
+    return { content };
   });
+
+  app.put<{ Params: { issue: string }; Body: { content?: string } }>(
+    '/api/tasks/:issue/plan',
+    async (req, reply) => {
+      const issue = Number(req.params.issue);
+      if (!getTask(issue)) return reply.code(404).send({ error: 'task not on the board' });
+      if (typeof req.body?.content !== 'string') {
+        return reply.code(400).send({ error: 'content must be a string' });
+      }
+      writePlan(issue, req.body.content);
+      return { ok: true };
+    },
+  );
 
   app.get<{ Params: { issue: string } }>('/api/tasks/:issue/usage', async (req, reply) => {
     const issue = Number(req.params.issue);
