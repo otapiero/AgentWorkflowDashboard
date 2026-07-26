@@ -31,6 +31,7 @@ async function main(): Promise<void> {
   const poller = startPoller(config, {
     onTasks: (tasks) => broadcaster.send('tasks', tasks),
     onPoll: (meta) => broadcaster.send('poll', meta),
+    hasClients: () => broadcaster.size > 0,
   });
 
   registerRoutes(app, { config, broadcaster, refresh: poller.runNow });

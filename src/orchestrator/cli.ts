@@ -17,7 +17,7 @@ import { loadConfig } from './config.ts';
 import { gatherFacts } from './facts.ts';
 import { reconcile } from './reconcile.ts';
 import { getTask, listTasks, newTask, removeTask, upsertTask } from './state.ts';
-import { fetchIssueTitle, listOpenIssues } from './github.ts';
+import { fetchBranchPrs, fetchIssueTitle, listOpenIssues } from './github.ts';
 import { spawnPhase } from './spawn.ts';
 import { listBranches, resolveBranch } from './worktree.ts';
 import { mcHome } from './paths.ts';
@@ -121,14 +121,18 @@ async function main(): Promise<void> {
     case 'facts': {
       const task = requireTask(Number(rest[0]));
       const branches = new Set(await listBranches(config));
-      console.log(JSON.stringify(await gatherFacts(config, task, branches), null, 2));
+      const batch = await fetchBranchPrs(config, [task.branch]);
+      console.log(
+        JSON.stringify(await gatherFacts(config, task, branches, batch), null, 2),
+      );
       return;
     }
 
     case 'reconcile': {
       const task = requireTask(Number(rest[0]));
       const branches = new Set(await listBranches(config));
-      const facts = await gatherFacts(config, task, branches);
+      const batch = await fetchBranchPrs(config, [task.branch]);
+      const facts = await gatherFacts(config, task, branches, batch);
       printDerived(task, reconcile(facts, task.manualPhase));
       return;
     }
@@ -140,8 +144,12 @@ async function main(): Promise<void> {
         return;
       }
       const branches = new Set(await listBranches(config));
+      // One batched call for every board branch, mirroring the poller.
+      const batch = await fetchBranchPrs(config, [
+        ...new Set(tasks.map((t) => t.branch)),
+      ]);
       for (const task of tasks) {
-        const facts = await gatherFacts(config, task, branches);
+        const facts = await gatherFacts(config, task, branches, batch);
         printDerived(task, reconcile(facts, task.manualPhase));
         console.log('');
       }

@@ -1,9 +1,9 @@
-import { applyLastGood, boardSignature } from './board.ts';
+import { applyLastGood, boardSignature, nextDelayMs } from './board.ts';
 import { gatherFacts } from './facts.ts';
-import { fetchRateLimit } from './github.ts';
+import { fetchBranchPrs } from './github.ts';
 import { reconcile } from './reconcile.ts';
 import { loadState, saveState } from './state.ts';
-import { listBranches } from './worktree.ts';
+import { listBranches, worktreeExists } from './worktree.ts';
 import { resolveAgent } from './agents.ts';
 import type {
   Config,
@@ -11,6 +11,7 @@ import type {
   PhaseDefaults,
   PollMeta,
   PrState,
+  RateLimit,
   TaskRecord,
   TaskWithDerived,
 } from '../shared/types.ts';
@@ -54,18 +55,35 @@ function pinnedFor(
  * that could change state. Because everything is re-derived rather than
  * remembered, a stale or missing cache repairs itself here.
  */
-export async function reconcileAll(config: Config): Promise<TaskWithDerived[]> {
+export async function reconcileAll(
+  config: Config,
+): Promise<{ results: TaskWithDerived[]; rateLimit: RateLimit | null }> {
   // Load the board once and gather the branch list once, rather than re-reading
   // state and running `git branch -a` per task.
   const state = loadState();
   const phaseDefaults = state.phaseDefaults ?? {};
   const branches = new Set(await listBranches(config));
 
+  // One batched GraphQL call covers every active branch's PR plus the budget.
+  // Active = not merged and actually started (has a branch or a worktree).
+  const activeBranches = [
+    ...new Set(
+      state.tasks
+        .filter(
+          (t) =>
+            t.prState !== 'MERGED' &&
+            (branches.has(t.branch) || worktreeExists(t.issue)),
+        )
+        .map((t) => t.branch),
+    ),
+  ];
+  const batch = await fetchBranchPrs(config, activeBranches);
+
   let dirty = false;
   const results = await Promise.all(
     state.tasks.map(async (task): Promise<TaskWithDerived> => {
       try {
-        const facts = await gatherFacts(config, task, branches);
+        const facts = await gatherFacts(config, task, branches, batch);
         const derived = reconcile(facts, task.manualPhase);
         const now = new Date().toISOString();
         const merged = mergedFields(task, facts.pr.state, now);
@@ -131,7 +149,7 @@ export async function reconcileAll(config: Config): Promise<TaskWithDerived[]> {
   );
 
   if (dirty) saveState(state);
-  return results;
+  return { results, rateLimit: batch.rateLimit };
 }
 
 export interface Poller {
@@ -144,6 +162,8 @@ export interface PollHandlers {
   onTasks: (tasks: TaskWithDerived[]) => void;
   /** The heartbeat: freshness and budget, sent on every poll regardless. */
   onPoll: (meta: PollMeta) => void;
+  /** Whether at least one browser tab is currently connected. */
+  hasClients: () => boolean;
 }
 
 export function startPoller(config: Config, handlers: PollHandlers): Poller {
@@ -155,10 +175,7 @@ export function startPoller(config: Config, handlers: PollHandlers): Poller {
   let lastGood = new Map<number, TaskWithDerived>();
 
   async function runReconcile(force: boolean): Promise<TaskWithDerived[]> {
-    const [raw, rateLimit] = await Promise.all([
-      reconcileAll(config),
-      fetchRateLimit(config),
-    ]);
+    const { results: raw, rateLimit } = await reconcileAll(config);
 
     const applied = applyLastGood(raw, lastGood);
     lastGood = applied.lastGood;
@@ -192,16 +209,34 @@ export function startPoller(config: Config, handlers: PollHandlers): Poller {
     return settled;
   }
 
-  timer = setInterval(() => {
-    void exec(false);
-  }, config.github.pollIntervalSeconds * 1000);
+  function scheduleNext(tasks: TaskWithDerived[]): void {
+    if (timer) clearTimeout(timer);
+    const ms = nextDelayMs(
+      tasks,
+      handlers.hasClients(),
+      config.github.pollIntervalSeconds * 1000,
+    );
+    timer = setTimeout(() => void tick(), ms);
+  }
 
-  void exec(false);
+  async function tick(): Promise<void> {
+    const tasks = await exec(false);
+    scheduleNext(tasks);
+  }
+
+  // Reconcile once immediately (crash recovery), then schedule adaptively.
+  void tick();
 
   return {
     stop: () => {
-      if (timer) clearInterval(timer);
+      if (timer) clearTimeout(timer);
     },
-    runNow: () => exec(true),
+    runNow: () => {
+      const settled = exec(true);
+      // A forced run resets the cadence timer so the next tick is measured from
+      // now, and picks up any change in client presence or in-flight work.
+      void settled.then(scheduleNext, () => scheduleNext([]));
+      return settled;
+    },
   };
 }

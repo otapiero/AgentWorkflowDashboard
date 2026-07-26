@@ -284,59 +284,6 @@ export async function listOpenIssues(
   }
 }
 
-/**
- * One GraphQL query for a branch's PR, its checks, its review decision and its
- * threads together — replacing the `gh pr list` + two `gh pr view` + graphql
- * calls this used to take. `statusCheckRollup` hangs off the PR's last commit;
- * `first:10` on the PRs covers a reopened branch while still preferring OPEN.
- */
-const BRANCH_PR_QUERY = `
-query($owner:String!,$name:String!,$branch:String!){
-  repository(owner:$owner,name:$name){
-    pullRequests(headRefName:$branch, first:10, orderBy:{field:CREATED_AT, direction:DESC}){
-      nodes{
-        number url state reviewDecision
-        reviewThreads(first:100){
-          nodes{ isResolved comments(first:1){ nodes{ author{ login } } } }
-        }
-        commits(last:1){
-          nodes{ commit{ statusCheckRollup{ contexts(first:100){ nodes{
-            __typename
-            ... on CheckRun{ status conclusion }
-            ... on StatusContext{ state }
-          } } } } }
-        }
-      }
-    }
-  }
-}`;
-
-export async function fetchBranchPr(
-  config: Config,
-  branch: string,
-): Promise<BranchPrFacts> {
-  try {
-    const out = await gh(
-      [
-        'api',
-        'graphql',
-        '-f',
-        `query=${BRANCH_PR_QUERY}`,
-        '-F',
-        `owner=${config.repo.owner}`,
-        '-F',
-        `name=${config.repo.name}`,
-        '-F',
-        `branch=${branch}`,
-      ],
-      config.repo.path,
-    );
-    return parseBranchPrResponse(JSON.parse(out), config.github.copilotReviewerLogin);
-  } catch {
-    return noBranchPr();
-  }
-}
-
 export interface BatchedBranchPrs {
   /** False when the whole request failed, so callers can hold at last-good. */
   ok: boolean;
@@ -416,21 +363,5 @@ export async function fetchBranchPrs(
     // The whole request failed. Report it so the poller holds active cards at
     // last-good rather than blanking every PR at once.
     return { ok: false, byBranch: new Map(), rateLimit: null };
-  }
-}
-
-/**
- * The current GraphQL rate-limit budget. Querying `rateLimit` is itself free
- * (it costs zero points), so this is a cheap once-per-poll health signal.
- */
-export async function fetchRateLimit(config: Config): Promise<RateLimit | null> {
-  try {
-    const out = await gh(
-      ['api', 'graphql', '-f', 'query={ rateLimit { limit remaining resetAt } }'],
-      config.repo.path,
-    );
-    return parseRateLimit(JSON.parse(out));
-  } catch {
-    return null;
   }
 }
