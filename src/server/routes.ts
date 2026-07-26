@@ -35,11 +35,9 @@ function isPhase(value: unknown): value is Phase {
 export function registerRoutes(app: FastifyInstance, deps: Deps): void {
   const { config, broadcaster, refresh } = deps;
 
-  /** Re-derive and push to every connected board. */
+  /** Re-derive and push to every connected board. A forced run broadcasts. */
   async function refreshAndBroadcast(): Promise<TaskWithDerived[]> {
-    const tasks = await refresh();
-    broadcaster.send('tasks', tasks);
-    return tasks;
+    return refresh();
   }
 
   app.get('/api/config', async () => ({
@@ -269,8 +267,8 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
       'X-Accel-Buffering': 'no',
     });
     reply.raw.write(': connected\n\n');
+    // add() replays the latest tasks + poll payloads, so the tab paints at once
+    // without forcing a fresh reconcile per connection.
     broadcaster.add(reply);
-    // Send current state immediately so a new tab is never blank.
-    void refresh().then((tasks) => broadcaster.send('tasks', tasks));
   });
 }

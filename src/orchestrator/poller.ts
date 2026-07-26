@@ -1,4 +1,6 @@
+import { applyLastGood, boardSignature } from './board.ts';
 import { gatherFacts } from './facts.ts';
+import { fetchRateLimit } from './github.ts';
 import { reconcile } from './reconcile.ts';
 import { loadState, saveState } from './state.ts';
 import { listBranches } from './worktree.ts';
@@ -7,6 +9,7 @@ import type {
   Config,
   DerivedState,
   PhaseDefaults,
+  PollMeta,
   TaskRecord,
   TaskWithDerived,
 } from '../shared/types.ts';
@@ -71,10 +74,13 @@ export async function reconcileAll(config: Config): Promise<TaskWithDerived[]> {
           pinned: pinnedFor(config, updated, derived, phaseDefaults),
         };
       } catch (err) {
-        // One unreachable task must not blank the whole board.
+        // One unreachable task must not blank the whole board. The poller holds
+        // it in its last good place; this fallback only applies on a first-ever
+        // poll that fails, when there is no good state to fall back to.
         console.error(`[mc] reconcile failed for #${task.issue}:`, err);
         return {
           ...task,
+          unreachable: true,
           pinned: { agent: null, model: null, effort: null },
           derived: reconcile(
             {
@@ -111,36 +117,69 @@ export interface Poller {
   runNow(): Promise<TaskWithDerived[]>;
 }
 
-export function startPoller(
-  config: Config,
-  onUpdate: (tasks: TaskWithDerived[]) => void,
-): Poller {
-  let timer: NodeJS.Timeout | null = null;
-  let running = false;
+export interface PollHandlers {
+  /** The full board. Sent only when it actually changed, or on a forced run. */
+  onTasks: (tasks: TaskWithDerived[]) => void;
+  /** The heartbeat: freshness and budget, sent on every poll regardless. */
+  onPoll: (meta: PollMeta) => void;
+}
 
-  const tick = async (): Promise<TaskWithDerived[]> => {
-    // Skip rather than queue: a slow poll must not stack up behind itself.
-    if (running) return [];
-    running = true;
-    try {
-      const tasks = await reconcileAll(config);
-      onUpdate(tasks);
-      return tasks;
-    } finally {
-      running = false;
+export function startPoller(config: Config, handlers: PollHandlers): Poller {
+  let timer: NodeJS.Timeout | null = null;
+  // Runs are serialized through this handle: two reconciles must never overlap,
+  // because they share one state file and one temp path when saving.
+  let active: Promise<TaskWithDerived[]> | null = null;
+  let lastSignature: string | null = null;
+  let lastGood = new Map<number, TaskWithDerived>();
+
+  async function runReconcile(force: boolean): Promise<TaskWithDerived[]> {
+    const [raw, rateLimit] = await Promise.all([
+      reconcileAll(config),
+      fetchRateLimit(config),
+    ]);
+
+    const applied = applyLastGood(raw, lastGood);
+    lastGood = applied.lastGood;
+    const tasks = applied.results;
+
+    // Dedupe the heavy payload; the heartbeat below still reports every poll.
+    const signature = boardSignature(tasks);
+    if (force || signature !== lastSignature) handlers.onTasks(tasks);
+    lastSignature = signature;
+
+    handlers.onPoll({ checkedAt: new Date().toISOString(), rateLimit });
+    return tasks;
+  }
+
+  function exec(force: boolean): Promise<TaskWithDerived[]> {
+    if (active) {
+      // A run is in flight. Interval polls ride it rather than stacking up; a
+      // forced run (a user action) chains a fresh pass so it reflects the change.
+      if (!force) return active;
+      active = active.then(
+        () => runReconcile(true),
+        () => runReconcile(true),
+      );
+    } else {
+      active = runReconcile(force);
     }
-  };
+    const settled = active;
+    void settled.finally(() => {
+      if (active === settled) active = null;
+    });
+    return settled;
+  }
 
   timer = setInterval(() => {
-    void tick();
+    void exec(false);
   }, config.github.pollIntervalSeconds * 1000);
 
-  void tick();
+  void exec(false);
 
   return {
     stop: () => {
       if (timer) clearInterval(timer);
     },
-    runNow: tick,
+    runNow: () => exec(true),
   };
 }

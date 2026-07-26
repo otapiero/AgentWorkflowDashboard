@@ -26,8 +26,12 @@ async function main(): Promise<void> {
   const broadcaster = new Broadcaster();
 
   // Reconciles once immediately, then on the configured interval. The startup
-  // pass is what recovers state after the app was closed or crashed.
-  const poller = startPoller(config, (tasks) => broadcaster.send('tasks', tasks));
+  // pass is what recovers state after the app was closed or crashed. `tasks`
+  // fires only when the board changed; `poll` is the every-cycle heartbeat.
+  const poller = startPoller(config, {
+    onTasks: (tasks) => broadcaster.send('tasks', tasks),
+    onPoll: (meta) => broadcaster.send('poll', meta),
+  });
 
   registerRoutes(app, { config, broadcaster, refresh: poller.runNow });
 

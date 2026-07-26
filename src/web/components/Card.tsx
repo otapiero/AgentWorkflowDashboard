@@ -67,10 +67,16 @@ export function Card({ task, selected, onOpen }: Props) {
   return (
     <button
       type="button"
-      className={`card state-${state}${selected ? ' is-selected' : ''}`}
+      className={`card state-${state}${selected ? ' is-selected' : ''}${
+        task.unreachable ? ' is-stale' : ''
+      }`}
       onClick={() => onOpen(task.issue)}
       aria-label={`Issue ${task.issue}, ${task.title}${
-        task.derived.needsYouReason ? `. ${task.derived.needsYouReason}` : ''
+        task.unreachable
+          ? '. Could not reach GitHub; showing last known state'
+          : task.derived.needsYouReason
+            ? `. ${task.derived.needsYouReason}`
+            : ''
       }`}
     >
       <div className="card-top">
@@ -86,7 +92,13 @@ export function Card({ task, selected, onOpen }: Props) {
 
       <div className="card-title">{task.title}</div>
 
-      <StatusLine task={task} state={state} />
+      {task.unreachable ? (
+        <div className="card-status status-stale">
+          <IconAlert /> couldn&apos;t reach GitHub
+        </div>
+      ) : (
+        <StatusLine task={task} state={state} />
+      )}
 
       {badges.length > 0 && (
         <div className="badges">

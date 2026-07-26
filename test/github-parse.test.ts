@@ -4,6 +4,7 @@ import {
   normalizeReviewDecision,
   parseReviewThreads,
   parseBranchPrResponse,
+  parseRateLimit,
 } from '../src/orchestrator/github.ts';
 
 const COPILOT = 'copilot-pull-request-reviewer';
@@ -306,5 +307,21 @@ describe('parseBranchPrResponse', () => {
       COPILOT,
     );
     expect(result.checks).toBe('none');
+  });
+});
+
+describe('parseRateLimit', () => {
+  test('reads the graphql rate-limit block', () => {
+    expect(
+      parseRateLimit({
+        data: { rateLimit: { limit: 5000, remaining: 4930, resetAt: '2026-07-26T11:00:00Z' } },
+      }),
+    ).toEqual({ limit: 5000, remaining: 4930, resetAt: '2026-07-26T11:00:00Z' });
+  });
+
+  test('a malformed or missing block yields null rather than throwing', () => {
+    expect(parseRateLimit(null)).toBeNull();
+    expect(parseRateLimit({})).toBeNull();
+    expect(parseRateLimit({ data: { rateLimit: { limit: 5000 } } })).toBeNull();
   });
 });

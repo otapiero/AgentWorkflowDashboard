@@ -8,9 +8,20 @@ import type { FastifyReply } from 'fastify';
  */
 export class Broadcaster {
   private clients = new Set<FastifyReply>();
+  /** The most recent payload per event, replayed so a new tab is never blank. */
+  private last = new Map<string, string>();
 
   add(reply: FastifyReply): void {
     this.clients.add(reply);
+    // Catch the new client up with the latest of each event immediately, rather
+    // than forcing a fresh reconcile just because a tab opened.
+    for (const payload of this.last.values()) {
+      try {
+        reply.raw.write(payload);
+      } catch {
+        this.clients.delete(reply);
+      }
+    }
     reply.raw.on('close', () => this.clients.delete(reply));
   }
 
@@ -20,6 +31,7 @@ export class Broadcaster {
 
   send(event: string, data: unknown): void {
     const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    this.last.set(event, payload);
     for (const client of this.clients) {
       try {
         client.raw.write(payload);

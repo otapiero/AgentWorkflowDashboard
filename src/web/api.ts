@@ -3,8 +3,11 @@ import type {
   Phase,
   PhaseConfig,
   PhaseDefaults,
+  PollMeta,
   TaskWithDerived,
 } from '../shared/types.ts';
+
+export type { PollMeta, RateLimit } from '../shared/types.ts';
 
 export interface AgentInfo {
   name: string;
@@ -87,14 +90,20 @@ export const api = {
 
 /** Subscribe to reconciled board state. Returns an unsubscribe function. */
 export function subscribe(
-  onTasks: (tasks: TaskWithDerived[]) => void,
-  onStatus: (connected: boolean) => void,
+  handlers: {
+    onTasks: (tasks: TaskWithDerived[]) => void;
+    onPoll: (meta: PollMeta) => void;
+    onStatus: (connected: boolean) => void;
+  },
 ): () => void {
   const source = new EventSource('/api/events');
   source.addEventListener('tasks', (event) => {
-    onTasks(JSON.parse((event as MessageEvent<string>).data) as TaskWithDerived[]);
+    handlers.onTasks(JSON.parse((event as MessageEvent<string>).data) as TaskWithDerived[]);
   });
-  source.addEventListener('open', () => onStatus(true));
-  source.addEventListener('error', () => onStatus(false));
+  source.addEventListener('poll', (event) => {
+    handlers.onPoll(JSON.parse((event as MessageEvent<string>).data) as PollMeta);
+  });
+  source.addEventListener('open', () => handlers.onStatus(true));
+  source.addEventListener('error', () => handlers.onStatus(false));
   return () => source.close();
 }

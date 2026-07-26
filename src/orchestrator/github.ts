@@ -1,6 +1,12 @@
 import { execa } from 'execa';
 
-import type { ChecksState, Config, PrState, ReviewDecision } from '../shared/types.ts';
+import type {
+  ChecksState,
+  Config,
+  PrState,
+  RateLimit,
+  ReviewDecision,
+} from '../shared/types.ts';
 
 /**
  * All GitHub access goes through the already-authenticated `gh` CLI.
@@ -177,6 +183,21 @@ export function parseBranchPrResponse(
   };
 }
 
+/** Pull the rate-limit budget out of a `{ rateLimit }` GraphQL response. */
+export function parseRateLimit(raw: unknown): RateLimit | null {
+  const rl = (raw as { data?: { rateLimit?: Partial<RateLimit> } })?.data
+    ?.rateLimit;
+  if (
+    !rl ||
+    typeof rl.limit !== 'number' ||
+    typeof rl.remaining !== 'number' ||
+    typeof rl.resetAt !== 'string'
+  ) {
+    return null;
+  }
+  return { limit: rl.limit, remaining: rl.remaining, resetAt: rl.resetAt };
+}
+
 // --- gh calls ------------------------------------------------------------
 
 async function gh(args: string[], cwd: string): Promise<string> {
@@ -290,5 +311,21 @@ export async function fetchBranchPr(
     return parseBranchPrResponse(JSON.parse(out), config.github.copilotReviewerLogin);
   } catch {
     return noBranchPr();
+  }
+}
+
+/**
+ * The current GraphQL rate-limit budget. Querying `rateLimit` is itself free
+ * (it costs zero points), so this is a cheap once-per-poll health signal.
+ */
+export async function fetchRateLimit(config: Config): Promise<RateLimit | null> {
+  try {
+    const out = await gh(
+      ['api', 'graphql', '-f', 'query={ rateLimit { limit remaining resetAt } }'],
+      config.repo.path,
+    );
+    return parseRateLimit(JSON.parse(out));
+  } catch {
+    return null;
   }
 }

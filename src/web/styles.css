@@ -158,6 +158,24 @@ button {
   background: var(--fault);
 }
 
+/* last-checked heartbeat + API budget */
+.poll-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.poll-budget {
+  color: var(--dimmer);
+}
+
+.poll-budget.is-low {
+  color: var(--attention);
+}
+
 /* ---------- buttons ---------- */
 
 .btn {
@@ -222,6 +240,12 @@ button {
 .btn.is-sm {
   padding: 5px 10px;
   font-size: 12px;
+}
+
+.btn.is-icon {
+  padding: 5px 8px;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .icon {
@@ -453,6 +477,15 @@ select.field {
 
 .status-idle {
   color: var(--dim);
+}
+
+.status-stale {
+  color: var(--attention);
+}
+
+/* Last-known state, held in place because the reconcile could not reach GitHub. */
+.card.is-stale {
+  opacity: 0.66;
 }
 
 .badges {

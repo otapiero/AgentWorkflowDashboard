@@ -142,6 +142,28 @@ export interface TaskWithDerived extends TaskRecord {
   derived: DerivedState;
   /** Agent + model + effort that a spawn at the current phase would use. */
   pinned: { agent: string | null; model: string | null; effort: string | null };
+  /**
+   * True when the last reconcile could not reach GitHub for this task. The
+   * derived state is then the last good one, held in place rather than blanked.
+   */
+  unreachable?: boolean;
+}
+
+/** GitHub API budget, surfaced so a spawn storm is visible before it bites. */
+export interface RateLimit {
+  remaining: number;
+  limit: number;
+  /** ISO time the window resets. */
+  resetAt: string;
+}
+
+/**
+ * The per-cycle heartbeat, sent on every poll even when the board is unchanged,
+ * so freshness and budget update without re-pushing the whole board.
+ */
+export interface PollMeta {
+  checkedAt: string;
+  rateLimit: RateLimit | null;
 }
 
 /** Per-phase default agent/model/effort, layered over config.yaml, not editing it. */
