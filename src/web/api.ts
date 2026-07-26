@@ -79,6 +79,7 @@ export const api = {
     post<TaskWithDerived[]>('/api/phase-defaults', { phase, ...o }),
   setLauncher: (launcher: LauncherKind) =>
     post<TaskWithDerived[]>('/api/settings', { launcher }),
+  openCode: (issue: number) => post<{ ok: true }>(`/api/tasks/${issue}/open-code`),
   cleanup: (issue: number) => post<TaskWithDerived[]>(`/api/tasks/${issue}/cleanup`),
   forget: (issue: number) =>
     request<TaskWithDerived[]>(`/api/tasks/${issue}`, { method: 'DELETE' }),

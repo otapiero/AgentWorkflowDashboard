@@ -6,7 +6,7 @@ import { fetchIssueTitle, listOpenIssues } from '../orchestrator/github.ts';
 import { planPath } from '../orchestrator/paths.ts';
 import { writeMarker, clearMarker } from '../orchestrator/markers.ts';
 import { reconcileAll } from '../orchestrator/poller.ts';
-import { spawnPhase } from '../orchestrator/spawn.ts';
+import { openWorktreeInVscode, spawnPhase } from '../orchestrator/spawn.ts';
 import {
   getPhaseDefaults,
   getSettings,
@@ -227,6 +227,22 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
     if (!existsSync(file)) return reply.code(404).send({ error: 'no plan attached yet' });
     return { content: readFileSync(file, 'utf8') };
   });
+
+  app.post<{ Params: { issue: string } }>(
+    '/api/tasks/:issue/open-code',
+    async (req, reply) => {
+      const issue = Number(req.params.issue);
+      if (!getTask(issue)) return reply.code(404).send({ error: 'task not on the board' });
+      try {
+        openWorktreeInVscode(issue);
+        return { ok: true };
+      } catch (err) {
+        return reply
+          .code(400)
+          .send({ error: err instanceof Error ? err.message : String(err) });
+      }
+    },
+  );
 
   app.post('/api/reconcile', async () => refreshAndBroadcast());
 

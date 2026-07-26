@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execa } from 'execa';
 
@@ -349,6 +349,24 @@ async function launchVscode(
 
   detach('code', ['--new-window', wsFile]);
   return `code --new-window ${wsFile}`;
+}
+
+/**
+ * Open the task's worktree folder in VS Code, without running anything.
+ *
+ * This is just a shortcut to the checkout, so unlike a spawn it does not create
+ * the worktree — there is nothing to open until a phase has run once. Opening a
+ * plain folder (not the phase workspace) is deliberate: the operator wants to
+ * look at or edit the code, not launch an agent.
+ */
+export function openWorktreeInVscode(issue: number): void {
+  const path = worktreePath(issue);
+  if (!existsSync(path)) {
+    throw new Error(
+      `No worktree yet for issue ${issue}. Run a phase first — that is what creates the checkout.`,
+    );
+  }
+  detach('code', [path]);
 }
 
 /** Launch detached and fully disowned; the terminal must outlive the app. */

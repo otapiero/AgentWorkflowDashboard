@@ -337,6 +337,13 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
             <button
               className="btn is-sm"
               disabled={busy !== null}
+              onClick={() => run('open-code', () => api.openCode(task.issue))}
+            >
+              {busy === 'open-code' ? 'Opening…' : 'Open in VS Code'}
+            </button>
+            <button
+              className="btn is-sm"
+              disabled={busy !== null}
               onClick={() => run('cleanup', () => api.cleanup(task.issue))}
             >
               Remove worktree
