@@ -19,6 +19,7 @@ import { reconcile } from './reconcile.ts';
 import { getTask, listTasks, newTask, removeTask, upsertTask } from './state.ts';
 import { fetchBranchPrs, fetchIssueTitle, listOpenIssues } from './github.ts';
 import { spawnPhase } from './spawn.ts';
+import { collectArtifacts } from './artifacts.ts';
 import { listBranches, resolveBranch } from './worktree.ts';
 import { mcHome } from './paths.ts';
 import type { Config, TaskRecord } from '../shared/types.ts';
@@ -87,7 +88,7 @@ function printDerived(task: TaskRecord, derived: ReturnType<typeof reconcile>): 
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   if (!command || command === 'help') {
-    console.log('commands: doctor | issues | import <issue> | forget <issue> | facts <issue> | reconcile <issue> | list | spawn <issue> <phase>');
+    console.log('commands: doctor | issues | import <issue> | forget <issue> | facts <issue> | reconcile <issue> | list | spawn <issue> <phase> | collect <issue>');
     return;
   }
 
@@ -167,6 +168,14 @@ async function main(): Promise<void> {
       upsertTask({ ...task, spawnHistory: [...task.spawnHistory, record] });
       console.log(`spawned ${phase.id} for #${task.issue} in a new terminal tab`);
       console.log(record.command);
+      return;
+    }
+
+    case 'collect': {
+      const task = requireTask(Number(rest[0]));
+      const refs = await collectArtifacts(config, task.issue, 'command');
+      console.log(`collected ${refs.length} artifact(s) for #${task.issue}`);
+      for (const r of refs) console.log(`  ${r.origin.padEnd(7)} ${r.name}`);
       return;
     }
 
