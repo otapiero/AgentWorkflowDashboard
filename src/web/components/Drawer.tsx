@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.ts';
 import type { BoardConfig } from '../api.ts';
 import { AgentPicker } from './AgentPicker.tsx';
+import { PlanEditor } from './PlanEditor.tsx';
 import type { AgentSelection } from './AgentPicker.tsx';
 import { AgentChip, IconPlay } from './bits.tsx';
 import type { Phase, TaskWithDerived } from '../../shared/types.ts';
@@ -33,6 +34,7 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
   const [instructions, setInstructions] = useState('');
   const [plan, setPlan] = useState<string | null>(null);
   const [usage, setUsage] = useState<import('../api.ts').MissionUsage | null>(null);
+  const [editingPlan, setEditingPlan] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,6 +69,7 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
     });
     setOnceOpen(false);
     setOnce(EMPTY);
+    setEditingPlan(false);
     api
       .plan(task.issue)
       .then((r) => setPlan(r.content))
@@ -306,12 +309,21 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
         </section>
 
         <section className="section">
-          <div className="section-label">Plan</div>
+          <div className="section-label">
+            Plan
+            <button
+              className="disclose"
+              style={{ marginLeft: 8 }}
+              onClick={() => setEditingPlan(true)}
+            >
+              {plan ? 'Expand / edit' : 'Write a plan'}
+            </button>
+          </div>
           {plan ? (
             <pre className="plan">{plan}</pre>
           ) : (
             <p className="note">
-              No plan attached. Run Plan to have an agent write one to the task workspace.
+              No plan attached. Run Plan to have an agent write one, or write one yourself.
             </p>
           )}
         </section>
@@ -404,6 +416,17 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
           </p>
         </section>
       </aside>
+      {editingPlan && (
+        <PlanEditor
+          issue={task.issue}
+          initial={plan ?? ''}
+          onClose={() => setEditingPlan(false)}
+          onSaved={(content) => {
+            setPlan(content);
+            onChanged();
+          }}
+        />
+      )}
     </>
   );
 }
