@@ -57,7 +57,9 @@ async function main(): Promise<void> {
   console.log('');
   console.log(`  Mission Control  http://127.0.0.1:${port}`);
   console.log(`  repo             ${config.repo.owner}/${config.repo.name}`);
-  console.log(`  polling every    ${config.github.pollIntervalSeconds}s`);
+  console.log(
+    `  polling          ${config.github.pollIntervalSeconds}s active / 120s idle / 600s no tab`,
+  );
   console.log('');
 
   const shutdown = async () => {

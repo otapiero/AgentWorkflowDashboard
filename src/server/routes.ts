@@ -284,8 +284,11 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
       'X-Accel-Buffering': 'no',
     });
     reply.raw.write(': connected\n\n');
-    // add() replays the latest tasks + poll payloads, so the tab paints at once
-    // without forcing a fresh reconcile per connection.
+    // The 0->1 transition means a tab opened after a dormant stretch: kick one
+    // fresh reconcile so the board is current. add() still replays the last
+    // payloads immediately, so the tab is never blank while that runs.
+    const wasEmpty = broadcaster.size === 0;
     broadcaster.add(reply);
+    if (wasEmpty) void refresh();
   });
 }
