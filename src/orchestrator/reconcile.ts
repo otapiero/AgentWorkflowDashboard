@@ -170,6 +170,15 @@ function computeBadges(facts: Facts): Badge[] {
     badges.push({ kind: 'review', label: 'changes requested', tone: 'bad' });
   }
 
+  const inCheckout = facts.artifacts.filter((a) => a.origin === 'repo').length;
+  if (inCheckout > 0) {
+    badges.push({
+      kind: 'artifacts-in-repo',
+      label: `${inCheckout} in checkout`,
+      tone: 'warn',
+    });
+  }
+
   return badges;
 }
 
