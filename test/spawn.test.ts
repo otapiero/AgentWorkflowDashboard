@@ -171,6 +171,8 @@ describe('buildCodeWorkspace', () => {
     worktree: 'C:\\Users\\ouriel\\.mc\\worktrees\\issue-3060',
     script: 'C:\\Users\\ouriel\\.mc\\scripts\\run-phase.ps1',
     specFile: 'C:\\Users\\ouriel\\.mc\\tasks\\3060\\spawn.json',
+    guardFile:
+      'C:\\Users\\ouriel\\.mc\\tasks\\3060\\markers\\plan.vscode-launched',
   };
 
   test('opens VS Code on the worktree so the code is visible', () => {
@@ -187,6 +189,15 @@ describe('buildCodeWorkspace', () => {
     expect(task.args).toContain('-File');
     expect(task.args).toContain(opts.script);
     expect(task.args).toContain(opts.specFile);
+  });
+
+  test('passes a one-shot guard file so re-opening the workspace does not re-run', () => {
+    // folderOpen fires on every open of the workspace; the guard file is how
+    // run-phase.ps1 tells a fresh launch apart from a re-open and skips the
+    // agent on the latter.
+    const task = buildCodeWorkspace(opts).tasks.tasks[0]!;
+    expect(task.args).toContain('-GuardFile');
+    expect(task.args).toContain(opts.guardFile);
   });
 
   test('names the task for the issue and phase', () => {

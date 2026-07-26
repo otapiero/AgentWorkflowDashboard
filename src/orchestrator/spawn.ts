@@ -1,8 +1,14 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execa } from 'execa';
 
-import { promptPath, runPhaseScript, taskDir, worktreePath } from './paths.ts';
+import {
+  markerPath,
+  promptPath,
+  runPhaseScript,
+  taskDir,
+  worktreePath,
+} from './paths.ts';
 import { buildPrompt, writePromptFile } from './prompt.ts';
 import { agentCapabilities, resolveAgent } from './agents.ts';
 import { getPhaseDefaults, getSettings } from './state.ts';
@@ -95,6 +101,8 @@ export interface CodeWorkspaceOptions {
   worktree: string;
   script: string;
   specFile: string;
+  /** File the phase run touches once so a re-open of the workspace is a no-op. */
+  guardFile: string;
 }
 
 interface CodeWorkspace {
@@ -122,6 +130,12 @@ interface CodeWorkspace {
  * .vscode folder, so opening in VS Code leaves no footprint in the checkout.
  * VS Code asks to allow automatic tasks the first time; after that it runs on
  * open.
+ *
+ * folderOpen fires on *every* open, including VS Code restoring the window on
+ * startup, so the task alone would re-run the agent each time. The guard file
+ * is how run-phase.ps1 tells a fresh launch apart from a re-open: it runs the
+ * agent only when the file is absent, and Mission Control removes the file when
+ * it deliberately launches the phase again.
  */
 export function buildCodeWorkspace(options: CodeWorkspaceOptions): CodeWorkspace {
   return {
@@ -134,7 +148,15 @@ export function buildCodeWorkspace(options: CodeWorkspaceOptions): CodeWorkspace
           label: `Mission Control #${options.issue} ${options.phase}`,
           type: 'process',
           command: 'pwsh',
-          args: ['-NoExit', '-File', options.script, '-SpecFile', options.specFile],
+          args: [
+            '-NoExit',
+            '-File',
+            options.script,
+            '-SpecFile',
+            options.specFile,
+            '-GuardFile',
+            options.guardFile,
+          ],
           presentation: { reveal: 'always', panel: 'dedicated', focus: true },
           runOptions: { runOn: 'folderOpen' },
           problemMatcher: [],
@@ -309,12 +331,18 @@ async function launchVscode(
 ): Promise<string> {
   await ensureWorktree(config, task.issue, task.branch);
 
+  // This is a deliberate launch, so clear any guard left by a previous run —
+  // otherwise the phase script would treat this as a re-open and skip the agent.
+  const guardFile = markerPath(task.issue, `${phase.id}.vscode-launched`);
+  rmSync(guardFile, { force: true });
+
   const workspace = buildCodeWorkspace({
     issue: task.issue,
     phase: phase.id,
     worktree: worktreePath(task.issue),
     script: runPhaseScript(),
     specFile,
+    guardFile,
   });
   const wsFile = codeWorkspacePath(task.issue);
   writeFileSync(wsFile, JSON.stringify(workspace, null, 2), 'utf8');

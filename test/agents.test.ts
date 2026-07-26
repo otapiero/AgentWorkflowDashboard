@@ -130,6 +130,17 @@ describe('agentCapabilities', () => {
     expect(caps.effortFlag).toBe('--effort');
   });
 
+  test("agentCapabilities > uses Copilot's dotted model identifiers", () => {
+    const caps = agentCapabilities('copilot', config.agents.copilot as AgentProfile);
+    expect(caps.models).toEqual([
+      'auto',
+      'claude-sonnet-5',
+      'gpt-5.6-luna',
+      'gpt-5.6-sol',
+      'gpt-5.6-terra',
+    ]);
+  });
+
   test("copilot's built-in effort list includes its extra levels", () => {
     const caps = agentCapabilities('copilot', config.agents.copilot as AgentProfile);
     expect(caps.efforts).toContain('minimal');
