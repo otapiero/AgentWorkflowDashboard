@@ -131,6 +131,10 @@ export interface TaskRecord {
   worktreePath: string | null;
   prNumber: number | null;
   prUrl: string | null;
+  /** Last observed PR state; persisted so merged tasks can be frozen. */
+  prState?: PrState | null;
+  /** ISO time merge was first observed; enables the done-freeze. */
+  mergedAt?: string | null;
   manualPhase: Phase | null;
   overrides?: TaskOverrides;
   spawnHistory: SpawnRecord[];
