@@ -38,7 +38,8 @@ export function LaunchCompose({
   run,
   onBack,
 }: LaunchComposeProps) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(task.overrides?.instructions ?? '');
+  const [kept, setKept] = useState(Boolean(task.overrides?.instructions));
   const [onceOpen, setOnceOpen] = useState(false);
   const [once, setOnce] = useState<AgentSelection>(EMPTY);
   const [previewing, setPreviewing] = useState(false);
@@ -48,6 +49,11 @@ export function LaunchCompose({
   useEffect(() => {
     boxRef.current?.focus();
   }, [phase.id]);
+
+  useEffect(() => {
+    setText(task.overrides?.instructions ?? '');
+    setKept(Boolean(task.overrides?.instructions));
+  }, [task.issue, task.overrides?.instructions]);
 
   // Grow to fit, capped. Reset to auto first or it can only ever get taller.
   useEffect(() => {
@@ -67,7 +73,35 @@ export function LaunchCompose({
     return () => window.removeEventListener('keydown', onKey);
   }, [full, previewing]);
 
-  function launch() {
+  /** Persist (or clear) the task-level instructions. */
+  function persist(value: string | null) {
+    return run('keep', () => api.overrides(task.issue, { instructions: value }));
+  }
+
+  function toggleKeep() {
+    const next = !kept;
+    setKept(next);
+    void persist(next ? text.trim() || null : null);
+  }
+
+  // Flush a kept edit on the way out, so backing out of compose does not lose
+  // it. A ref, so the cleanup reads current values rather than mount-time ones.
+  const latest = useRef({ kept, text, issue: task.issue });
+  latest.current = { kept, text, issue: task.issue };
+
+  useEffect(() => {
+    return () => {
+      const { kept: k, text: t, issue } = latest.current;
+      if (!k) return;
+      const value = t.trim() || null;
+      // Fire-and-forget: the component is going away and the board refreshes
+      // on its own poll regardless.
+      void api.overrides(issue, { instructions: value });
+    };
+  }, []);
+
+  async function launch() {
+    if (kept) await persist(text.trim() || null);
     return run(phase.id, () =>
       api.spawn(task.issue, phase.id, {
         customInstructions: text.trim() || undefined,
@@ -131,6 +165,14 @@ export function LaunchCompose({
           </button>
           <button className="btn is-sm" onClick={() => setPreviewing(true)}>
             👁 Preview prompt
+          </button>
+          <button
+            className={`btn is-sm${kept ? ' is-on' : ''}`}
+            onClick={toggleKeep}
+            aria-pressed={kept}
+            title="Keep for every run of this task"
+          >
+            📌 {kept ? 'Kept' : 'Keep'}
           </button>
         </div>
         <button

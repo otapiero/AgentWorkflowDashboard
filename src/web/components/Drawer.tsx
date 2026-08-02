@@ -156,6 +156,11 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
                 effort={task.pinned.effort}
               />
             )}
+            {task.overrides?.instructions && (
+              <span className="badge" title="This task has kept instructions">
+                📌 kept
+              </span>
+            )}
             {task.derived.badges.length === 0 && !task.pinned.agent ? (
               <span className="badge">not started</span>
             ) : (
