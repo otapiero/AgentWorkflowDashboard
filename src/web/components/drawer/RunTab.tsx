@@ -1,109 +1,71 @@
 import { useEffect, useState } from 'react';
 
 import { api } from '../../api.ts';
-import { AgentPicker } from '../AgentPicker.tsx';
-import type { AgentSelection } from '../AgentPicker.tsx';
+import { LaunchCompose } from './LaunchCompose.tsx';
 import { IconPlay } from '../bits.tsx';
-import type { Phase } from '../../../shared/types.ts';
 import type { TabProps } from './types.ts';
 
-const EMPTY: AgentSelection = { agent: '', model: '', effort: '' };
-
 export function RunTab({ task, config, busy, run }: TabProps) {
-  const [instructions, setInstructions] = useState('');
-  const [onceOpen, setOnceOpen] = useState(false);
-  const [once, setOnce] = useState<AgentSelection>(EMPTY);
+  const [armed, setArmed] = useState<string | null>(null);
 
-  useEffect(() => {
-    setInstructions('');
-    setOnceOpen(false);
-    setOnce(EMPTY);
-  }, [task.issue]);
+  // A different task is a different launch; never carry a phase across.
+  useEffect(() => setArmed(null), [task.issue]);
 
   const spawnable = config.pipeline.filter((p) => p.spawnable && p.command);
-
-  function spawn(phase: Phase) {
-    return run(phase, () =>
-      api.spawn(task.issue, phase, {
-        customInstructions: instructions.trim() || undefined,
-        agent: onceOpen ? once.agent || undefined : undefined,
-        model: onceOpen ? once.model || undefined : undefined,
-        effort: onceOpen ? once.effort || undefined : undefined,
-      }),
-    );
-  }
+  const phase = spawnable.find((p) => p.id === armed) ?? null;
 
   return (
     <>
-      <section className="section">
-        <div className="section-label">Run a phase</div>
-        <div className="stack">
-          <textarea
-            className="field textarea"
-            placeholder="Extra instructions for this run (optional)"
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-          />
+      {phase ? (
+        <LaunchCompose
+          task={task}
+          config={config}
+          phase={phase}
+          busy={busy}
+          run={run}
+          onBack={() => setArmed(null)}
+        />
+      ) : (
+        <section className="section">
+          <div className="section-label">Run a phase</div>
           <div className="actions">
-            {spawnable.map((phase) => (
+            {spawnable.map((p) => (
               <button
-                key={phase.id}
+                key={p.id}
                 className={`btn is-sm${
-                  phase.id === task.derived.derivedPhase ? ' is-primary' : ''
+                  p.id === task.derived.derivedPhase ? ' is-current' : ''
                 }`}
-                disabled={busy !== null}
-                onClick={() => spawn(phase.id)}
+                onClick={() => setArmed(p.id)}
               >
-                <IconPlay /> {busy === phase.id ? 'Opening…' : phase.label}
+                <IconPlay /> {p.label}
               </button>
             ))}
           </div>
-
-          {!onceOpen ? (
-            <button className="disclose" onClick={() => setOnceOpen(true)}>
-              Run once with a different agent…
-            </button>
-          ) : (
-            <div className="stack">
-              <AgentPicker
-                agents={config.agents}
-                value={once}
-                onChange={setOnce}
-                inheritedAgent={task.pinned.agent}
-                inheritAgentLabel="Use pinned agent"
-              />
-              <p className="hint">Applies to the next phase you launch only. Nothing is saved.</p>
-            </div>
-          )}
-
           <p className="hint">
-            Opens a Windows Terminal tab and hands the session over. The tab keeps
-            running if you close Mission Control.
+            Underlined is where this task sits now — but any phase can be re-run.
           </p>
-        </div>
-      </section>
+        </section>
+      )}
 
       <section className="section">
         <div className="section-label">Mark progress</div>
         <div className="actions">
           {config.pipeline
             .filter((p) => p.gate.type === 'manual' && p.id !== 'merge')
-            .map((phase) => {
-              const done = task.derived.gates[phase.id];
+            .map((p) => {
+              const done = task.derived.gates[p.id];
               return (
                 <button
-                  key={phase.id}
+                  key={p.id}
                   className="btn is-sm"
                   disabled={busy !== null}
                   onClick={() =>
-                    run(`mark-${phase.id}`, () =>
-                      done
-                        ? api.unmarkDone(task.issue, phase.id)
-                        : api.markDone(task.issue, phase.id),
+                    run(`mark-${p.id}`, () =>
+                      done ? api.unmarkDone(task.issue, p.id) : api.markDone(task.issue, p.id),
                     )
                   }
                 >
-                  {done ? `Undo ${phase.label}` : `${phase.label} done`}
+                  {done ? `Undo ${p.label}` : `${p.label} done`}
                 </button>
               );
             })}
