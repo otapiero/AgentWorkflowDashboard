@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, subscribe } from './api.ts';
 import type { BoardConfig, PollMeta } from './api.ts';
 import { needsYouIssues, newlyNeedsYou } from './notify.ts';
+import { AttentionRail } from './components/AttentionRail.tsx';
 import { Board } from './components/Board.tsx';
 import { Drawer } from './components/Drawer.tsx';
 import { ImportDrawer } from './components/ImportDrawer.tsx';
@@ -209,6 +210,13 @@ export function App() {
           <p className="error">{error}</p>
         </div>
       )}
+
+      <AttentionRail
+        tasks={visible}
+        config={config}
+        selectedIssue={selected}
+        onOpen={setSelected}
+      />
 
       <Board
         config={config}
