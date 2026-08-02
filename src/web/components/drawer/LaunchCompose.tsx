@@ -5,6 +5,7 @@ import { AgentPicker } from '../AgentPicker.tsx';
 import type { AgentSelection } from '../AgentPicker.tsx';
 import type { BoardConfig } from '../../api.ts';
 import { IconPlay } from '../bits.tsx';
+import { PromptPreview } from './PromptPreview.tsx';
 import type { PhaseConfig, TaskWithDerived } from '../../../shared/types.ts';
 import type { TabProps } from './types.ts';
 
@@ -40,6 +41,7 @@ export function LaunchCompose({
   const [text, setText] = useState('');
   const [onceOpen, setOnceOpen] = useState(false);
   const [once, setOnce] = useState<AgentSelection>(EMPTY);
+  const [previewing, setPreviewing] = useState(false);
   const boxRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -112,7 +114,11 @@ export function LaunchCompose({
       </div>
 
       <div className="compose-actions">
-        <div className="compose-tools" />
+        <div className="compose-tools">
+          <button className="btn is-sm" onClick={() => setPreviewing(true)}>
+            👁 Preview prompt
+          </button>
+        </div>
         <button
           className="btn is-primary is-launch"
           disabled={busy !== null}
@@ -126,6 +132,16 @@ export function LaunchCompose({
         Opens a Windows Terminal tab and hands the session over. The tab keeps
         running if you close Mission Control.
       </p>
+
+      {previewing && (
+        <PromptPreview
+          issue={task.issue}
+          phase={phase.id}
+          phaseLabel={phase.label}
+          instructions={text}
+          onClose={() => setPreviewing(false)}
+        />
+      )}
     </section>
   );
 }
