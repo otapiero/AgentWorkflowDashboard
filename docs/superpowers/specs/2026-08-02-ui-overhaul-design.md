@@ -36,6 +36,9 @@ action — is at the bottom, adjacent to two destructive buttons.
 
 - Make the resolved prompt visible before launch, and give instructions a
   writing surface that grows to fit the thought.
+- Let instructions worth keeping be kept, with one toggle — reaching the
+  durable per-task instruction the backend already supports but no UI has ever
+  been able to set.
 - Let a glance at the board answer "does anything need me?" with no clicks.
 - Give the busy lanes the width, and stop empty lanes from taking a share.
 - Rank the drawer by how often each thing is touched.
@@ -45,12 +48,6 @@ action — is at the bottom, adjacent to two destructive buttons.
 - **No change to what gets spawned.** Prompt assembly, agent resolution,
   worktree handling and the reconciler are untouched. This is a UI change with
   one additive read-only endpoint.
-- **No persistent per-task instructions.** `spawn.ts:270` falls back to
-  `task.overrides.instructions`, a durable per-task instruction that no UI has
-  ever set. It stays unreachable and the fallback stays as written: the
-  operator's use is one-off context per run, and a standing instruction that
-  silently rides along on every future spawn is a worse default than retyping.
-  Recorded here so the dead branch is not mistaken for an oversight later.
 - **No drag-and-drop, no auto-import, no search.** Unchanged from
   `2026-07-21`.
 - **No new agent behaviour.** Nothing here asks an agent to do anything.
@@ -64,6 +61,7 @@ Reached by walking mockups; each was chosen against at least two alternatives.
 | Board | Attention rail + dense 9-lane kanban | Stage grouping (4 columns); urgency-sorted list |
 | Launch | Phase first, then compose | Inline box; always-on preview; split button |
 | Preview | On demand, behind a button | Embedded in the compose view |
+| Instructions | One-off by default, 📌 toggle to keep | Always one-off; always persisted |
 | Fast path | None — two clicks always | Ctrl+click launch; per-phase "launch now" |
 | Drawer | Tabs, permanent header | Ranked scroll; two-column at 760px |
 | Width | Drag-resizable, persisted, 620px default | Fixed 620px; fixed 760px |
@@ -95,7 +93,8 @@ Replaces the section body in place (not a modal). Contains:
 - The instructions textarea, empty and ~38px tall, **auto-growing** with its
   content to a maximum of 40% of the drawer's height, after which it scrolls
   and the `⛶ Full window` button is the intended escape.
-- `⛶ Full window` and `👁 Preview prompt` on the left, below the box.
+- `⛶ Full window`, `👁 Preview prompt` and the 📌 keep-toggle on the left,
+  below the box.
 - `▶ Launch <Phase>` as the primary button on the right.
 - A word count and a `Ctrl+Enter launches` hint.
 
@@ -105,6 +104,39 @@ current phase. A single consistent path is worth more than a saved click on a
 tool used a few dozen times a day, and a phase button that sometimes launches
 and sometimes composes is the kind of ambiguity that costs an accidental
 spawn.
+
+### Keeping instructions — the 📌 toggle
+
+Instructions are **one-off by default**: typed, used for that launch,
+discarded. The 📌 toggle beside the box changes that for text worth keeping.
+
+`spawn.ts:270` already resolves
+`options.customInstructions ?? task.overrides.instructions`, and
+`POST /api/tasks/:issue/overrides` already accepts an `instructions` field.
+Both have been in place since the overrides work and neither has ever been
+reachable. The toggle is the missing surface, not new machinery.
+
+**Behaviour:**
+
+- Opening compose on a task that has saved instructions **prefills the box**
+  with them and shows the pin lit. This is what makes the value editable and
+  visible rather than an invisible rider — without it, saved text would
+  silently join every prompt with nothing on screen to say so.
+- Toggling 📌 **on** persists the box's current content immediately.
+- While lit, edits persist when you launch or when you leave the compose view,
+  whichever comes first.
+- Toggling 📌 **off** clears `overrides.instructions` and leaves the text in
+  the box as a one-off for this launch only.
+- Tooltip states the scope plainly: *"Keep for every run of this task"*.
+
+**Scope is the task, not the phase.** `overrides.instructions` is a single
+per-task field, so kept text rides along on Plan, Implement, Publish and both
+review phases alike. The preview (§ above) is what keeps this honest — the
+kept text appears highlighted in the resolved prompt for whichever phase is
+armed, so its reach is visible before launch rather than discovered after.
+
+The drawer header shows a small 📌 next to the agent chip when a task has
+kept instructions, so the state is legible without opening compose.
 
 ### Full window
 
@@ -128,7 +160,11 @@ that its relationship to the rest of the prompt is invisible; showing the
 whole thing with the contribution highlighted makes the box's purpose
 self-evident.
 
-### New endpoint
+### Backend changes
+
+Two, both small.
+
+**1. Prompt preview (new).**
 
 ```
 POST /api/tasks/:issue/prompt   { phase, instructions? }  →  { text, command, words }
@@ -143,6 +179,24 @@ launches is worse than no preview.
 
 Errors surface in the preview pane rather than as a toast — a missing command
 file is exactly the thing preview should reveal.
+
+**2. `POST /api/tasks/:issue/overrides` must merge, not replace.**
+
+It currently rebuilds the whole `overrides` object from the body
+(`routes.ts:208`), so any field the caller omits is silently dropped. That is
+survivable today only because the single caller remembers to pass
+`instructions: task.overrides?.instructions` straight back through
+(`Drawer.tsx:245`).
+
+The 📌 toggle makes that untenable: the Run tab would write `instructions`
+while the Setup tab writes `agent`/`model`/`effort`, and whichever saved last
+would wipe the other's field. Saving an agent pin silently deleting your kept
+instructions is exactly the kind of quiet data loss this tool should not have.
+
+So the handler takes only the keys present in the body and leaves the rest
+alone, with an explicit `null` to clear a field (which is how 📌-off clears
+`instructions`). The pass-through in `Drawer.tsx` then goes away as dead
+defensive code rather than being carried into three new components.
 
 ---
 
@@ -250,7 +304,7 @@ components/
   Drawer.tsx          shell: header, tab strip, width drag, task-switch reset
   drawer/
     RunTab.tsx        phase list ⇄ compose view, mark-progress
-    LaunchCompose.tsx compose box, grow behaviour, full-window + preview
+    LaunchCompose.tsx compose box, grow behaviour, full-window + preview + 📌
     PromptPreview.tsx resolved prompt with instructions highlighted
     PlanTab.tsx       plan + artifacts
     HistoryTab.tsx    usage + spawn history
@@ -286,6 +340,9 @@ The reconciler is the tested surface and this change does not touch it.
   divide the remainder, order preserved.
 - **Unit:** attention-rail membership matches `derived.needsYou`, the same
   predicate `needsYouIssues` already uses for notifications.
+- **Unit:** the overrides handler merges — writing `{ agent }` leaves an
+  existing `instructions` intact, and `{ instructions: null }` clears only
+  that field. This is the regression that would otherwise eat kept text.
 - **Manual:** launch each phase from compose and confirm the spawned terminal
   receives exactly the text preview showed.
 
@@ -299,3 +356,9 @@ The reconciler is the tested surface and this change does not touch it.
   undercut the consistency the flow was chosen for.
 - **Rail eating vertical space** on a short window. It is bounded to one row
   of cards and scrolls horizontally past three.
+- **Kept instructions going stale.** Text pinned during Implement still rides
+  along at Publish and review time, where it may no longer make sense. Three
+  things keep this visible rather than silent: the box prefills with it, the
+  header shows 📌, and the preview shows it in place for the armed phase. Not
+  eliminated — a per-phase field would do that, but it is a bigger change than
+  the one asked for and the backend has no slot for it.
