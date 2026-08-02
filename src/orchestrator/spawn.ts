@@ -9,13 +9,14 @@ import {
   taskDir,
   worktreePath,
 } from './paths.ts';
-import { buildPrompt, writePromptFile } from './prompt.ts';
+import { writePromptFile } from './prompt.ts';
 import {
   readArtifacts,
   resolveArtifactStoredPath,
   writePlanSnapshot,
 } from './artifacts.ts';
-import { agentCapabilities, resolveAgent } from './agents.ts';
+import { agentCapabilities } from './agents.ts';
+import { resolveSpawnPlan } from './spawn-plan.ts';
 import { getPhaseDefaults, getSettings } from './state.ts';
 import { ensureWorktree } from './worktree.ts';
 import type {
@@ -247,31 +248,18 @@ export async function spawnPhase(
   phase: PhaseConfig,
   options: SpawnOptions = {},
 ): Promise<SpawnRecord> {
-  if (!phase.command) {
-    throw new Error(`Phase '${phase.id}' has no command to render a prompt from.`);
-  }
-
-  const { agent, model, effort } = resolveAgent(
+  const { agent, model, effort, profile, promptText } = resolveSpawnPlan(
     config,
     task,
-    phase.id,
+    phase,
     getPhaseDefaults(),
-    { agent: options.agent, model: options.model, effort: options.effort },
+    {
+      customInstructions: options.customInstructions,
+      agent: options.agent,
+      model: options.model,
+      effort: options.effort,
+    },
   );
-  if (!agent) {
-    throw new Error(
-      `Phase '${phase.id}' has no agent to spawn. Pin one on the task or set a phase default.`,
-    );
-  }
-  const profile = config.agents[agent]!;
-
-  const promptText = buildPrompt(phase.command, task, {
-    customInstructions:
-      options.customInstructions ?? task.overrides?.instructions,
-    // Agents without a system-prompt flag carry the rules in the prompt body.
-    inlineInstructions:
-      profile.instructionMode === 'inline' ? STANDING_RULES : undefined,
-  });
   writePromptFile(task.issue, promptText);
 
   // Record the "before" picture so a plan run's artifacts can be attributed to
