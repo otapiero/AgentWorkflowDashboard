@@ -48,6 +48,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 const post = <T>(url: string, body?: unknown) =>
   request<T>(url, { method: 'POST', body: body ? JSON.stringify(body) : undefined });
 
+export interface PromptPreview {
+  text: string;
+  command: string;
+  words: number;
+}
+
 export const api = {
   config: () => request<BoardConfig>('/api/config'),
   tasks: () => request<TaskWithDerived[]>('/api/tasks'),
@@ -76,6 +82,9 @@ export const api = {
     } = {},
   ) => post<{ spawned: unknown }>(`/api/tasks/${issue}/spawn`, { phase, ...opts }),
 
+  previewPrompt: (issue: number, phase: Phase, instructions?: string) =>
+    post<PromptPreview>(`/api/tasks/${issue}/prompt`, { phase, instructions }),
+
   markDone: (issue: number, phase: Phase) =>
     post<TaskWithDerived[]>(`/api/tasks/${issue}/mark-done`, { phase }),
   unmarkDone: (issue: number, phase: Phase) =>
@@ -84,7 +93,12 @@ export const api = {
     post<TaskWithDerived[]>(`/api/tasks/${issue}/move`, { phase }),
   overrides: (
     issue: number,
-    o: { agent?: string; model?: string; effort?: string; instructions?: string },
+    o: {
+      agent?: string | null;
+      model?: string | null;
+      effort?: string | null;
+      instructions?: string | null;
+    },
   ) => post<TaskWithDerived[]>(`/api/tasks/${issue}/overrides`, o),
   phaseDefault: (phase: string, o: { agent?: string; model?: string; effort?: string }) =>
     post<TaskWithDerived[]>('/api/phase-defaults', { phase, ...o }),

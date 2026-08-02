@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { api, subscribe } from './api.ts';
 import type { BoardConfig, PollMeta } from './api.ts';
 import { needsYouIssues, newlyNeedsYou } from './notify.ts';
+import { AttentionRail } from './components/AttentionRail.tsx';
 import { Board } from './components/Board.tsx';
 import { Drawer } from './components/Drawer.tsx';
 import { ImportDrawer } from './components/ImportDrawer.tsx';
@@ -23,7 +24,6 @@ export function App() {
   const [config, setConfig] = useState<BoardConfig | null>(null);
   const [tasks, setTasks] = useState<TaskWithDerived[]>([]);
   const [connected, setConnected] = useState(false);
-  const [onlyNeedsYou, setOnlyNeedsYou] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [importing, setImporting] = useState(false);
   const [settingsPhase, setSettingsPhase] = useState<string | null>(null);
@@ -104,12 +104,9 @@ export function App() {
     api.config().then(setConfig).catch(() => {});
   }, []);
 
-  const needsYouCount = useMemo(
-    () => tasks.filter((t) => t.derived.needsYou).length,
-    [tasks],
-  );
-
-  const visible = onlyNeedsYou ? tasks.filter((t) => t.derived.needsYou) : tasks;
+  // Kept rather than inlined as `tasks`: Board and the rail both read it, and
+  // it stays the seam if filtering ever returns.
+  const visible = tasks;
   const selectedTask = tasks.find((t) => t.issue === selected) ?? null;
 
   function editDefault(phaseId: string) {
@@ -149,13 +146,6 @@ export function App() {
         <span className="topbar-spacer" />
 
         <div className="topbar-actions">
-          <button
-            className={`btn is-sm${onlyNeedsYou ? ' is-on' : ''}`}
-            onClick={() => setOnlyNeedsYou((v) => !v)}
-            aria-pressed={onlyNeedsYou}
-          >
-            Needs you{needsYouCount > 0 ? ` · ${needsYouCount}` : ''}
-          </button>
           <button className="btn is-sm is-primary" onClick={() => setImporting(true)}>
             + New from issue
           </button>
@@ -167,9 +157,6 @@ export function App() {
             }}
           >
             Agents
-          </button>
-          <button className="btn is-sm is-ghost" onClick={refresh}>
-            Refresh
           </button>
           <button
             className={`btn is-sm is-icon${notifyOn ? ' is-on' : ''}`}
@@ -184,7 +171,11 @@ export function App() {
             {notifyOn ? '🔔' : '🔕'}
           </button>
           {pollMeta && (
-            <span className="poll-status">
+            <button
+              className="poll-status"
+              onClick={refresh}
+              title="Click to re-check GitHub now"
+            >
               <span className="poll-checked">checked {ago(pollMeta.checkedAt, now)}</span>
               {pollMeta.rateLimit && (
                 <span
@@ -196,7 +187,7 @@ export function App() {
                   {pollMeta.rateLimit.remaining.toLocaleString()} API
                 </span>
               )}
-            </span>
+            </button>
           )}
           <span className={`lamp ${connected ? 'is-on' : 'is-off'}`}>
             {connected ? 'live' : 'offline'}
@@ -209,6 +200,13 @@ export function App() {
           <p className="error">{error}</p>
         </div>
       )}
+
+      <AttentionRail
+        tasks={visible}
+        config={config}
+        selectedIssue={selected}
+        onOpen={setSelected}
+      />
 
       <Board
         config={config}

@@ -1,4 +1,5 @@
 import { Lane } from './Lane.tsx';
+import { laneLayout } from '../board-model.ts';
 import type { BoardConfig } from '../api.ts';
 import type { PhaseConfig, Phase, TaskWithDerived } from '../../shared/types.ts';
 
@@ -30,14 +31,20 @@ export function Board({ config, tasks, selectedIssue, onOpen, onEditDefault }: P
     byPhase.set(phase, [...(byPhase.get(phase) ?? []), task]);
   }
 
+  const layout = laneLayout(
+    lanes.map((phase) => ({ id: phase.id, count: (byPhase.get(phase.id) ?? []).length })),
+  );
+
   return (
     <div className="board">
-      {lanes.map((phase) => (
+      {lanes.map((phase, i) => (
         <Lane
           key={phase.id}
           phase={phase}
           tasks={byPhase.get(phase.id) ?? []}
           config={config}
+          collapsed={layout[i]!.collapsed}
+          grow={layout[i]!.grow}
           selectedIssue={selectedIssue}
           onOpen={onOpen}
           onEditDefault={onEditDefault}
