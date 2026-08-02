@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 
 import { api } from '../api.ts';
 import type { BoardConfig } from '../api.ts';
@@ -24,6 +25,14 @@ const TABS: { id: DrawerTab; label: string }[] = [
   { id: 'setup', label: 'Setup' },
 ];
 
+const WIDTH_KEY = 'mc-drawer-width';
+const MIN_W = 420;
+const DEFAULT_W = 620;
+
+function clampWidth(px: number): number {
+  return Math.max(MIN_W, Math.min(px, Math.min(1100, window.innerWidth * 0.9)));
+}
+
 /**
  * Everything about one task, and every action on it.
  *
@@ -37,6 +46,28 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+
+  const [width, setWidth] = useState(() => {
+    const saved = Number(localStorage.getItem(WIDTH_KEY));
+    return Number.isFinite(saved) && saved > 0 ? clampWidth(saved) : DEFAULT_W;
+  });
+
+  // Drag from the left edge. Listeners live on window so the pointer can leave
+  // the 6px handle mid-drag without the resize sticking.
+  const startDrag = useCallback((down: ReactPointerEvent) => {
+    down.preventDefault();
+    const move = (e: PointerEvent) => setWidth(clampWidth(window.innerWidth - e.clientX));
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setWidth((w) => {
+        localStorage.setItem(WIDTH_KEY, String(w));
+        return w;
+      });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, []);
 
   useEffect(() => {
     setTab('run');
@@ -74,7 +105,19 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
   return (
     <>
       <button className="scrim" onClick={onClose} aria-label="Close details" />
-      <aside className="drawer" role="dialog" aria-label={`Issue ${task.issue}`}>
+      <aside
+        className="drawer"
+        role="dialog"
+        aria-label={`Issue ${task.issue}`}
+        style={{ width }}
+      >
+        <div
+          className="drawer-grip"
+          onPointerDown={startDrag}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize drawer"
+        />
         <header className="drawer-head">
           <div className="drawer-eyebrow">
             <span>#{task.issue}</span>
