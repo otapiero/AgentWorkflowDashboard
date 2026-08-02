@@ -5,6 +5,7 @@ import { readPlan, writePlan } from '../orchestrator/plan.ts';
 import { writeMarker, clearMarker } from '../orchestrator/markers.ts';
 import { openArtifactInEditor, openWorktreeInVscode, spawnPhase } from '../orchestrator/spawn.ts';
 import { resolveSpawnPlan } from '../orchestrator/spawn-plan.ts';
+import { mergeOverrides } from '../orchestrator/overrides.ts';
 import { missionUsage } from '../orchestrator/usage.ts';
 import {
   getPhaseDefaults,
@@ -228,7 +229,12 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
 
   app.post<{
     Params: { issue: string };
-    Body: { agent?: string; model?: string; effort?: string; instructions?: string };
+    Body: {
+      agent?: string | null;
+      model?: string | null;
+      effort?: string | null;
+      instructions?: string | null;
+    };
   }>('/api/tasks/:issue/overrides', async (req, reply) => {
     const task = getTask(Number(req.params.issue));
     if (!task) return reply.code(404).send({ error: 'task not on the board' });
@@ -239,12 +245,7 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
     }
     upsertTask({
       ...task,
-      overrides: {
-        agent: agent || undefined,
-        model: req.body?.model || undefined,
-        effort: req.body?.effort || undefined,
-        instructions: req.body?.instructions || undefined,
-      },
+      overrides: mergeOverrides(task.overrides, req.body ?? {}),
     });
     return refreshAndBroadcast();
   });

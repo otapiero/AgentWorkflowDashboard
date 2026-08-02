@@ -93,7 +93,12 @@ export const api = {
     post<TaskWithDerived[]>(`/api/tasks/${issue}/move`, { phase }),
   overrides: (
     issue: number,
-    o: { agent?: string; model?: string; effort?: string; instructions?: string },
+    o: {
+      agent?: string | null;
+      model?: string | null;
+      effort?: string | null;
+      instructions?: string | null;
+    },
   ) => post<TaskWithDerived[]>(`/api/tasks/${issue}/overrides`, o),
   phaseDefault: (phase: string, o: { agent?: string; model?: string; effort?: string }) =>
     post<TaskWithDerived[]>('/api/phase-defaults', { phase, ...o }),

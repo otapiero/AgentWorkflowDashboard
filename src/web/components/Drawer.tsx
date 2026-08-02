@@ -242,7 +242,6 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
                       agent: pin.agent || undefined,
                       model: pin.model || undefined,
                       effort: pin.effort || undefined,
-                      instructions: task.overrides?.instructions,
                     }),
                   )
                 }
