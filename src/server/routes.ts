@@ -4,6 +4,7 @@ import { fetchIssueTitle, listOpenIssues } from '../orchestrator/github.ts';
 import { readPlan, writePlan } from '../orchestrator/plan.ts';
 import { writeMarker, clearMarker } from '../orchestrator/markers.ts';
 import { openArtifactInEditor, openWorktreeInVscode, spawnPhase } from '../orchestrator/spawn.ts';
+import { resolveSpawnPlan } from '../orchestrator/spawn-plan.ts';
 import { missionUsage } from '../orchestrator/usage.ts';
 import {
   getPhaseDefaults,
@@ -145,6 +146,37 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
       // The tab needs a moment to write its running marker before we re-derive.
       setTimeout(() => void refreshAndBroadcast(), 1500);
       return { spawned: record };
+    } catch (err) {
+      return reply
+        .code(500)
+        .send({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  /**
+   * What the agent *would* receive. Read-only: no prompt file, no plan
+   * snapshot, no spawn record — this must never have a side effect, because
+   * the operator will hit it repeatedly while writing.
+   */
+  app.post<{
+    Params: { issue: string };
+    Body: { phase?: string; instructions?: string };
+  }>('/api/tasks/:issue/prompt', async (req, reply) => {
+    const task = getTask(Number(req.params.issue));
+    if (!task) return reply.code(404).send({ error: 'task not on the board' });
+
+    const phase = config.pipeline.find((p) => p.id === req.body?.phase);
+    if (!phase) return reply.code(400).send({ error: `unknown phase '${req.body?.phase}'` });
+
+    try {
+      const plan = resolveSpawnPlan(config, task, phase, getPhaseDefaults(), {
+        customInstructions: req.body?.instructions || undefined,
+      });
+      return {
+        text: plan.promptText,
+        command: plan.command,
+        words: plan.promptText.trim().split(/\s+/).filter(Boolean).length,
+      };
     } catch (err) {
       return reply
         .code(500)

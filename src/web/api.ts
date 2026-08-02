@@ -48,6 +48,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 const post = <T>(url: string, body?: unknown) =>
   request<T>(url, { method: 'POST', body: body ? JSON.stringify(body) : undefined });
 
+export interface PromptPreview {
+  text: string;
+  command: string;
+  words: number;
+}
+
 export const api = {
   config: () => request<BoardConfig>('/api/config'),
   tasks: () => request<TaskWithDerived[]>('/api/tasks'),
@@ -75,6 +81,9 @@ export const api = {
       effort?: string;
     } = {},
   ) => post<{ spawned: unknown }>(`/api/tasks/${issue}/spawn`, { phase, ...opts }),
+
+  previewPrompt: (issue: number, phase: Phase, instructions?: string) =>
+    post<PromptPreview>(`/api/tasks/${issue}/prompt`, { phase, instructions }),
 
   markDone: (issue: number, phase: Phase) =>
     post<TaskWithDerived[]>(`/api/tasks/${issue}/mark-done`, { phase }),
