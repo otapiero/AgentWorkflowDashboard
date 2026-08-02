@@ -158,13 +158,24 @@ button {
   background: var(--fault);
 }
 
-/* last-checked heartbeat + API budget */
+/* last-checked heartbeat + API budget; doubles as the re-check control */
 .poll-status {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   font-family: var(--mono);
   font-size: 11px;
+  color: var(--dim);
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.poll-status:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.topbar-actions .btn:not(.is-primary):not(.is-icon) {
   color: var(--dim);
 }
 
