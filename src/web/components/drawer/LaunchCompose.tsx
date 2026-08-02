@@ -42,6 +42,7 @@ export function LaunchCompose({
   const [onceOpen, setOnceOpen] = useState(false);
   const [once, setOnce] = useState<AgentSelection>(EMPTY);
   const [previewing, setPreviewing] = useState(false);
+  const [full, setFull] = useState(false);
   const boxRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -55,6 +56,16 @@ export function LaunchCompose({
     box.style.height = 'auto';
     box.style.height = `${Math.min(box.scrollHeight, window.innerHeight * 0.4)}px`;
   }, [text]);
+
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (e: KeyboardEvent) => {
+      // The preview owns Escape while it is up.
+      if (e.key === 'Escape' && !previewing) setFull(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [full, previewing]);
 
   function launch() {
     return run(phase.id, () =>
@@ -115,6 +126,9 @@ export function LaunchCompose({
 
       <div className="compose-actions">
         <div className="compose-tools">
+          <button className="btn is-sm" onClick={() => setFull(true)}>
+            ⛶ Full window
+          </button>
           <button className="btn is-sm" onClick={() => setPreviewing(true)}>
             👁 Preview prompt
           </button>
@@ -132,6 +146,47 @@ export function LaunchCompose({
         Opens a Windows Terminal tab and hands the session over. The tab keeps
         running if you close Mission Control.
       </p>
+
+      {full && (
+        <div className="plan-editor-scrim" role="dialog" aria-label="Instructions">
+          <div className="plan-editor">
+            <header className="plan-editor-head">
+              <strong>
+                Instructions · {phase.label} · #{task.issue}
+              </strong>
+              <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                <button className="btn is-sm" onClick={() => setPreviewing(true)}>
+                  👁 Preview
+                </button>
+                <button
+                  className="btn is-sm is-primary"
+                  disabled={busy !== null}
+                  onClick={() => void launch()}
+                >
+                  ▶ Launch
+                </button>
+                <button className="btn is-sm is-ghost" onClick={() => setFull(false)}>
+                  Close
+                </button>
+              </span>
+            </header>
+            <div className="plan-editor-body">
+              <textarea
+                className="plan-editor-text"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    if (busy === null) void launch();
+                  }
+                }}
+                autoFocus
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {previewing && (
         <PromptPreview

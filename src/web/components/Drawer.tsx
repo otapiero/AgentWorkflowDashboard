@@ -77,7 +77,11 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      // An overlay (plan editor, prompt preview, full-window compose) owns
+      // Escape while it is up.
+      if (document.querySelector('.plan-editor-scrim')) return;
+      onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
