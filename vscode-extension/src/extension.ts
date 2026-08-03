@@ -3,6 +3,7 @@ import { performance } from 'node:perf_hooks';
 
 import { MissionControlClient } from './client/mission-control-client.ts';
 import { CommandController } from './commands.ts';
+import { DeferredActivation } from './deferred-activation.ts';
 import { DeliveryLedger } from './notifications/delivery-ledger.ts';
 import { NotificationCoordinator } from './notifications/notification-coordinator.ts';
 import { MissionControlRuntime, type RuntimeSettings } from './runtime.ts';
@@ -19,20 +20,17 @@ export interface MissionControlTestApi { activationMetricsForTests(): { syncActi
 
 export function activate(context: vscode.ExtensionContext): MissionControlTestApi | void {
   const started = performance.now();
-  let resolveReady!: () => void;
-  let rejectReady!: (error: unknown) => void;
-  const ready = new Promise<void>((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
-  setImmediate(() => {
-    try {
+  const deferred = new DeferredActivation(setImmediate, clearImmediate, () => {
       const runtime = createRuntime(context);
       activeRuntime = runtime;
       context.subscriptions.push(runtime);
       runtime.start();
-      resolveReady();
-    } catch (error) { rejectReady(error); }
   });
+  void deferred.ready.catch(() => undefined);
+  context.subscriptions.push({ dispose: () => deferred.dispose() });
+  deferred.schedule();
   syncActivationMs = performance.now() - started;
-  if (context.extensionMode === vscode.ExtensionMode.Test) return { activationMetricsForTests, readyForTests: async () => await ready, lastOpenFolderArgs: () => activeRuntime?.lastOpenFolderArgsForTests() ?? null, seedTasksForTests: tasks => activeRuntime?.seedTasksForTests(tasks) };
+  if (context.extensionMode === vscode.ExtensionMode.Test) return { activationMetricsForTests, readyForTests: async () => await deferred.ready, lastOpenFolderArgs: () => activeRuntime?.lastOpenFolderArgsForTests() ?? null, seedTasksForTests: tasks => activeRuntime?.seedTasksForTests(tasks) };
 }
 export function activationMetricsForTests(): { syncActivationMs: number } { return { syncActivationMs }; }
 export function deactivate(): void { activeRuntime?.dispose(); activeRuntime = undefined; }
