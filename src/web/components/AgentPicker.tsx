@@ -1,10 +1,7 @@
 import type { AgentInfo } from '../api.ts';
-
-export interface AgentSelection {
-  agent: string;
-  model: string;
-  effort: string;
-}
+import { selectionForAgent } from '../../shared/agent-selection.ts';
+export type { AgentSelection } from '../../shared/agent-selection.ts';
+import type { AgentSelection } from '../../shared/agent-selection.ts';
 
 /**
  * A paired agent / model / effort selector, reused for per-task pins, per-phase
@@ -37,13 +34,7 @@ export function AgentPicker({
   const efforts = withValue(agent?.efforts ?? [], value.effort);
 
   function changeAgent(nextAgentName: string) {
-    const nextEffectiveName = nextAgentName || inheritedAgent || agents[0]?.name;
-    const nextAgent = agents.find((candidate) => candidate.name === nextEffectiveName);
-    onChange({
-      agent: nextAgentName,
-      model: nextAgent?.models.includes(value.model) ? value.model : '',
-      effort: nextAgent?.efforts.includes(value.effort) ? value.effort : '',
-    });
+    onChange(selectionForAgent(value, agents, nextAgentName, inheritedAgent));
   }
 
   return (
