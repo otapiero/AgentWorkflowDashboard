@@ -83,6 +83,26 @@ test('two contenders safely elect one mutation owner after a stale guard generat
   expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ token: owners[0]!.token });
 });
 
+test('an earlier live mutation owner wins even when a later contender has a lexically earlier token', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'start.lock');
+  await writeFile(file, JSON.stringify({ token: 'stale-owner', createdAt: 0 }));
+  let owned!: () => void;
+  let resume!: () => void;
+  const firstOwned = new Promise<void>((resolve) => { owned = resolve; });
+  const firstResume = new Promise<void>((resolve) => { resume = resolve; });
+  const first = acquireAtomicLease(file, 1, () => 10, {
+    token: () => 'z-first',
+    afterMutationOwnership: async () => { owned(); await firstResume; },
+  });
+
+  await firstOwned;
+  const later = await acquireAtomicLease(file, 1, () => 10, { token: () => 'a-later' });
+  expect(later).toBeNull();
+  resume();
+  expect(await first).not.toBeNull();
+});
+
 test('release leaves a newer lock intact', async () => {
   const directory = await temporaryDirectory();
   const file = join(directory, 'start.lock');
