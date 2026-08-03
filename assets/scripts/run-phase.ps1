@@ -32,6 +32,21 @@ Write-Host "  Mission Control - issue #$issue - $phase" -ForegroundColor Green
 Write-Host "  branch: $($spec.branch)" -ForegroundColor DarkGray
 Write-Host ""
 
+# Rebuild PATH from the registry. A newly installed agent CLI adds itself to the
+# user PATH, but every process already running — Explorer, VS Code, and so this
+# tab — keeps the environment block it was born with, so the agent stays
+# invisible until the next sign-out. Reading the persisted value gives a fresh
+# tab the PATH the machine actually has.
+$env:PATH = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+            [Environment]::GetEnvironmentVariable('Path', 'User')
+
+# Resolve the agent now rather than at launch time. Failing here costs nothing;
+# failing after the worktree and the running marker are in place buries a
+# one-line "not recognized" under a whole session's output.
+if (-not (Get-Command $spec.exe -ErrorAction SilentlyContinue)) {
+    throw "Agent executable '$($spec.exe)' was not found on PATH. Install it, or point the agent's launch: at its full path in config.yaml."
+}
+
 # One-shot guard for the VS Code launcher. If the guard file already exists this
 # is a re-open (or VS Code restoring the window), so do nothing but keep the tab.
 if ($GuardFile) {
