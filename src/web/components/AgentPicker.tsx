@@ -36,12 +36,22 @@ export function AgentPicker({
   const models = withValue(agent?.models ?? [], value.model);
   const efforts = withValue(agent?.efforts ?? [], value.effort);
 
+  function changeAgent(nextAgentName: string) {
+    const nextEffectiveName = nextAgentName || inheritedAgent || agents[0]?.name;
+    const nextAgent = agents.find((candidate) => candidate.name === nextEffectiveName);
+    onChange({
+      agent: nextAgentName,
+      model: nextAgent?.models.includes(value.model) ? value.model : '',
+      effort: nextAgent?.efforts.includes(value.effort) ? value.effort : '',
+    });
+  }
+
   return (
     <div className="picker">
       <select
         className="field"
         value={value.agent}
-        onChange={(e) => onChange({ ...value, agent: e.target.value })}
+        onChange={(e) => changeAgent(e.target.value)}
         aria-label="Agent"
       >
         <option value="">{inheritAgentLabel}</option>
