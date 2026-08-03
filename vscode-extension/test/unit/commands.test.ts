@@ -20,7 +20,7 @@ function controller(overrides: Partial<ConstructorParameters<typeof CommandContr
   const client = { spawn: vi.fn().mockResolvedValue({ spawned: {} }) };
   const flow = vi.fn().mockResolvedValue({ phase: 'implement', agent: 'codex', model: 'gpt-5.6-sol', effort: 'high' });
   const output = { show: vi.fn() };
-  const server = { restartOwned: vi.fn().mockResolvedValue(undefined) };
+  const server = { restartOwned: vi.fn().mockResolvedValue(true) };
   const launchPicker = { pick: vi.fn() };
   return { current, api, store, client, flow, output, server, commands: new CommandController({ api, store, client, config: () => config, serverUrl: () => 'http://127.0.0.1:4317/', runLaunchFlow: flow, launchPicker, output, server, ...overrides }) };
 }
@@ -104,12 +104,12 @@ describe('CommandController', () => {
     await commands.restartServer();
     expect(output.show).toHaveBeenCalledTimes(2);
     expect(server.restartOwned).toHaveBeenCalledOnce();
-    expect(api.showInformationMessage).toHaveBeenCalledWith('Mission Control server restart requested.');
+    expect(api.showInformationMessage).toHaveBeenCalledWith('Mission Control server stopped; reconnecting.');
   });
 
   test('uses retargeted client and server after a runtime reconfiguration', async () => {
     const replacementClient = { spawn: vi.fn().mockResolvedValue({ spawned: {} }) };
-    const replacementServer = { restartOwned: vi.fn().mockResolvedValue(undefined) };
+    const replacementServer = { restartOwned: vi.fn().mockResolvedValue(true) };
     const { commands, current, client, server } = controller({ currentClient: () => replacementClient, currentServer: () => replacementServer });
     await commands.runCurrentPhase(current);
     await commands.restartServer();

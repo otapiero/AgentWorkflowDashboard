@@ -31,7 +31,6 @@ export class MissionControlStatusBar implements vscode.Disposable {
     this.taskItem = api.createStatusBarItem(api.StatusBarAlignment.Left);
     this.connectionItem = api.createStatusBarItem(api.StatusBarAlignment.Right);
     this.taskItem.command = 'missionControl.runCurrentPhase';
-    this.connectionItem.command = 'missionControl.openDashboard';
     this.unsubscribe = store.onDidChange(() => this.refresh());
     this.refresh();
     this.taskItem.show();
@@ -64,5 +63,6 @@ export class MissionControlStatusBar implements vscode.Disposable {
     if (text === this.lastConnectionText) return;
     this.lastConnectionText = text;
     this.connectionItem.text = text;
+    this.connectionItem.command = this.store.snapshot().connection === 'connected' ? 'missionControl.openDashboard' : 'missionControl.connectionActions';
   }
 }

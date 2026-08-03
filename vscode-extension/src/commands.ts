@@ -32,6 +32,7 @@ export interface CommandDependencies {
   output: { show(): void };
   server: Pick<ServerManager, 'restartOwned'>;
   currentServer?: () => Pick<ServerManager, 'restartOwned'>;
+  canMutate?: () => boolean;
 }
 
 export class CommandController {
@@ -52,6 +53,7 @@ export class CommandController {
   }
 
   async runCurrentPhase(candidate?: TaskWithDerived | number): Promise<void> {
+    if (this.deps.canMutate && !this.deps.canMutate()) { await this.deps.api.showWarningMessage('Mission Control is not connected.'); return; }
     const task = candidate ? this.latest(candidate) : matchWorkspace(this.deps.api.workspaceUri() as { scheme: string; fsPath: string } | undefined, this.deps.store.tasks());
     if (!task) {
       await this.deps.api.showWarningMessage('This workspace is not a Mission Control worktree.');
@@ -101,8 +103,12 @@ export class CommandController {
 
   async restartServer(): Promise<void> {
     this.deps.output.show();
-    await (this.deps.currentServer?.() ?? this.deps.server).restartOwned();
-    await this.deps.api.showInformationMessage('Mission Control server restart requested.');
+    try {
+      const restarted = await (this.deps.currentServer?.() ?? this.deps.server).restartOwned();
+      await this.deps.api.showInformationMessage(restarted ? 'Mission Control server stopped; reconnecting.' : 'No owned Mission Control server was found; restart was not performed.');
+    } catch (error) {
+      await this.deps.api.showWarningMessage(error instanceof Error ? error.message : String(error), 'Show Logs');
+    }
   }
 
   async showLogs(): Promise<void> { this.deps.output.show(); }

@@ -19,6 +19,7 @@ export interface RuntimeDependencies {
   delay(ms: number, signal: AbortSignal): Promise<void>;
   jitter(delayMs: number): number;
   presentConnectionFailure(result: EnsureReadyResult): Promise<'retry' | 'configure' | 'logs' | undefined>;
+  log?: (message: string) => void;
   lastOpenFolderArgsForTests?: () => readonly unknown[] | null;
   seedTasksForTests?: (tasks: readonly TaskWithDerived[]) => void;
 }
@@ -43,12 +44,15 @@ export class MissionControlRuntime implements vscode.Disposable {
 
   reconfigure(changedKeys: ReadonlySet<string>): void {
     if (![...changedKeys].some((key) => key === 'missionControl.serverUrl' || key === 'missionControl.installationPath' || key === 'missionControl.autoStart')) return;
+    this.deps.store.setConnection('starting');
+    this.deps.log?.('Configuration changed; reconnecting.');
     this.abort();
     if (this.started) this.begin();
   }
 
   lastOpenFolderArgsForTests(): readonly unknown[] | null { return this.deps.lastOpenFolderArgsForTests?.() ?? null; }
   requestSignal(): AbortSignal | undefined { return this.controller?.signal; }
+  retry(): void { this.abort(); if (this.started) { this.deps.store.setConnection('starting'); this.begin(); } }
   seedTasksForTests = (tasks: readonly TaskWithDerived[]): void => { this.deps.seedTasksForTests?.(tasks); };
 
   dispose(): void { this.started = false; this.abort(); }
@@ -70,12 +74,15 @@ export class MissionControlRuntime implements vscode.Disposable {
     let reconnect = false;
     while (!signal.aborted && generation === this.generation) {
       if (reconnect) {
-        try { await this.deps.delay(this.deps.jitter(reconnectDelays[Math.min(Math.max(attempts - 1, 0), reconnectDelays.length - 1)]!), signal); } catch { return; }
+        const retryDelay = this.deps.jitter(reconnectDelays[Math.min(Math.max(attempts - 1, 0), reconnectDelays.length - 1)]!);
+        this.deps.log?.(`Reconnecting in ${Math.round(retryDelay)} ms.`);
+        try { await this.deps.delay(retryDelay, signal); } catch { return; }
         if (signal.aborted) return;
       }
       const ready = await server.ensureReady();
       if (signal.aborted) return;
       if (ready.kind !== 'ready') {
+        this.deps.log?.(`Connection failed: ${ready.kind}.`);
         this.deps.store.setConnection(ready.kind === 'incompatible' ? 'incompatible' : 'disconnected');
         const action = await this.deps.presentConnectionFailure(ready);
         if (action === 'retry') { reconnect = true; attempts += 1; continue; }
@@ -105,6 +112,7 @@ export class MissionControlRuntime implements vscode.Disposable {
         }, signal);
         if (signal.aborted) return;
         if (closed || opened) {
+          this.deps.log?.(`SSE closed${closed ? `: ${(closed as Error).message}` : '.'}`);
           this.deps.store.setConnection('disconnected');
           reconnect = true;
           attempts += 1;

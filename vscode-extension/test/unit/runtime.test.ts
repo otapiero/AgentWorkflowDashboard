@@ -74,6 +74,7 @@ test('restarts only when connection settings change', async () => {
   runtime.reconfigure(new Set(['missionControl.notifications.ci']));
   expect(clients).toHaveLength(1);
   runtime.reconfigure(new Set(['missionControl.serverUrl']));
+  expect(runtime['deps'].store.snapshot().connection).toBe('starting');
   expect(clients).toHaveLength(2);
   runtime.dispose();
 });

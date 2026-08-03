@@ -58,25 +58,34 @@ function createRuntime(context: vscode.ExtensionContext): MissionControlRuntime 
     executeCommand: (command, ...args) => { if (command === 'vscode.openFolder') lastOpenFolderArgs = args; return vscode.commands.executeCommand(command, ...args); }, uriFile: vscode.Uri.file, uriParse: vscode.Uri.parse, openExternal: vscode.env.openExternal,
     showInformationMessage: vscode.window.showInformationMessage, showWarningMessage: vscode.window.showWarningMessage,
     showQuickPick: vscode.window.showQuickPick as never, terminals: vscode.window.terminals, workspaceUri: folder,
-  }, store, client, currentClient: () => client, config: () => store.snapshot().config, serverUrl: () => settings().serverUrl, output, server, currentServer: () => server,
+  }, store, client, currentClient: () => client, canMutate: () => store.snapshot().connection === 'connected', config: () => store.snapshot().config, serverUrl: () => settings().serverUrl, output, server, currentServer: () => server,
     launchPicker: launchPickerFrom(vscode.window.showQuickPick as never),
   });
   const notificationOptions = notificationSettings();
   const notifications = new NotificationCoordinator(new DeliveryLedger(context.globalStorageUri.fsPath, async (ms) => await new Promise(resolve => setTimeout(resolve, ms))), async event => {
-    const actions = event.prUrl ? ['View PR', 'Open Worktree'] : ['Open Worktree', 'Run Phase'];
+    const eventTask = store.task(event.issue); const currentTask = matchWorkspace(folder(), store.tasks());
+    const actions: string[] = [];
+    if (event.prUrl) actions.push('View PR');
+    else if (eventTask?.integration.worktreeExists) actions.push('Open Worktree');
+    if (event.kind === 'approvalRequired' && eventTask?.integration.worktreeExists) actions.push('Run Phase');
+    if (currentTask?.issue === event.issue && eventTask?.integration.liveSpawn) actions.push('View Session');
+    actions.push('Open Dashboard');
     const show = event.kind === 'ciFailed' ? vscode.window.showErrorMessage : event.kind === 'reviewComments' || event.kind === 'approvalRequired' ? vscode.window.showWarningMessage : vscode.window.showInformationMessage;
     const choice = await show(`${event.title}: ${event.message}`, ...actions);
     if (choice === 'Open Worktree') await commands.openTask(store.task(event.issue));
     if (choice === 'Run Phase') await commands.runCurrentPhase(store.task(event.issue));
+    if (choice === 'View Session') await commands.viewSession(store.task(event.issue));
+    if (choice === 'Open Dashboard') await commands.openDashboard();
     if (choice === 'View PR' && event.prUrl) await vscode.env.openExternal(vscode.Uri.parse(event.prUrl));
   }, notificationOptions);
   const runtime = new MissionControlRuntime({ readSettings: settings, createClient: (url) => { client = new MissionControlClient(url); return client; }, createServerManager: (nextClient, nextSettings) => { server = makeServer(nextClient as MissionControlClient, nextSettings, context.globalStorageUri.fsPath); return server; }, store, notifications,
-    delay: (ms, signal) => abortableDelay(ms, signal), jitter: value => value * (0.8 + Math.random() * 0.4), presentConnectionFailure: async result => presentFailure(result, output), lastOpenFolderArgsForTests: () => lastOpenFolderArgs, seedTasksForTests: tasks => store.applyTasks(tasks) });
+    delay: (ms, signal) => abortableDelay(ms, signal), jitter: value => value * (0.8 + Math.random() * 0.4), presentConnectionFailure: async result => presentFailure(result, output), log: message => output.appendLine(message), lastOpenFolderArgsForTests: () => lastOpenFolderArgs, seedTasksForTests: tasks => store.applyTasks(tasks) });
   const register = (id: string, callback: (...args: never[]) => unknown) => context.subscriptions.push(vscode.commands.registerCommand(id.replace('missionControl.', 'missionControl.internal.'), callback));
   register('missionControl.openTask', (task) => commands.openTask(task)); register('missionControl.runCurrentPhase', (task) => commands.runCurrentPhase(task));
   register('missionControl.openDashboard', () => commands.openDashboard()); register('missionControl.restartServer', () => commands.restartServer()); register('missionControl.showLogs', () => commands.showLogs()); register('missionControl.viewSession', (task) => commands.viewSession(task));
   register('missionControl.refresh', async () => { const signal = runtime.requestSignal(); if (!signal) return; const tasks = await client.reconcile(signal); if (signal.aborted) return; store.applyTasks(tasks); await notifications.apply(tasks); });
   register('missionControl.filter', async () => tree.setFilter(await vscode.window.showInputBox({ prompt: 'Filter Mission Control tasks' }) ?? ''));
+  register('missionControl.connectionActions', async () => { const action = await vscode.window.showWarningMessage('Mission Control is disconnected.', 'Retry', 'Show Logs'); if (action === 'Retry') runtime.retry(); if (action === 'Show Logs') output.show(); });
   const updateContexts = () => { const snapshot = store.snapshot(); void vscode.commands.executeCommand('setContext', 'missionControl.connected', snapshot.connection === 'connected'); void vscode.commands.executeCommand('setContext', 'missionControl.configured', Boolean(snapshot.config)); void vscode.commands.executeCommand('setContext', 'missionControl.currentTask', Boolean(matchWorkspace(folder(), snapshot.tasks)?.integration.liveSpawn)); };
   context.subscriptions.push(output, tree, view, status, vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('missionControl.notifications')) Object.assign(notificationOptions, notificationSettings()); runtime.reconfigure(new Set(['missionControl.serverUrl', 'missionControl.installationPath', 'missionControl.autoStart'].filter(key => event.affectsConfiguration(key)))); }), vscode.workspace.onDidChangeWorkspaceFolders(updateContexts));
   context.subscriptions.push({ dispose: store.onDidChange(updateContexts) }); updateContexts();

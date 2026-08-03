@@ -80,7 +80,7 @@ export class ServerManager {
     }
   }
 
-  async restartOwned(): Promise<void> {
+  async restartOwned(): Promise<boolean> {
     const owner = await this.readOwner();
     const current = await this.health();
     if (owner && current && owner.pid === current.pid && owner.startedAt === current.startedAt) {
@@ -88,7 +88,9 @@ export class ServerManager {
       try { await unlink(this.ownerFile()); } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
+      return true;
     }
+    return false;
   }
 
   dispose(): void { this.controller.abort(); }
