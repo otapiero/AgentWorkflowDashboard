@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,9 +9,13 @@ import { loadConfig } from '../orchestrator/config.ts';
 import { startPoller } from '../orchestrator/poller.ts';
 import { registerRoutes } from './routes.ts';
 import { Broadcaster } from './sse.ts';
+import { createHealthResponse } from './health.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const distWeb = join(here, '..', '..', 'dist', 'web');
+const packageJson = JSON.parse(
+  readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+) as { version: string };
 
 async function main(): Promise<void> {
   let config;
@@ -24,6 +28,7 @@ async function main(): Promise<void> {
 
   const app = Fastify({ logger: false });
   const broadcaster = new Broadcaster();
+  const health = createHealthResponse(packageJson.version);
 
   // Reconciles once immediately, then on the configured interval. The startup
   // pass is what recovers state after the app was closed or crashed. `tasks`
@@ -34,7 +39,7 @@ async function main(): Promise<void> {
     hasClients: () => broadcaster.size > 0,
   });
 
-  registerRoutes(app, { config, broadcaster, refresh: poller.runNow });
+  registerRoutes(app, { config, broadcaster, refresh: poller.runNow, health });
 
   if (existsSync(distWeb)) {
     await app.register(fastifyStatic, { root: distWeb });

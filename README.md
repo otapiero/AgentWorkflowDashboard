@@ -163,3 +163,8 @@ npm run typecheck
 
 The reconciler is the main verification surface and is tested exhaustively
 against hand-built facts and against the real recorded shapes of `gh` output.
+
+## VS Code companion
+
+The optional VS Code companion is packaged, installed, configured, updated, and
+uninstalled as described in [its README](vscode-extension/README.md).

@@ -7,6 +7,14 @@ function task(issue: number, needsYou: boolean): TaskWithDerived {
   return {
     issue,
     title: `task ${issue}`,
+    integration: {
+      workspacePath: 'C:\\mc\\worktrees\\issue-1',
+      worktreeExists: false,
+      liveSpawn: null,
+      checks: 'none',
+      review: { decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 },
+      approvalRequired: false,
+    },
     derived: { needsYou, needsYouReason: needsYou ? 'changes requested' : null } as DerivedState,
   } as TaskWithDerived;
 }

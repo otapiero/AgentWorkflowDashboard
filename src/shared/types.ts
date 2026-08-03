@@ -102,6 +102,43 @@ export interface Facts {
   };
 }
 
+export interface EditorIntegrationState {
+  workspacePath: string;
+  worktreeExists: boolean;
+  liveSpawn: LiveSpawn | null;
+  checks: ChecksState;
+  review: Facts['review'];
+  approvalRequired: boolean;
+}
+
+export interface HealthResponse {
+  status: 'ok';
+  apiVersion: number;
+  serverVersion: string;
+  pid: number;
+  startedAt: string;
+}
+
+/** A configured agent with the launch choices exposed to the dashboard. */
+export interface AgentInfo {
+  name: string;
+  models: string[];
+  efforts: string[];
+  hasEffort: boolean;
+  /** Configured defaults used when no task or phase override applies. */
+  defaultModel?: string;
+  defaultEffort?: string;
+}
+
+/** Configuration DTO returned by the local Mission Control API. */
+export interface BoardConfig {
+  repo: { path: string; owner: string; name: string; baseBranch: string; branchPrefix: string };
+  pipeline: PhaseConfig[];
+  agents: AgentInfo[];
+  phaseDefaults: PhaseDefaults;
+  launcher: LauncherKind;
+}
+
 export type BadgeKind =
   | 'live'
   | 'stale-spawn'
@@ -171,6 +208,7 @@ export interface TaskRecord {
 
 export interface TaskWithDerived extends TaskRecord {
   derived: DerivedState;
+  integration: EditorIntegrationState;
   /** Agent + model + effort that a spawn at the current phase would use. */
   pinned: { agent: string | null; model: string | null; effort: string | null };
   /**

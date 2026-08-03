@@ -1,0 +1,52 @@
+{
+  "name": "mission-control",
+  "publisher": "otapiero",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.131.0"
+  },
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.cjs",
+  "contributes": {
+    "configuration": { "title": "Mission Control", "properties": {
+      "missionControl.serverUrl": { "type": "string", "default": "http://127.0.0.1:4317" }, "missionControl.installationPath": { "type": "string", "default": "" }, "missionControl.autoStart": { "type": "boolean", "default": true }, "missionControl.notifications.enabled": { "type": "boolean", "default": true }, "missionControl.notifications.agentFinished": { "type": "boolean", "default": true }, "missionControl.notifications.ci": { "type": "boolean", "default": true }, "missionControl.notifications.review": { "type": "boolean", "default": true }
+    } },
+    "viewsContainers": { "activitybar": [{ "id": "missionControl", "title": "Mission Control", "icon": "resources/mission-control.svg" }] },
+    "views": { "missionControl": [{ "id": "missionControl.tasks", "name": "Tasks" }] },
+    "commands": [
+      { "command": "missionControl.openTask", "title": "Mission Control: Open Task" }, { "command": "missionControl.runCurrentPhase", "title": "Mission Control: Run Current Phase" }, { "command": "missionControl.openDashboard", "title": "Mission Control: Open Dashboard" }, { "command": "missionControl.restartServer", "title": "Mission Control: Restart Server" }, { "command": "missionControl.showLogs", "title": "Mission Control: Show Logs" }, { "command": "missionControl.viewSession", "title": "Mission Control: View Session" }, { "command": "missionControl.refresh", "title": "Refresh" }, { "command": "missionControl.filter", "title": "Filter" }, { "command": "missionControl.connectionActions", "title": "Mission Control: Connection Actions" }
+    ],
+    "menus": { "commandPalette": [{ "command": "missionControl.refresh", "when": "false" }, { "command": "missionControl.filter", "when": "false" }], "view/title": [{ "command": "missionControl.refresh", "when": "view == missionControl.tasks", "group": "navigation" }, { "command": "missionControl.filter", "when": "view == missionControl.tasks", "group": "navigation" }], "view/item/context": [{ "command": "missionControl.openTask", "when": "view == missionControl.tasks && viewItem =~ /^task:.*:worktree$/" }, { "command": "missionControl.runCurrentPhase", "when": "view == missionControl.tasks && viewItem =~ /^task:/ && missionControl.connected" }, { "command": "missionControl.viewSession", "when": "view == missionControl.tasks && viewItem =~ /^task:.*:current-live:/" }] },
+    "viewsWelcome": [{ "view": "missionControl.tasks", "contents": "Configure [Mission Control](command:workbench.action.openSettings?%22missionControl.installationPath%22) to get started.", "when": "!missionControl.configured" }]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "build:performance": "node esbuild.mjs --performance",
+    "test:performance": "npm run build:performance && node --expose-gc dist/performance.cjs",
+    "test:extension": "npm run build && npm run build:test && vscode-test",
+    "build:test": "node esbuild.mjs --tests",
+    "verify": "npm run typecheck && npm run test:unit && npm run test:performance && npm run build",
+    "package": "npm run verify && vsce package --out dist/mission-control-0.1.0.vsix && npm run check:vsix-size",
+    "check:vsix-size": "node scripts/check-vsix-size.mjs dist/mission-control-0.1.0.vsix",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "@types/vscode": "^1.125.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

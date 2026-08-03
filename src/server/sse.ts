@@ -11,18 +11,20 @@ export class Broadcaster {
   /** The most recent payload per event, replayed so a new tab is never blank. */
   private last = new Map<string, string>();
 
-  add(reply: FastifyReply): void {
+  add(reply: FastifyReply, options: { replay?: boolean } = {}): void {
     this.clients.add(reply);
+    reply.raw.on('close', () => this.clients.delete(reply));
     // Catch the new client up with the latest of each event immediately, rather
     // than forcing a fresh reconcile just because a tab opened.
-    for (const payload of this.last.values()) {
-      try {
-        reply.raw.write(payload);
-      } catch {
-        this.clients.delete(reply);
+    if (options.replay !== false) {
+      for (const payload of this.last.values()) {
+        try {
+          reply.raw.write(payload);
+        } catch {
+          this.clients.delete(reply);
+        }
       }
     }
-    reply.raw.on('close', () => this.clients.delete(reply));
   }
 
   get size(): number {

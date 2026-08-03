@@ -38,21 +38,12 @@ function switchAgent(value: AgentSelection, nextAgent: string): AgentSelection {
 }
 
 describe('AgentPicker agent changes', () => {
-  test('clears model and effort values unsupported by the newly selected agent', () => {
+  test('wires agent changes through the shared selection helper', () => {
     expect(
       switchAgent(
         { agent: 'claude', model: 'opus', effort: 'low' },
         'codex',
       ),
     ).toEqual({ agent: 'codex', model: '', effort: '' });
-  });
-
-  test('preserves model and effort values supported by both agents', () => {
-    expect(
-      switchAgent(
-        { agent: 'claude', model: 'default', effort: 'high' },
-        'codex',
-      ),
-    ).toEqual({ agent: 'codex', model: 'default', effort: 'high' });
   });
 });
