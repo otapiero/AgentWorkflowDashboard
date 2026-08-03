@@ -6,6 +6,7 @@ import { collectArtifacts, readArtifacts, shouldCollectPlan } from './artifacts.
 import { artifactsManifestPath, planSnapshotPath } from './paths.ts';
 import { fetchBranchPrs } from './github.ts';
 import { reconcile } from './reconcile.ts';
+import { toEditorIntegration } from './editor-integration.ts';
 import { loadState, saveState } from './state.ts';
 import { listBranches, worktreeExists } from './worktree.ts';
 import { resolveAgent } from './agents.ts';
@@ -134,6 +135,7 @@ export async function reconcileAll(
         return {
           ...updated,
           derived,
+          integration: toEditorIntegration(facts),
           pinned: pinnedFor(config, updated, derived, phaseDefaults),
         };
       } catch (err) {
@@ -141,32 +143,31 @@ export async function reconcileAll(
         // it in its last good place; this fallback only applies on a first-ever
         // poll that fails, when there is no good state to fall back to.
         console.error(`[mc] reconcile failed for #${task.issue}:`, err);
+        const fallbackFacts = {
+          issue: task.issue,
+          worktreeExists: false,
+          branchExists: false,
+          markers: [],
+          planMdExists: false,
+          artifacts: [],
+          hasPushedCommits: false,
+          dirtyFileCount: 0,
+          unpushedCommits: 0,
+          liveSpawn: null,
+          pr: { exists: false, number: null, url: null, state: null },
+          checks: 'none' as const,
+          review: {
+            decision: 'NONE' as const,
+            unresolvedThreads: 0,
+            copilotUnresolved: 0,
+          },
+        };
         return {
           ...task,
           unreachable: true,
           pinned: { agent: null, model: null, effort: null },
-          derived: reconcile(
-            {
-              issue: task.issue,
-              worktreeExists: false,
-              branchExists: false,
-              markers: [],
-              planMdExists: false,
-              artifacts: [],
-              hasPushedCommits: false,
-              dirtyFileCount: 0,
-              unpushedCommits: 0,
-              liveSpawn: null,
-              pr: { exists: false, number: null, url: null, state: null },
-              checks: 'none',
-              review: {
-                decision: 'NONE',
-                unresolvedThreads: 0,
-                copilotUnresolved: 0,
-              },
-            },
-            task.manualPhase,
-          ),
+          derived: reconcile(fallbackFacts, task.manualPhase),
+          integration: toEditorIntegration(fallbackFacts),
         };
       }
     }),

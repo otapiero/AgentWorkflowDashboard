@@ -14,6 +14,14 @@ function card(badges: Badge[]): TaskWithDerived {
     prNumber: null, prUrl: null, prState: null, mergedAt: null,
     manualPhase: null, spawnHistory: [], lastReconciledAt: null,
     pinned: { agent: null, model: null, effort: null },
+    integration: {
+      workspacePath: 'C:\\mc\\worktrees\\issue-1',
+      worktreeExists: false,
+      liveSpawn: null,
+      checks: 'none',
+      review: { decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 },
+      approvalRequired: false,
+    },
     derived: {
       issue: 1, derivedPhase: 'ci', displayPhase: 'ci',
       gates: {} as never, badges, artifacts: [], needsYou: false, needsYouReason: null,

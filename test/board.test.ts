@@ -30,6 +30,14 @@ function task(overrides: Partial<TaskWithDerived> = {}): TaskWithDerived {
     spawnHistory: [],
     lastReconciledAt: '2026-07-26T10:00:00Z',
     derived: derived(),
+    integration: {
+      workspacePath: 'C:\\mc\\worktrees\\issue-1',
+      worktreeExists: false,
+      liveSpawn: null,
+      checks: 'none',
+      review: { decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 },
+      approvalRequired: false,
+    },
     pinned: { agent: null, model: null, effort: null },
     ...overrides,
   };

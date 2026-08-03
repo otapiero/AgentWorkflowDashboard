@@ -102,6 +102,23 @@ export interface Facts {
   };
 }
 
+export interface EditorIntegrationState {
+  workspacePath: string;
+  worktreeExists: boolean;
+  liveSpawn: LiveSpawn | null;
+  checks: ChecksState;
+  review: Facts['review'];
+  approvalRequired: boolean;
+}
+
+export interface HealthResponse {
+  status: 'ok';
+  apiVersion: 1;
+  serverVersion: string;
+  pid: number;
+  startedAt: string;
+}
+
 export type BadgeKind =
   | 'live'
   | 'stale-spawn'
@@ -171,6 +188,7 @@ export interface TaskRecord {
 
 export interface TaskWithDerived extends TaskRecord {
   derived: DerivedState;
+  integration: EditorIntegrationState;
   /** Agent + model + effort that a spawn at the current phase would use. */
   pinned: { agent: string | null; model: string | null; effort: string | null };
   /**

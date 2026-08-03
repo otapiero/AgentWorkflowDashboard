@@ -20,13 +20,14 @@ import {
 import { agentCapabilities } from '../orchestrator/agents.ts';
 import { removeWorktree, resolveBranch } from '../orchestrator/worktree.ts';
 import { PHASES } from '../shared/types.ts';
-import type { Config, Phase, TaskWithDerived } from '../shared/types.ts';
+import type { Config, HealthResponse, Phase, TaskWithDerived } from '../shared/types.ts';
 import type { Broadcaster } from './sse.ts';
 
 interface Deps {
   config: Config;
   broadcaster: Broadcaster;
   refresh: () => Promise<TaskWithDerived[]>;
+  health: HealthResponse;
 }
 
 function isPhase(value: unknown): value is Phase {
@@ -34,12 +35,14 @@ function isPhase(value: unknown): value is Phase {
 }
 
 export function registerRoutes(app: FastifyInstance, deps: Deps): void {
-  const { config, broadcaster, refresh } = deps;
+  const { config, broadcaster, refresh, health } = deps;
 
   /** Re-derive and push to every connected board. A forced run broadcasts. */
   async function refreshAndBroadcast(): Promise<TaskWithDerived[]> {
     return refresh();
   }
+
+  app.get('/api/health', async () => health);
 
   app.get('/api/config', async () => ({
     repo: config.repo,
