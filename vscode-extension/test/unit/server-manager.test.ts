@@ -6,6 +6,7 @@ import type { ChildProcess } from 'node:child_process';
 import { afterEach, expect, test, vi } from 'vitest';
 
 import type { HealthResponse } from '../../../src/shared/types.ts';
+import { MissionControlClient } from '../../src/client/mission-control-client.ts';
 import { ServerManager } from '../../src/server-manager.ts';
 
 const directories: string[] = [];
@@ -40,6 +41,17 @@ test('reports an API mismatch without spawning', async () => {
   const dependencies = options({ client: { health: vi.fn().mockResolvedValue(health({ apiVersion: 2 } as never)) } });
   await expect(new ServerManager(dependencies).ensureReady()).resolves.toEqual({ kind: 'incompatible', health: health({ apiVersion: 2 } as never) });
   expect(dependencies.process.spawn).not.toHaveBeenCalled();
+});
+
+test('reports an API mismatch from a runtime-validated client response', async () => {
+  const client = new MissionControlClient('http://127.0.0.1:4317', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+    status: 'ok', apiVersion: 2, serverVersion: '2.0.0', pid: 42, startedAt: '2026-08-03T10:00:00.000Z',
+  }), { status: 200, headers: { 'content-type': 'application/json' } })));
+
+  await expect(new ServerManager(options({ client })).ensureReady()).resolves.toEqual({
+    kind: 'incompatible',
+    health: { status: 'ok', apiVersion: 2, serverVersion: '2.0.0', pid: 42, startedAt: '2026-08-03T10:00:00.000Z' },
+  });
 });
 
 test.each(['https://127.0.0.1:4317', 'http://0.0.0.0:4317', 'not a url', 'http://user@localhost:4317', 'http://localhost:4317/path', 'http://localhost:4317/?query=1', 'http://localhost:4317/#hash'])('rejects unsafe or malformed server URL %s', async (serverUrl) => {

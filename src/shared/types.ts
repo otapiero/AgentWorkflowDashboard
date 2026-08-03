@@ -113,7 +113,7 @@ export interface EditorIntegrationState {
 
 export interface HealthResponse {
   status: 'ok';
-  apiVersion: 1;
+  apiVersion: number;
   serverVersion: string;
   pid: number;
   startedAt: string;

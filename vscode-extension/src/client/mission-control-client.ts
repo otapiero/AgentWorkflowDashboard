@@ -12,6 +12,40 @@ export class ApiError extends Error {
   }
 }
 
+export class ApiContractError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApiContractError';
+  }
+}
+
+function parseHealthResponse(value: unknown): HealthResponse {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ApiContractError('Invalid health response');
+  }
+  const health = value as Record<string, unknown>;
+  if (
+    health.status !== 'ok'
+    || typeof health.apiVersion !== 'number'
+    || !Number.isSafeInteger(health.apiVersion)
+    || health.apiVersion <= 0
+    || typeof health.serverVersion !== 'string'
+    || typeof health.pid !== 'number'
+    || !Number.isSafeInteger(health.pid)
+    || health.pid <= 0
+    || typeof health.startedAt !== 'string'
+  ) {
+    throw new ApiContractError('Invalid health response');
+  }
+  return {
+    status: 'ok',
+    apiVersion: health.apiVersion,
+    serverVersion: health.serverVersion,
+    pid: health.pid,
+    startedAt: health.startedAt,
+  };
+}
+
 export interface SpawnRequest {
   phase: Phase;
   customInstructions?: string;
@@ -35,7 +69,7 @@ export class MissionControlClient {
   }
 
   health(signal: AbortSignal): Promise<HealthResponse> {
-    return this.request('/api/health', signal);
+    return this.request('/api/health', signal, {}, parseHealthResponse);
   }
 
   config(signal: AbortSignal): Promise<BoardConfig> {
@@ -90,6 +124,7 @@ export class MissionControlClient {
     path: string,
     signal: AbortSignal,
     init: { method?: 'GET' | 'POST'; body?: unknown } = {},
+    parse?: (value: unknown) => T,
   ): Promise<T> {
     const method = init.method ?? 'GET';
     const headers: Record<string, string> = { Accept: 'application/json' };
@@ -101,7 +136,14 @@ export class MissionControlClient {
 
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, request);
     if (!response.ok) throw await this.errorFrom(response);
-    return response.json() as Promise<T>;
+    let value: unknown;
+    try {
+      value = await response.json();
+    } catch (error) {
+      if (parse) throw new ApiContractError('Invalid health response');
+      throw error;
+    }
+    return parse ? parse(value) : value as T;
   }
 
   private async errorFrom(response: Response): Promise<ApiError> {

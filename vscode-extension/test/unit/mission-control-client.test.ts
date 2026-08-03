@@ -1,7 +1,15 @@
 import { expect, test, vi } from 'vitest';
 
-import { ApiError, MissionControlClient } from '../../src/client/mission-control-client.ts';
+import { ApiContractError, ApiError, MissionControlClient } from '../../src/client/mission-control-client.ts';
 import { config, task } from './fixtures.ts';
+
+const validHealth = {
+  status: 'ok',
+  apiVersion: 1,
+  serverVersion: '1.0.0',
+  pid: 42,
+  startedAt: '2026-08-03T10:00:00.000Z',
+} as const;
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -40,6 +48,42 @@ test('uses the normalized origin, JSON headers, and caller signal for REST reque
   expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://127.0.0.1:4317/api/health', expect.objectContaining({ method: 'GET', headers: { Accept: 'application/json' }, signal }));
   expect(fetchMock).toHaveBeenNthCalledWith(4, 'http://127.0.0.1:4317/api/tasks/3060/spawn', expect.objectContaining({ method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ phase: 'implement', customInstructions: 'Ship it' }), signal }));
   expect(fetchMock).toHaveBeenNthCalledWith(5, 'http://127.0.0.1:4317/api/reconcile', expect.objectContaining({ method: 'POST', signal }));
+});
+
+test('health returns a complete validated response and tolerates additive fields', async () => {
+  const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response({ ...validHealth, futureField: 'allowed' }));
+  const client = new MissionControlClient('http://127.0.0.1:4317', fetchMock);
+
+  await expect(client.health(new AbortController().signal)).resolves.toEqual(validHealth);
+});
+
+test('health rejects malformed JSON with a payload-free contract error', async () => {
+  const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response('{not-json', {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  }));
+  const client = new MissionControlClient('http://127.0.0.1:4317', fetchMock);
+
+  await expect(client.health(new AbortController().signal)).rejects.toEqual(new ApiContractError('Invalid health response'));
+});
+
+test.each([
+  ['null', null],
+  ['array', []],
+  ['missing field', { status: 'ok', apiVersion: 1, serverVersion: '1.0.0', pid: 42 }],
+  ['wrong status', { ...validHealth, status: 'starting' }],
+  ['string API version', { ...validHealth, apiVersion: '1' }],
+  ['non-positive API version', { ...validHealth, apiVersion: 0 }],
+  ['fractional API version', { ...validHealth, apiVersion: 1.5 }],
+  ['wrong server version', { ...validHealth, serverVersion: 1 }],
+  ['non-positive PID', { ...validHealth, pid: 0 }],
+  ['fractional PID', { ...validHealth, pid: 42.5 }],
+  ['wrong start time', { ...validHealth, startedAt: 1 }],
+])('health rejects %s response data', async (_name, body) => {
+  const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response(body));
+  const client = new MissionControlClient('http://127.0.0.1:4317', fetchMock);
+
+  await expect(client.health(new AbortController().signal)).rejects.toEqual(new ApiContractError('Invalid health response'));
 });
 
 test('throws ApiError with the server error message', async () => {
