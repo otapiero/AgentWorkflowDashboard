@@ -7,6 +7,7 @@ import { launchPickerFrom } from './launch-flow.ts';
 import { DeferredActivation } from './deferred-activation.ts';
 import { DeliveryLedger } from './notifications/delivery-ledger.ts';
 import { NotificationCoordinator } from './notifications/notification-coordinator.ts';
+import { notificationActions } from './notifications/notification-actions.ts';
 import { MissionControlRuntime, type RuntimeSettings } from './runtime.ts';
 import { ServerManager } from './server-manager.ts';
 import { MissionControlStatusBar } from './status-bar.ts';
@@ -28,7 +29,7 @@ export function activate(context: vscode.ExtensionContext): MissionControlTestAp
       runtime.start();
   });
   void deferred.ready.catch(() => undefined);
-  for (const id of ['openTask', 'runCurrentPhase', 'openDashboard', 'restartServer', 'showLogs', 'viewSession', 'refresh', 'filter']) {
+  for (const id of ['openTask', 'runCurrentPhase', 'openDashboard', 'restartServer', 'showLogs', 'viewSession', 'refresh', 'filter', 'connectionActions']) {
     context.subscriptions.push(vscode.commands.registerCommand(`missionControl.${id}`, async (...args) => { await deferred.ready; return await vscode.commands.executeCommand(`missionControl.internal.${id}`, ...args); }));
   }
   context.subscriptions.push({ dispose: () => deferred.dispose() });
@@ -64,12 +65,7 @@ function createRuntime(context: vscode.ExtensionContext): MissionControlRuntime 
   const notificationOptions = notificationSettings();
   const notifications = new NotificationCoordinator(new DeliveryLedger(context.globalStorageUri.fsPath, async (ms) => await new Promise(resolve => setTimeout(resolve, ms))), async event => {
     const eventTask = store.task(event.issue); const currentTask = matchWorkspace(folder(), store.tasks());
-    const actions: string[] = [];
-    if (event.prUrl) actions.push('View PR');
-    else if (eventTask?.integration.worktreeExists) actions.push('Open Worktree');
-    if (event.kind === 'approvalRequired' && eventTask?.integration.worktreeExists) actions.push('Run Phase');
-    if (currentTask?.issue === event.issue && eventTask?.integration.liveSpawn) actions.push('View Session');
-    actions.push('Open Dashboard');
+    const actions = notificationActions(event, eventTask, currentTask);
     const show = event.kind === 'ciFailed' ? vscode.window.showErrorMessage : event.kind === 'reviewComments' || event.kind === 'approvalRequired' ? vscode.window.showWarningMessage : vscode.window.showInformationMessage;
     const choice = await show(`${event.title}: ${event.message}`, ...actions);
     if (choice === 'Open Worktree') await commands.openTask(store.task(event.issue));

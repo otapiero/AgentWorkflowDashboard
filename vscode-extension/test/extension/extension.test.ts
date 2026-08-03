@@ -16,6 +16,7 @@ suite('Mission Control extension', () => {
     const commands = await vscode.commands.getCommands(true);
     assert.ok(commands.includes('missionControl.openTask'));
     assert.ok(commands.includes('missionControl.runCurrentPhase'));
+    assert.ok(commands.includes('missionControl.connectionActions'));
   });
 
   test('contributes the configured tree and settings', async () => {
