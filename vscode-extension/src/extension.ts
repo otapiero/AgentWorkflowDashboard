@@ -65,7 +65,7 @@ function createRuntime(context: vscode.ExtensionContext): MissionControlRuntime 
   const notificationOptions = notificationSettings();
   const notifications = new NotificationCoordinator(new DeliveryLedger(context.globalStorageUri.fsPath, async (ms) => await new Promise(resolve => setTimeout(resolve, ms))), async event => {
     const eventTask = store.task(event.issue); const currentTask = matchWorkspace(folder(), store.tasks());
-    const actions = notificationActions(event, eventTask, currentTask);
+    const actions = notificationActions(event, eventTask, currentTask, store.snapshot().connection === 'connected');
     const show = event.kind === 'ciFailed' ? vscode.window.showErrorMessage : event.kind === 'reviewComments' || event.kind === 'approvalRequired' ? vscode.window.showWarningMessage : vscode.window.showInformationMessage;
     const choice = await show(`${event.title}: ${event.message}`, ...actions);
     if (choice === 'Open Worktree') await commands.openTask(store.task(event.issue));
