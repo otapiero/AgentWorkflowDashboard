@@ -48,3 +48,18 @@ test('accepts a large chunk containing many complete small frames', async () => 
 
   expect(received).toBe(frames);
 });
+
+test('stops draining buffered frames after the consumer aborts', async () => {
+  const controller = new AbortController();
+  const events = [];
+
+  for await (const event of parseSse(
+    stream(['event: tasks\ndata: first\n\nevent: tasks\ndata: later\n\n']),
+    controller.signal,
+  )) {
+    events.push(event);
+    controller.abort();
+  }
+
+  expect(events).toEqual([{ event: 'tasks', data: 'first' }]);
+});

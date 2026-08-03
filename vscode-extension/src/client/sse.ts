@@ -26,6 +26,10 @@ export async function* parseSse(
       let boundary = buffer.indexOf('\n\n', start);
 
       while (boundary >= 0) {
+        if (signal.aborted) {
+          buffer = '';
+          return;
+        }
         const frame = buffer.slice(start, boundary);
         start = boundary + 2;
         const lines = frame.split('\n').filter((line) => !line.startsWith(':'));
