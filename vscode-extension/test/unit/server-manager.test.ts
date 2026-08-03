@@ -70,20 +70,30 @@ test('launches detached, hidden and unreferenced then waits on the bounded readi
   expect(dependencies.delay).toHaveBeenCalledWith(100, expect.any(AbortSignal));
 });
 
+test('uses every bounded readiness delay before reporting unavailable', async () => {
+  const installationPath = await directory(); const storagePath = await directory();
+  await writeFile(join(installationPath, 'package.json'), JSON.stringify({ name: 'mission-control', scripts: { start: 'node' } }));
+  const dependencies = options({ installationPath, storagePath, autoStart: true, client: { health: vi.fn().mockRejectedValue(new Error('offline')) } });
+
+  await expect(new ServerManager(dependencies).ensureReady()).resolves.toMatchObject({ kind: 'unavailable' });
+  expect(vi.mocked(dependencies.delay).mock.calls.map(([delay]) => delay)).toEqual([0, 100, 200, 400, 800, 1_000, 1_000, 1_000, 1_000, 1_000]);
+});
+
 test('two managers sharing a startup lock create one process', async () => {
   const installationPath = await directory(); const storagePath = await directory();
   await writeFile(join(installationPath, 'package.json'), JSON.stringify({ name: 'mission-control', scripts: { start: 'node' } }));
   const client = { health: vi.fn().mockRejectedValue(new Error('offline')) };
   const process = { spawn: vi.fn(() => ({ pid: 42, unref: vi.fn() }) as unknown as ChildProcess) };
-  const common = { client, installationPath, storagePath, serverUrl: 'http://localhost:4317', autoStart: true, expectedApiVersion: 1 as const, process, kill: vi.fn(), delay: vi.fn(() => new Promise<void>(() => {})) };
+  let completeFirstWait: (() => void) | undefined;
+  let delayCalls = 0;
+  const common = { client, installationPath, storagePath, serverUrl: 'http://localhost:4317', autoStart: true, expectedApiVersion: 1 as const, process, kill: vi.fn(), delay: vi.fn(() => (++delayCalls === 1 ? new Promise<void>((resolve) => { completeFirstWait = resolve; }) : Promise.resolve())) };
   const first = new ServerManager(common).ensureReady();
   await vi.waitFor(() => expect(process.spawn).toHaveBeenCalledOnce());
   const second = await new ServerManager(common).ensureReady();
   expect(second).toMatchObject({ kind: 'unavailable' });
   expect(process.spawn).toHaveBeenCalledOnce();
-  // The first wait is intentionally left pending; dispose proves no shutdown kill.
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  first;
+  completeFirstWait!();
+  await first;
 });
 
 test('restart kills only the matching owned health identity and dispose only aborts waits', async () => {
@@ -95,4 +105,16 @@ test('restart kills only the matching owned health identity and dispose only abo
   expect(dependencies.kill).toHaveBeenCalledWith(42);
   manager.dispose();
   expect(dependencies.kill).toHaveBeenCalledOnce();
+});
+
+test.each([
+  health({ pid: 99 }),
+  health({ startedAt: '2026-08-03T11:00:00.000Z' }),
+])('restart does not kill when ownership identity differs', async (currentHealth) => {
+  const storagePath = await directory();
+  await writeFile(join(storagePath, 'server-owner.json'), JSON.stringify({ pid: 42, startedAt: health().startedAt }));
+  const dependencies = options({ storagePath, client: { health: vi.fn().mockResolvedValue(currentHealth) } });
+
+  await new ServerManager(dependencies).restartOwned();
+  expect(dependencies.kill).not.toHaveBeenCalled();
 });

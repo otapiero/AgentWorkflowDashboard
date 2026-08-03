@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rmdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -40,6 +40,19 @@ test('replaces only a stale lock', async () => {
   expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ token: lease!.token, createdAt: 1_101 });
 });
 
+test('serializes concurrent stale takeovers so exactly one contender owns the lock', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'start.lock');
+  await writeFile(file, JSON.stringify({ token: 'stale-owner', createdAt: 0 }));
+
+  const contenders = await Promise.all(Array.from({ length: 20 }, () => acquireAtomicLease(file, 1, () => 10)));
+  const owners = contenders.filter((lease): lease is NonNullable<typeof lease> => lease !== null);
+
+  expect(owners).toHaveLength(1);
+  expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ token: owners[0]!.token });
+  await Promise.all(owners.map((lease) => lease.release()));
+});
+
 test('release leaves a newer lock intact', async () => {
   const directory = await temporaryDirectory();
   const file = join(directory, 'start.lock');
@@ -48,6 +61,19 @@ test('release leaves a newer lock intact', async () => {
 
   await lease!.release();
   expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ token: 'new-owner', createdAt: 101 });
+});
+
+test('release cannot remove a replacement while a serialized mutation is in progress', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'start.lock');
+  const original = await acquireAtomicLease(file, 1, () => 0);
+  await mkdir(`${file}.mutation`);
+  const release = original!.release();
+  await writeFile(file, JSON.stringify({ token: 'replacement', createdAt: 10 }));
+  await rmdir(`${file}.mutation`);
+  await release;
+
+  expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ token: 'replacement', createdAt: 10 });
 });
 
 test('releases after an action fails', async () => {
