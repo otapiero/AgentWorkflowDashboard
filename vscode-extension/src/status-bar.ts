@@ -26,6 +26,7 @@ export class MissionControlStatusBar implements vscode.Disposable {
     private readonly store: TaskStore,
     private readonly currentWorkspaceUri: () => { scheme: string; fsPath: string } | undefined,
     api: StatusApi,
+    private readonly onDispatchForTests?: () => void,
   ) {
     this.taskItem = api.createStatusBarItem(api.StatusBarAlignment.Left);
     this.connectionItem = api.createStatusBarItem(api.StatusBarAlignment.Right);
@@ -42,6 +43,7 @@ export class MissionControlStatusBar implements vscode.Disposable {
     const current = matchWorkspace(this.currentWorkspaceUri(), snapshot.tasks);
     this.updateTask(current ? taskStatus(current) : '');
     this.updateConnection(snapshot.connection === 'connected' ? '$(check) Mission Control' : '$(warning) Mission Control disconnected');
+    this.onDispatchForTests?.();
   }
 
   dispose(): void {

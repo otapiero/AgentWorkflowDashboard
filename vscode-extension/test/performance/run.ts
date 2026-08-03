@@ -7,6 +7,9 @@ import type { BoardConfig, TaskWithDerived } from '../../../src/shared/types.ts'
 import { DeliveryLedger } from '../../src/notifications/delivery-ledger.ts';
 import { MissionControlRuntime } from '../../src/runtime.ts';
 import { TaskStore } from '../../src/task-store.ts';
+import { MissionControlClient } from '../../src/client/mission-control-client.ts';
+import { MissionControlTreeProvider } from '../../src/tree-provider.ts';
+import { MissionControlStatusBar } from '../../src/status-bar.ts';
 
 function within(name: string, actual: number, limit: number): void {
   if (actual > limit) throw new Error(`${name}: ${actual.toFixed(2)} exceeded ${limit}`);
@@ -60,7 +63,40 @@ async function main(): Promise<void> {
   await new Promise<void>(resolve => setImmediate(resolve));
   if (timers.size !== 0) throw new Error(`connected runtime timer registry: expected 0, got ${timers.size}`);
 
-  console.log(`Performance budgets: retained heap ${retainedHeapMiB.toFixed(2)} MiB / 25.00 MiB; applyTasks ${applyTasksMs.toFixed(2)} ms / 100.00 ms; notification fingerprints ${fingerprintCount} / 500; runtime timers ${timers.size} / 0`);
+  const flow = await measureRuntimeFlow();
+  within('healthy response to first populated tree dispatch ms', flow.healthyTreeMs, 500);
+  within('SSE task receipt to tree and status dispatch ms', flow.sseDispatchMs, 100);
+
+  console.log(`Performance budgets: retained heap ${retainedHeapMiB.toFixed(2)} MiB / 25.00 MiB; applyTasks ${applyTasksMs.toFixed(2)} ms / 100.00 ms; healthy tree ${flow.healthyTreeMs.toFixed(2)} ms / 500.00 ms; SSE tree+status ${flow.sseDispatchMs.toFixed(2)} ms / 100.00 ms; notification fingerprints ${fingerprintCount} / 500; runtime timers ${timers.size} / 0`);
 }
+
+async function measureRuntimeFlow(): Promise<{ healthyTreeMs: number; sseDispatchMs: number }> {
+  const store = new TaskStore();
+  let treeDispatches = 0; let statusDispatches = 0;
+  class Emitter<T> { private listeners: ((value: T) => void)[] = []; event = (listener: (value: T) => void) => { this.listeners.push(listener); return { dispose() {} }; }; fire(value: T) { for (const listener of this.listeners) listener(value); } dispose() {} }
+  const tree = new MissionControlTreeProvider(store, () => undefined, { TreeItem: class { constructor(_label: string, _state: number) {} } as never, ThemeIcon: class {} as never, EventEmitter: Emitter as never, Uri: { file: (path: string) => path }, CollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 } as never }, () => { treeDispatches += 1; });
+  const status = new MissionControlStatusBar(store, () => undefined, { StatusBarAlignment: { Left: 1, Right: 2 } as never, createStatusBarItem: () => ({ text: '', show() {}, dispose() {} }) }, () => { statusDispatches += 1; });
+  tree.getChildren();
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({ start(value) { controller = value; } });
+  const client = new MissionControlClient('http://127.0.0.1:4317', async (url) => {
+    const path = new URL(url instanceof Request ? url.url : url.toString()).pathname;
+    if (path === '/api/events') return new Response(stream, { status: 200 });
+    const body = path === '/api/config' ? config : makeTasks(1);
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
+  const ready = deferred<void>(); const baselineStart = performance.now();
+  const runtime = new MissionControlRuntime({ readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }), createClient: () => client, createServerManager: () => ({ ensureReady: async () => ({ kind: 'ready', health: {} }) }) as never, store, notifications: { prime: () => {}, apply: async () => {} } as never, delay: async () => {}, jitter: value => value, presentConnectionFailure: async () => undefined });
+  const stop = store.onDidChange(() => { if (store.snapshot().isBaselineReady && treeDispatches > 0) ready.resolve(); });
+  runtime.start(); await ready.promise; const healthyTreeMs = performance.now() - baselineStart; stop();
+  const dispatched = deferred<void>(); const sseStart = performance.now();
+  const observe = store.onDidChange(() => { if (treeDispatches > 1 && statusDispatches > 2) dispatched.resolve(); });
+  controller!.enqueue(encoder.encode(`event: tasks\ndata: ${JSON.stringify(makeTasks(1, 1))}\n\n`));
+  await dispatched.promise; const sseDispatchMs = performance.now() - sseStart; observe(); runtime.dispose(); tree.dispose(); status.dispose();
+  return { healthyTreeMs, sseDispatchMs };
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } { let resolve!: (value: T) => void; return { promise: new Promise<T>(value => { resolve = value; }), resolve }; }
 
 void main();

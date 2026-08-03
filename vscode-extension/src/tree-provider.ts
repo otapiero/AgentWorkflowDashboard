@@ -23,6 +23,7 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
     private readonly store: TaskStore,
     private readonly currentWorkspaceUri: () => { scheme: string; fsPath: string } | undefined,
     private readonly api: VscodeAdapter,
+    private readonly onDispatchForTests?: () => void,
   ) {
     this.emitter = new this.api.EventEmitter<TreeNode | undefined>();
     this.onDidChangeTreeData = this.emitter.event;
@@ -71,7 +72,7 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
       const node = this.cached.get(id);
       if (node) toRefresh.set(id, node);
     }
-    for (const node of toRefresh.values()) this.emitter.fire(node);
+    for (const node of toRefresh.values()) { this.emitter.fire(node); this.onDispatchForTests?.(); }
   }
 
   setFilter(value: string): void {
@@ -79,7 +80,7 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
     if (this.filter === next) return;
     this.filter = next;
     this.cached.clear();
-    this.emitter.fire(undefined);
+    this.emitter.fire(undefined); this.onDispatchForTests?.();
   }
 
   dispose(): void {

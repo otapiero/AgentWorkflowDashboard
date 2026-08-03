@@ -8,8 +8,7 @@ suite('Mission Control extension', () => {
     const extension = vscode.extensions.getExtension('otapiero.mission-control');
     assert.ok(extension);
     const api = await extension.activate() as MissionControlTestApi;
-    // Extension Host startup varies with the loaded VS Code process; Task 10 owns the formal budget gate.
-    assert.ok(api.activationMetricsForTests().syncActivationMs >= 0);
+    assert.ok(api.activationMetricsForTests().syncActivationMs <= 50, `synchronous activation ${api.activationMetricsForTests().syncActivationMs.toFixed(2)}ms exceeded 50ms`);
     const commands = await vscode.commands.getCommands(true);
     assert.ok(commands.includes('missionControl.openTask'));
     assert.ok(commands.includes('missionControl.runCurrentPhase'));
@@ -31,5 +30,18 @@ suite('Mission Control extension', () => {
     const args = api.lastOpenFolderArgs(); assert.ok(args);
     assert.equal((args[0] as vscode.Uri).fsPath.toLowerCase(), seeded.integration.workspacePath.toLowerCase());
     assert.deepEqual(args[1], { forceNewWindow: true });
+  });
+
+  test('retains at most 25 MiB after seeding 500 Extension Host tasks', async () => {
+    const extension = vscode.extensions.getExtension('otapiero.mission-control'); assert.ok(extension);
+    const api = await extension.activate() as MissionControlTestApi;
+    global.gc?.();
+    const before = process.memoryUsage().heapUsed;
+    api.seedTasksForTests(Array.from({ length: 500 }, (_, index) => task({ issue: 10_000 + index })));
+    await new Promise<void>(resolve => setImmediate(resolve));
+    global.gc?.();
+    const samples = await Promise.all(Array.from({ length: 3 }, async () => { await new Promise<void>(resolve => setImmediate(resolve)); return process.memoryUsage().heapUsed; }));
+    const retainedMiB = (Math.min(...samples) - before) / 1024 / 1024;
+    assert.ok(retainedMiB <= 25, `Extension Host retained ${retainedMiB.toFixed(2)} MiB, exceeding 25 MiB`);
   });
 });
