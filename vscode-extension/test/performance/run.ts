@@ -86,10 +86,12 @@ async function measureRuntimeFlow(): Promise<{ healthyTreeMs: number; sseDispatc
     const body = path === '/api/config' ? config : makeTasks(1);
     return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
   });
-  const ready = deferred<void>(); const connected = deferred<void>(); const baselineStart = performance.now();
-  const runtime = new MissionControlRuntime({ readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }), createClient: () => client, createServerManager: () => ({ ensureReady: async () => ({ kind: 'ready', health: {} }) }) as never, store, notifications: { prime: () => {}, apply: async () => {} } as never, delay: async () => {}, jitter: value => value, presentConnectionFailure: async () => undefined });
+  const ready = deferred<void>(); const connected = deferred<void>(); let healthSuccessAt: number | undefined;
+  const runtime = new MissionControlRuntime({ readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }), createClient: () => client, createServerManager: () => ({ ensureReady: async () => { healthSuccessAt = performance.now(); return { kind: 'ready', health: {} }; } }) as never, store, notifications: { prime: () => {}, apply: async () => {} } as never, delay: async () => {}, jitter: value => value, presentConnectionFailure: async () => undefined });
   const stop = store.onDidChange(() => { if (store.snapshot().isBaselineReady && treeDispatches > 0) ready.resolve(); if (store.snapshot().connection === 'connected') connected.resolve(); });
-  runtime.start(); await ready.promise; const healthyTreeMs = performance.now() - baselineStart;
+  runtime.start(); await ready.promise;
+  if (healthSuccessAt === undefined) throw new Error('healthy-response boundary was not set');
+  const healthyTreeMs = performance.now() - healthSuccessAt;
   await connected.promise;
   tree.getChildren();
   treeDispatches = 0; statusDispatches = 0;
