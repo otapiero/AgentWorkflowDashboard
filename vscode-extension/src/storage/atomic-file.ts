@@ -1,4 +1,4 @@
-import { appendFile, mkdir, open, readFile, unlink } from 'node:fs/promises';
+import { appendFile, mkdir, open, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
@@ -11,6 +11,8 @@ export interface AtomicLease {
 interface LeaseRecord { token: string; createdAt: number }
 
 interface MutationTicket { ticket: string; pid?: number; host?: string; heartbeat?: number; released?: boolean }
+const JOURNAL_RECORD_CAP = 1_000;
+const JOURNAL_BYTE_CAP = 128 * 1024;
 
 export interface AtomicLeaseTestHooks {
   token?: () => string;
@@ -31,7 +33,20 @@ async function withMutationLock<T>(
   const journal = `${file}.mutation.journal`;
   const ticket = hooks?.token?.() ?? randomUUID();
   // Leading separator prevents a torn final record from consuming the next ticket.
-  const append = (entry: MutationTicket) => appendFile(journal, `\n${JSON.stringify(entry)}\n`);
+  const append = async (entry: MutationTicket): Promise<void> => {
+    const serialized = JSON.stringify(entry);
+    for (;;) {
+      await appendFile(journal, `\n${serialized}\n`);
+      try {
+        if ((await readFile(journal, 'utf8')).split('\n').some((line) => {
+          try {
+            const record = JSON.parse(line) as MutationTicket;
+            return record.ticket === entry.ticket && record.released === entry.released && record.heartbeat === entry.heartbeat;
+          } catch { return false; }
+        })) return;
+      } catch { /* A concurrent rotator moved this generation; append again. */ }
+    }
+  };
   await append({ ticket, pid: process.pid, host: hostname(), heartbeat: now() });
   const heartbeatInterval = setInterval(() => { void append({ ticket, heartbeat: now() }); }, Math.max(1, Math.floor(staleMs / 3)));
   try {
@@ -63,7 +78,39 @@ async function withMutationLock<T>(
   } finally {
     clearInterval(heartbeatInterval);
     await append({ ticket, released: true });
+    await rotateIfQuiescent(journal, staleMs, now);
   }
+}
+
+async function rotateIfQuiescent(journal: string, staleMs: number, now: () => number): Promise<void> {
+  let text: string;
+  try {
+    const details = await stat(journal);
+    text = await readFile(journal, 'utf8');
+    if (details.size < JOURNAL_BYTE_CAP && text.split('\n').length < JOURNAL_RECORD_CAP) return;
+  } catch { return; }
+  const active = new Map<string, MutationTicket>();
+  for (const line of text.split('\n')) {
+    try {
+      const entry = JSON.parse(line) as MutationTicket;
+      if (entry.released) active.delete(entry.ticket);
+      else if (entry.ticket) active.set(entry.ticket, { ...active.get(entry.ticket), ...entry });
+    } catch { /* torn records are not active */ }
+  }
+  for (const entry of active.values()) {
+    if (typeof entry.pid !== 'number' || typeof entry.host !== 'string' || typeof entry.heartbeat !== 'number') continue;
+    if (now() - entry.heartbeat > staleMs) continue;
+    if (entry.host !== hostname()) return;
+    try { process.kill(entry.pid, 0); return; } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') return;
+    }
+  }
+  const archive = `${journal}.${randomUUID()}.archive`;
+  try {
+    await rename(journal, archive);
+    await writeFile(journal, '');
+    await rm(archive, { force: true });
+  } catch { /* A concurrent rotator won; the current generation remains valid. */ }
 }
 
 async function readRecord(file: string): Promise<LeaseRecord | null> {

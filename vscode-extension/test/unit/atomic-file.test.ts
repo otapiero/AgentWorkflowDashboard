@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rmdir, rm, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rmdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -112,6 +112,18 @@ test('skips a stale PID-reuse ticket and ignores a torn final journal record', a
   const lease = await acquireAtomicLease(file, 10, () => 100);
 
   expect(lease).not.toBeNull();
+});
+
+test('compacts a large quiescent journal below the fixed cap', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'start.lock');
+  await writeFile(file, JSON.stringify({ token: 'stale-owner', createdAt: 0 }));
+  await writeFile(`${file}.mutation.journal`, Array.from({ length: 1_100 }, (_, index) => JSON.stringify({ ticket: `old-${index}`, released: true })).join('\n'));
+
+  const lease = await acquireAtomicLease(file, 1, () => 10);
+
+  expect(lease).not.toBeNull();
+  expect((await stat(`${file}.mutation.journal`)).size).toBeLessThan(128 * 1024);
 });
 
 test('release leaves a newer lock intact', async () => {
