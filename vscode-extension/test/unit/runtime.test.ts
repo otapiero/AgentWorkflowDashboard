@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 
 import { MissionControlRuntime } from '../../src/runtime.ts';
+import { NotificationCoordinator } from '../../src/notifications/notification-coordinator.ts';
 import { TaskStore } from '../../src/task-store.ts';
 import { config, task } from './fixtures.ts';
 
@@ -104,9 +105,10 @@ test('disposal aborts the active stream and pending reconnect delay', async () =
 
 test('delivers an offline actionable transition once after authoritative reconnect', async () => {
   const baseline = task({ checks: 'success' }); const offline = task({ checks: 'failure' });
-  let connection = 0; const applied: unknown[][] = [];
+  let connection = 0; const presented: string[] = [];
   const client = { config: async () => config, tasks: async () => connection === 0 ? [baseline] : [offline], reconcile: async () => connection === 0 ? [baseline] : [offline], connect: async (handlers: { onOpen(): Promise<void>; onClosed(error: Error | null): void }, signal: AbortSignal) => { await handlers.onOpen(); if (connection++ === 0) { handlers.onClosed(new Error('lost')); return; } await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })); } };
-  const runtime = new MissionControlRuntime({ readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }), createClient: () => client as never, createServerManager: () => ({ ensureReady: async () => ({ kind: 'ready', health: {} }) }) as never, store: new TaskStore(), notifications: { prime: () => {}, apply: async (tasks: unknown[]) => { applied.push(tasks); } } as never, delay: async () => {}, jitter: value => value, presentConnectionFailure: async () => undefined });
+  const notifications = new NotificationCoordinator({ claim: async () => true } as never, event => { presented.push(event.kind); }, { agentFinished: true, ciFailed: true, ciPassed: true, reviewComments: true, approvalRequired: true });
+  const runtime = new MissionControlRuntime({ readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }), createClient: () => client as never, createServerManager: () => ({ ensureReady: async () => ({ kind: 'ready', health: {} }) }) as never, store: new TaskStore(), notifications, delay: async () => {}, jitter: value => value, presentConnectionFailure: async () => undefined });
   runtime.start(); await new Promise(resolve => setTimeout(resolve, 0)); await new Promise(resolve => setTimeout(resolve, 0));
-  expect(applied).toHaveLength(2); expect(applied[0]).toEqual([offline]); expect(applied[1]).toEqual([offline]); runtime.dispose();
+  expect(presented).toEqual(['ciFailed']); runtime.dispose();
 });
