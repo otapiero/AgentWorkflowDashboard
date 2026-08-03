@@ -103,6 +103,17 @@ test('an earlier live mutation owner wins even when a later contender has a lexi
   expect(await first).not.toBeNull();
 });
 
+test('skips a stale PID-reuse ticket and ignores a torn final journal record', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'start.lock');
+  await writeFile(file, JSON.stringify({ token: 'stale-owner', createdAt: 0 }));
+  await writeFile(`${file}.mutation.journal`, `${JSON.stringify({ ticket: 'old', pid: process.pid, host: 'localhost', heartbeat: 0 })}\n{\"ticket\":`);
+
+  const lease = await acquireAtomicLease(file, 10, () => 100);
+
+  expect(lease).not.toBeNull();
+});
+
 test('release leaves a newer lock intact', async () => {
   const directory = await temporaryDirectory();
   const file = join(directory, 'start.lock');

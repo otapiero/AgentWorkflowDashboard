@@ -10,7 +10,7 @@ export interface AtomicLease {
 
 interface LeaseRecord { token: string; createdAt: number }
 
-interface MutationTicket { ticket: string; pid: number; host: string; released?: boolean }
+interface MutationTicket { ticket: string; pid?: number; host?: string; heartbeat?: number; released?: boolean }
 
 export interface AtomicLeaseTestHooks {
   token?: () => string;
@@ -30,7 +30,10 @@ async function withMutationLock<T>(
 ): Promise<T | null> {
   const journal = `${file}.mutation.journal`;
   const ticket = hooks?.token?.() ?? randomUUID();
-  await appendFile(journal, `${JSON.stringify({ ticket, pid: process.pid, host: hostname() } satisfies MutationTicket)}\n`);
+  // Leading separator prevents a torn final record from consuming the next ticket.
+  const append = (entry: MutationTicket) => appendFile(journal, `\n${JSON.stringify(entry)}\n`);
+  await append({ ticket, pid: process.pid, host: hostname(), heartbeat: now() });
+  const heartbeatInterval = setInterval(() => { void append({ ticket, heartbeat: now() }); }, Math.max(1, Math.floor(staleMs / 3)));
   try {
     await hooks?.afterMutationOwnership?.();
     const text = await readFile(journal, 'utf8');
@@ -40,11 +43,16 @@ async function withMutationLock<T>(
       try {
         const entry = JSON.parse(line) as MutationTicket;
         if (entry.released) tickets.delete(entry.ticket);
-        else if (typeof entry.ticket === 'string' && typeof entry.pid === 'number' && typeof entry.host === 'string') tickets.set(entry.ticket, entry);
+        else if (typeof entry.ticket === 'string') {
+          const prior = tickets.get(entry.ticket);
+          tickets.set(entry.ticket, { ...prior, ...entry });
+        }
       } catch { /* Ignore a torn final append; it cannot own the mutation. */ }
     }
     let owner: string | undefined;
     for (const entry of tickets.values()) {
+      if (typeof entry.pid !== 'number' || typeof entry.host !== 'string' || typeof entry.heartbeat !== 'number') continue;
+      if (now() - entry.heartbeat > staleMs) continue;
       if (entry.host !== hostname()) { owner = entry.ticket; break; }
       try { process.kill(entry.pid, 0); owner = entry.ticket; break; } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') { owner = entry.ticket; break; }
@@ -53,7 +61,8 @@ async function withMutationLock<T>(
     if (owner !== ticket) return null;
     return await action();
   } finally {
-    await appendFile(journal, `${JSON.stringify({ ticket, released: true })}\n`);
+    clearInterval(heartbeatInterval);
+    await append({ ticket, released: true });
   }
 }
 
