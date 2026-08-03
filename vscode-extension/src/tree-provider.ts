@@ -2,7 +2,7 @@ import type * as vscode from 'vscode';
 
 import type { StoreChange } from './task-store.ts';
 import { TaskStore } from './task-store.ts';
-import { buildChildren, buildRootNodes, type TreeNode } from './tree-model.ts';
+import { buildChildren, buildRootNodes, buildTaskNode, type TreeNode } from './tree-model.ts';
 
 type VscodeAdapter = {
   TreeItem: new (label: string, state: number) => { id?: string; contextValue?: string; description?: string; iconPath?: unknown; command?: unknown };
@@ -42,6 +42,7 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
       item.description = node.description;
       item.iconPath = new this.api.ThemeIcon(node.severity === 'bad' ? 'error' : node.severity === 'warn' ? 'warning' : 'circle-outline');
       item.contextValue = `task:${node.severity}:${this.store.task(node.issue)?.integration.worktreeExists ? 'worktree' : 'missing-worktree'}`;
+      if (this.store.task(node.issue)?.integration.worktreeExists) item.command = { command: 'missionControl.openTask', title: 'Open Worktree', arguments: [node.issue] };
     }
     if (node.kind === 'action') item.command = { command: node.command, title: node.label, arguments: [...node.args] };
     return item as vscode.TreeItem;
@@ -57,22 +58,34 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
   }
 
   applyStoreChange(change: StoreChange): void {
+    if (change.kind === 'full') {
+      this.cached.clear();
+      this.emitter.fire(undefined); this.onDispatchForTests?.();
+      return;
+    }
+    const snapshot = this.store.snapshot();
     const toRefresh = new Map<string, TreeNode>();
     for (const issue of change.issues) {
       const id = `task:${issue}`;
-      const node = this.cached.get(id);
-      if (node) toRefresh.set(id, node);
+      if (!this.cached.has(id)) continue;
+      const task = this.store.task(issue);
+      if (task) toRefresh.set(id, buildTaskNode(task));
+      else this.cached.delete(id);
     }
-    if (change.issues.size > 0) {
-      const current = this.cached.get('section:current');
+    if (change.issues.size > 0 && this.cached.has('section:current')) {
+      const current = buildRootNodes(snapshot, this.currentWorkspaceUri()).find((node) => node.id === 'section:current');
       if (current) toRefresh.set(current.id, current);
     }
     for (const section of change.sections) {
       const id = section === 'current' || section === 'attention' || section === 'all' ? `section:${section}` : `phase:${section}`;
-      const node = this.cached.get(id);
+      if (!this.cached.has(id)) continue;
+      const node = id.startsWith('section:')
+        ? buildRootNodes(snapshot, this.currentWorkspaceUri()).find((candidate) => candidate.id === id)
+        : buildChildren(snapshot, this.currentWorkspaceUri(), 'section:all', this.filter).find((candidate) => candidate.id === id);
       if (node) toRefresh.set(id, node);
+      else this.cached.delete(id);
     }
-    for (const node of toRefresh.values()) { this.emitter.fire(node); this.onDispatchForTests?.(); }
+    for (const node of toRefresh.values()) { this.cached.set(node.id, node); this.emitter.fire(node); this.onDispatchForTests?.(); }
   }
 
   setFilter(value: string): void {

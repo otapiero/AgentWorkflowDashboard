@@ -24,7 +24,7 @@ test('reports only the task and sections changed by one update', () => {
 
   store.applyTasks([task({ issue: 1, phase: 'ci', needsYou: true }), task({ issue: 2, phase: 'implement' })]);
 
-  expect(changes).toEqual([{ issues: new Set([1]), sections: new Set(['attention']) }]);
+  expect(changes).toEqual([{ kind: 'targeted', issues: new Set([1]), sections: new Set(['attention']) }]);
 });
 
 test('reports both phase sections when a task moves phases', () => {
@@ -35,7 +35,7 @@ test('reports both phase sections when a task moves phases', () => {
 
   store.applyTasks([task({ issue: 1, phase: 'implement' })]);
 
-  expect(changes).toEqual([{ issues: new Set([1]), sections: new Set(['plan', 'implement']) }]);
+  expect(changes).toEqual([{ kind: 'targeted', issues: new Set([1]), sections: new Set(['plan', 'implement']) }]);
   expect(store.phaseTasks('plan')).toEqual([]);
   expect(store.phaseTasks('implement').map(({ issue }) => issue)).toEqual([1]);
 });
@@ -66,7 +66,7 @@ test('reports connection updates and retains poll metadata separately', () => {
     isBaselineReady: false,
   });
   expect(changes).toEqual([
-    { issues: new Set(), sections: new Set(['current', 'attention', 'all']) },
+    { kind: 'targeted', issues: new Set(), sections: new Set(['current', 'attention', 'all']) },
   ]);
 });
 
@@ -81,4 +81,27 @@ test('snapshots 500 tasks without duplicating issues', () => {
   expect(snapshot.tasks).toHaveLength(500);
   expect(snapshot.tasks[0]?.issue).toBe(1);
   expect(snapshot.tasks[499]?.issue).toBe(500);
+});
+
+test('emits one full baseline change even when the first task list is empty', () => {
+  const store = new TaskStore();
+  const changes: StoreChange[] = [];
+  store.onDidChange((change) => changes.push(change));
+
+  store.applyBaseline(config, []);
+
+  expect(changes).toEqual([{ kind: 'full', reason: 'baseline' }]);
+});
+
+test('emits one full config change when only pipeline presentation changes', () => {
+  const store = new TaskStore();
+  store.applyBaseline(config, []);
+  const changes: StoreChange[] = [];
+  store.onDidChange((change) => changes.push(change));
+  const changed = { ...config, pipeline: config.pipeline.map((phase) => phase.id === 'implement' ? { ...phase, label: 'Build' } : phase) };
+
+  store.applyBaseline(changed, []);
+  store.applyBaseline(changed, []);
+
+  expect(changes).toEqual([{ kind: 'full', reason: 'config' }]);
 });

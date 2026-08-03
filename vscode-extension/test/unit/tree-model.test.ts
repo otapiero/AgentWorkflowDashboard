@@ -15,9 +15,27 @@ describe('tree model', () => {
     ]);
   });
 
-  test('shows the exact current worktree task and a clear unrelated message', () => {
+  test('shows the exact current worktree task, resolved agent, and permitted native actions', () => {
+    const live = taskWithPath('C:\\mc\\worktrees\\issue-3060');
+    live.integration.liveSpawn = { phase: 'implement', pid: 42, startedAt: '2026-08-03T10:00:00.000Z' };
+    const current = buildChildren(snapshot([live]), { scheme: 'file', fsPath: 'C:\\mc\\worktrees\\issue-3060' }, 'section:current');
+    expect(current).toEqual([
+      { kind: 'task', id: 'task:3060', issue: 3060, label: '#3060 Task 3060', description: 'Implement', severity: 'normal' },
+      { kind: 'message', id: 'message:agent:3060', label: 'Agent: codex · gpt-5.6-sol · medium' },
+      { kind: 'message', id: 'message:session:3060', label: 'Session: Implement running' },
+      { kind: 'action', id: 'action:view-session:3060', label: 'View Session', command: 'missionControl.viewSession', args: [3060] },
+      { kind: 'action', id: 'action:open:3060', label: 'Open Worktree', command: 'missionControl.openTask', args: [3060] },
+    ]);
+  });
+
+  test('shows Run Current Phase only for a connected spawnable phase without a live session', () => {
     const current = buildChildren(snapshot([taskWithPath('C:\\mc\\worktrees\\issue-3060')]), { scheme: 'file', fsPath: 'C:\\mc\\worktrees\\issue-3060' }, 'section:current');
-    expect(current.map((node) => node.id)).toEqual(['task:3060']);
+    expect(current.map((node) => node.id)).toEqual(['task:3060', 'message:agent:3060', 'action:run:3060', 'action:open:3060']);
+    const disconnected = { ...snapshot(), connection: 'disconnected' as const };
+    expect(buildChildren(disconnected, { scheme: 'file', fsPath: 'C:\\mc\\worktrees\\issue-3060' }, 'section:current').map((node) => node.id)).toEqual(['task:3060', 'message:agent:3060', 'action:open:3060']);
+  });
+
+  test('shows a clear unrelated-workspace message', () => {
     const unrelated = buildChildren(snapshot(), { scheme: 'file', fsPath: 'C:\\elsewhere' }, 'section:current');
     expect(unrelated).toEqual([{ kind: 'message', id: 'message:current:unrelated', label: 'This workspace is not a Mission Control worktree.' }]);
   });
@@ -26,7 +44,7 @@ describe('tree model', () => {
     const bad = task({ issue: 7, needsYou: true, checks: 'failure', lastReconciledAt: '2026-08-03T12:00:00.000Z' });
     const warnLater = task({ issue: 9, needsYou: true, lastReconciledAt: '2026-08-03T12:00:00.000Z' });
     const warnEarlier = task({ issue: 8, needsYou: true, lastReconciledAt: '2026-08-03T11:00:00.000Z' });
-    expect(buildChildren(snapshot([warnLater, bad, warnEarlier]), undefined, 'section:attention').map((node) => node.id)).toEqual(['task:7', 'task:8', 'task:9']);
+    expect(buildChildren(snapshot([warnLater, bad, warnEarlier]), undefined, 'section:attention').map((node) => node.id)).toEqual(['task:7', 'task:9', 'task:8']);
   });
 
   test('uses structured attention signals for severity', () => {

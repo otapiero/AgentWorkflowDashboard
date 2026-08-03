@@ -41,7 +41,7 @@ export class CommandController {
     this.launch = deps.runLaunchFlow ?? runLaunchFlow;
   }
 
-  async openTask(candidate?: TaskWithDerived): Promise<void> {
+  async openTask(candidate?: TaskWithDerived | number): Promise<void> {
     const task = candidate ? this.latest(candidate) : await this.pickTask();
     if (!task) return;
     if (!task.integration.worktreeExists) {
@@ -51,7 +51,7 @@ export class CommandController {
     await this.deps.api.executeCommand('vscode.openFolder', this.deps.api.uriFile(task.integration.workspacePath), { forceNewWindow: true });
   }
 
-  async runCurrentPhase(candidate?: TaskWithDerived): Promise<void> {
+  async runCurrentPhase(candidate?: TaskWithDerived | number): Promise<void> {
     const task = candidate ? this.latest(candidate) : matchWorkspace(this.deps.api.workspaceUri() as { scheme: string; fsPath: string } | undefined, this.deps.store.tasks());
     if (!task) {
       await this.deps.api.showWarningMessage('This workspace is not a Mission Control worktree.');
@@ -79,7 +79,7 @@ export class CommandController {
     await this.deps.api.openExternal(this.deps.api.uriParse(origin));
   }
 
-  async viewSession(candidate?: TaskWithDerived): Promise<void> {
+  async viewSession(candidate?: TaskWithDerived | number): Promise<void> {
     const task = candidate ? this.latest(candidate) : matchWorkspace(this.deps.api.workspaceUri() as { scheme: string; fsPath: string } | undefined, this.deps.store.tasks());
     if (!task) return;
     const expected = normalizeWorkspacePath(task.integration.workspacePath);
@@ -99,8 +99,8 @@ export class CommandController {
 
   async showLogs(): Promise<void> { this.deps.output.show(); }
 
-  private latest(candidate: TaskWithDerived): TaskWithDerived | undefined {
-    return this.deps.store.task(candidate.issue);
+  private latest(candidate: TaskWithDerived | number): TaskWithDerived | undefined {
+    return this.deps.store.task(typeof candidate === 'number' ? candidate : candidate.issue);
   }
 
   private async pickTask(): Promise<TaskWithDerived | undefined> {

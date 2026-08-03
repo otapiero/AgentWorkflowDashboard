@@ -24,7 +24,7 @@ export function buildRootNodes(_snapshot: TaskStoreSnapshot, _currentUri: Worksp
 export function buildChildren(snapshot: TaskStoreSnapshot, currentUri: WorkspaceUri, parentId: string, filter = ''): readonly TreeNode[] {
   if (parentId === 'section:current') {
     const current = matchWorkspace(currentUri, snapshot.tasks);
-    return current ? [taskNode(current)] : [{ kind: 'message', id: 'message:current:unrelated', label: 'This workspace is not a Mission Control worktree.' }];
+    return current ? currentWorktreeNodes(snapshot, current) : [{ kind: 'message', id: 'message:current:unrelated', label: 'This workspace is not a Mission Control worktree.' }];
   }
   if (parentId === 'section:attention') {
     return [...filtered(snapshot.tasks.filter((task) => task.derived.needsYou), filter)].sort(attentionOrder).map(taskNode);
@@ -39,11 +39,6 @@ export function buildChildren(snapshot: TaskStoreSnapshot, currentUri: Workspace
     const phase = parentId.slice('phase:'.length) as Phase;
     return [...filtered(snapshot.tasks.filter((task) => task.derived.displayPhase === phase), filter)].sort(issueOrder).map(taskNode);
   }
-  if (parentId.startsWith('task:')) {
-    const issue = Number(parentId.slice('task:'.length));
-    const task = snapshot.tasks.find((candidate) => candidate.issue === issue);
-    return task ? [{ kind: 'action', id: `action:open:${issue}`, label: 'Open Worktree', command: 'missionControl.openTask', args: [task] }] : [];
-  }
   return [];
 }
 
@@ -57,8 +52,27 @@ export function phaseLabel(phase: Phase): string {
   return phase.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function taskNode(task: TaskWithDerived): TaskNode {
+export function buildTaskNode(task: TaskWithDerived): TaskNode {
   return { kind: 'task', id: `task:${task.issue}`, issue: task.issue, label: `#${task.issue} ${task.title}`, description: phaseLabel(task.derived.displayPhase), severity: severityFor(task) };
+}
+
+const taskNode = buildTaskNode;
+
+function currentWorktreeNodes(snapshot: TaskStoreSnapshot, task: TaskWithDerived): TreeNode[] {
+  const nodes: TreeNode[] = [taskNode(task)];
+  const agent = [task.pinned.agent, task.pinned.model, task.pinned.effort].filter(Boolean).join(' · ');
+  if (agent) nodes.push({ kind: 'message', id: `message:agent:${task.issue}`, label: `Agent: ${agent}` });
+  if (task.integration.liveSpawn) {
+    nodes.push({ kind: 'message', id: `message:session:${task.issue}`, label: `Session: ${phaseLabel(task.integration.liveSpawn.phase)} running` });
+    nodes.push({ kind: 'action', id: `action:view-session:${task.issue}`, label: 'View Session', command: 'missionControl.viewSession', args: [task.issue] });
+  } else {
+    const currentPhase = snapshot.config?.pipeline.find((phase) => phase.id === task.derived.displayPhase);
+    if (snapshot.connection === 'connected' && currentPhase?.spawnable) {
+      nodes.push({ kind: 'action', id: `action:run:${task.issue}`, label: 'Run Current Phase', command: 'missionControl.runCurrentPhase', args: [task.issue] });
+    }
+  }
+  if (task.integration.worktreeExists) nodes.push({ kind: 'action', id: `action:open:${task.issue}`, label: 'Open Worktree', command: 'missionControl.openTask', args: [task.issue] });
+  return nodes;
 }
 
 function filtered(tasks: readonly TaskWithDerived[], filter: string): readonly TaskWithDerived[] {
@@ -72,6 +86,6 @@ function attentionOrder(left: TaskWithDerived, right: TaskWithDerived): number {
   const severity = ({ bad: 0, warn: 1, normal: 2 } as const);
   const severityOrder = severity[severityFor(left)] - severity[severityFor(right)];
   if (severityOrder) return severityOrder;
-  const timeOrder = (left.lastReconciledAt ?? '').localeCompare(right.lastReconciledAt ?? '');
+  const timeOrder = (right.lastReconciledAt ?? '').localeCompare(left.lastReconciledAt ?? '');
   return timeOrder || issueOrder(left, right);
 }

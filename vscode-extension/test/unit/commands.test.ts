@@ -28,7 +28,7 @@ function controller(overrides: Partial<ConstructorParameters<typeof CommandContr
 describe('CommandController', () => {
   test('opens the latest task worktree in a new window', async () => {
     const { commands, current, api } = controller();
-    await commands.openTask(current);
+    await commands.openTask(current.issue);
     expect(api.executeCommand).toHaveBeenCalledWith('vscode.openFolder', { fsPath: current.integration.workspacePath }, { forceNewWindow: true });
   });
 

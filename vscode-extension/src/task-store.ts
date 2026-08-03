@@ -2,10 +2,14 @@ import type { BoardConfig, Phase, PollMeta, TaskWithDerived } from '../../src/sh
 
 export type ConnectionState = 'starting' | 'connected' | 'disconnected' | 'incompatible';
 
-export interface StoreChange {
+export type StoreChange = {
+  kind: 'targeted';
   issues: ReadonlySet<number>;
   sections: ReadonlySet<'current' | 'attention' | 'all' | Phase>;
-}
+} | {
+  kind: 'full';
+  reason: 'baseline' | 'config';
+};
 
 export interface TaskStoreSnapshot {
   config: BoardConfig | null;
@@ -33,13 +37,19 @@ export class TaskStore {
   }
 
   applyBaseline(config: BoardConfig, tasks: readonly TaskWithDerived[]): void {
+    const firstBaseline = !this.baselineReady;
+    const pipelineChanged = this.config !== null && pipelineSignature(this.config) !== pipelineSignature(config);
     this.config = config;
     this.baselineReady = true;
-    this.replaceTasks(tasks);
+    const targeted = this.replaceTasks(tasks);
+    if (firstBaseline) this.emit({ kind: 'full', reason: 'baseline' });
+    else if (pipelineChanged) this.emit({ kind: 'full', reason: 'config' });
+    else if (targeted) this.emit(targeted);
   }
 
   applyTasks(tasks: readonly TaskWithDerived[]): void {
-    this.replaceTasks(tasks);
+    const change = this.replaceTasks(tasks);
+    if (change) this.emit(change);
   }
 
   applyPoll(poll: PollMeta): void {
@@ -50,6 +60,7 @@ export class TaskStore {
     if (this.connection === connection) return;
     this.connection = connection;
     this.emit({
+      kind: 'targeted',
       issues: new Set(),
       sections: new Set(['current', 'attention', 'all']),
     });
@@ -81,7 +92,7 @@ export class TaskStore {
     return Object.freeze(this.orderedTasks.filter((task) => task.derived.displayPhase === phase));
   }
 
-  private replaceTasks(tasks: readonly TaskWithDerived[]): void {
+  private replaceTasks(tasks: readonly TaskWithDerived[]): Extract<StoreChange, { kind: 'targeted' }> | null {
     const incoming = new Map<number, TaskWithDerived>();
     for (const task of tasks) incoming.set(task.issue, task);
 
@@ -127,12 +138,16 @@ export class TaskStore {
     }
 
     this.orderedTasks = Object.freeze([...this.tasksByIssue.values()].sort((left, right) => left.issue - right.issue));
-    if (issues.size > 0) this.emit({ issues, sections });
+    return issues.size > 0 ? { kind: 'targeted', issues, sections } : null;
   }
 
   private emit(change: StoreChange): void {
     for (const listener of this.listeners) listener(change);
   }
+}
+
+function pipelineSignature(config: BoardConfig): string {
+  return JSON.stringify(config.pipeline);
 }
 
 function signature(task: TaskWithDerived): string {
