@@ -20,6 +20,7 @@ export interface RuntimeDependencies {
   jitter(delayMs: number): number;
   presentConnectionFailure(result: EnsureReadyResult): Promise<'retry' | 'configure' | 'logs' | undefined>;
   lastOpenFolderArgsForTests?: () => readonly unknown[] | null;
+  seedTasksForTests?: (tasks: readonly TaskWithDerived[]) => void;
 }
 
 const reconnectDelays = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000] as const;
@@ -48,6 +49,7 @@ export class MissionControlRuntime implements vscode.Disposable {
 
   lastOpenFolderArgsForTests(): readonly unknown[] | null { return this.deps.lastOpenFolderArgsForTests?.() ?? null; }
   requestSignal(): AbortSignal | undefined { return this.controller?.signal; }
+  seedTasksForTests = (tasks: readonly TaskWithDerived[]): void => { this.deps.seedTasksForTests?.(tasks); };
 
   dispose(): void { this.started = false; this.abort(); }
 

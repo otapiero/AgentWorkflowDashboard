@@ -11,9 +11,10 @@ import { MissionControlStatusBar } from './status-bar.ts';
 import { TaskStore } from './task-store.ts';
 import { MissionControlTreeProvider } from './tree-provider.ts';
 import { matchWorkspace } from './workspace-matcher.ts';
+import type { TaskWithDerived } from '../../src/shared/types.ts';
 
 let syncActivationMs = 0;
-export interface MissionControlTestApi { activationMetricsForTests(): { syncActivationMs: number }; lastOpenFolderArgs(): readonly unknown[] | null; }
+export interface MissionControlTestApi { activationMetricsForTests(): { syncActivationMs: number }; lastOpenFolderArgs(): readonly unknown[] | null; seedTasksForTests(tasks: readonly TaskWithDerived[]): void; }
 
 export function activate(context: vscode.ExtensionContext): MissionControlTestApi | void {
   const started = performance.now();
@@ -21,7 +22,7 @@ export function activate(context: vscode.ExtensionContext): MissionControlTestAp
   context.subscriptions.push(runtime);
   runtime.start();
   syncActivationMs = performance.now() - started;
-  if (context.extensionMode === vscode.ExtensionMode.Test) return { activationMetricsForTests, lastOpenFolderArgs: () => runtime.lastOpenFolderArgsForTests() };
+  if (context.extensionMode === vscode.ExtensionMode.Test) return { activationMetricsForTests, lastOpenFolderArgs: () => runtime.lastOpenFolderArgsForTests(), seedTasksForTests: tasks => runtime.seedTasksForTests(tasks) };
 }
 export function activationMetricsForTests(): { syncActivationMs: number } { return { syncActivationMs }; }
 export function deactivate(): void {}
@@ -58,7 +59,7 @@ function createRuntime(context: vscode.ExtensionContext): MissionControlRuntime 
     if (choice === 'View PR' && event.prUrl) await vscode.env.openExternal(vscode.Uri.parse(event.prUrl));
   }, notificationOptions);
   const runtime = new MissionControlRuntime({ readSettings: settings, createClient: (url) => { client = new MissionControlClient(url); return client; }, createServerManager: (nextClient, nextSettings) => { server = makeServer(nextClient as MissionControlClient, nextSettings, context.globalStorageUri.fsPath); return server; }, store, notifications,
-    delay: (ms, signal) => abortableDelay(ms, signal), jitter: value => value * (0.8 + Math.random() * 0.4), presentConnectionFailure: async result => presentFailure(result, output), lastOpenFolderArgsForTests: () => lastOpenFolderArgs });
+    delay: (ms, signal) => abortableDelay(ms, signal), jitter: value => value * (0.8 + Math.random() * 0.4), presentConnectionFailure: async result => presentFailure(result, output), lastOpenFolderArgsForTests: () => lastOpenFolderArgs, seedTasksForTests: tasks => store.applyTasks(tasks) });
   const register = (id: string, callback: (...args: never[]) => unknown) => context.subscriptions.push(vscode.commands.registerCommand(id, callback));
   register('missionControl.openTask', (task) => commands.openTask(task)); register('missionControl.runCurrentPhase', (task) => commands.runCurrentPhase(task));
   register('missionControl.openDashboard', () => commands.openDashboard()); register('missionControl.restartServer', () => commands.restartServer()); register('missionControl.showLogs', () => commands.showLogs()); register('missionControl.viewSession', (task) => commands.viewSession(task));
