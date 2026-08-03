@@ -56,3 +56,23 @@ test('marks the retained store disconnected and waits before reconnecting', asyn
   expect(store.snapshot().tasks).toHaveLength(1);
   runtime.dispose();
 });
+
+test('restarts only when connection settings change', async () => {
+  const clients: string[] = [];
+  const client = {
+    config: async () => config, tasks: async () => [task()], reconcile: async () => [task()],
+    connect: async (handlers: { onOpen(): Promise<void> }, signal: AbortSignal) => { await handlers.onOpen(); await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })); },
+  };
+  const runtime = new MissionControlRuntime({
+    readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }),
+    createClient: (url) => { clients.push(url); return client as never; }, createServerManager: () => ({ ensureReady: async () => ({ kind: 'ready', health: {} }) }) as never,
+    store: new TaskStore(), notifications: { prime: () => {}, apply: async () => {} } as never,
+    delay: async () => {}, jitter: value => value, presentConnectionFailure: async () => undefined,
+  });
+  runtime.start(); await new Promise(resolve => setTimeout(resolve, 0));
+  runtime.reconfigure(new Set(['missionControl.notifications.ci']));
+  expect(clients).toHaveLength(1);
+  runtime.reconfigure(new Set(['missionControl.serverUrl']));
+  expect(clients).toHaveLength(2);
+  runtime.dispose();
+});
