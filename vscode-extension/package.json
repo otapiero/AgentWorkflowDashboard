@@ -1,0 +1,36 @@
+{
+  "name": "mission-control",
+  "publisher": "otapiero",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.131.0"
+  },
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.cjs",
+  "icon": "resources/mission-control.svg",
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "test:extension": "npm run build:test && vscode-test",
+    "build:test": "node esbuild.mjs --tests",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/vscode": "^1.125.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

@@ -1,4 +1,5 @@
 import type {
+  BoardConfig,
   LauncherKind,
   Phase,
   PhaseConfig,
@@ -7,23 +8,8 @@ import type {
   TaskWithDerived,
 } from '../shared/types.ts';
 
-export type { PollMeta, RateLimit } from '../shared/types.ts';
+export type { AgentInfo, BoardConfig, PollMeta, RateLimit } from '../shared/types.ts';
 export type { MissionUsage, SessionUsage, TokenTotals } from '../orchestrator/usage.ts';
-
-export interface AgentInfo {
-  name: string;
-  models: string[];
-  efforts: string[];
-  hasEffort: boolean;
-}
-
-export interface BoardConfig {
-  repo: { path: string; owner: string; name: string; baseBranch: string; branchPrefix: string };
-  pipeline: PhaseConfig[];
-  agents: AgentInfo[];
-  phaseDefaults: PhaseDefaults;
-  launcher: LauncherKind;
-}
 
 export interface OpenIssue {
   number: number;

@@ -119,6 +119,23 @@ export interface HealthResponse {
   startedAt: string;
 }
 
+/** A configured agent with the launch choices exposed to the dashboard. */
+export interface AgentInfo {
+  name: string;
+  models: string[];
+  efforts: string[];
+  hasEffort: boolean;
+}
+
+/** Configuration DTO returned by the local Mission Control API. */
+export interface BoardConfig {
+  repo: { path: string; owner: string; name: string; baseBranch: string; branchPrefix: string };
+  pipeline: PhaseConfig[];
+  agents: AgentInfo[];
+  phaseDefaults: PhaseDefaults;
+  launcher: LauncherKind;
+}
+
 export type BadgeKind =
   | 'live'
   | 'stale-spawn'
