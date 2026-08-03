@@ -6,6 +6,7 @@ import {
   parseBranchPrResponse,
   parseBranchPrsResponse,
   parseRateLimit,
+  unavailableBranches,
 } from '../src/orchestrator/github.ts';
 
 const COPILOT = 'copilot-pull-request-reviewer';
@@ -345,6 +346,58 @@ describe('parseBranchPrsResponse', () => {
   test('a branch missing from the response folds to no PR', () => {
     const map = parseBranchPrsResponse({ data: { repository: {} } }, ['x'], COPILOT);
     expect(map.get('x')?.pr.exists).toBe(false);
+  });
+
+  test('healthy aliases still fold when a sibling alias errored', () => {
+    // GitHub fills in every alias it could answer and nulls the one it could
+    // not; the good branches must survive their neighbour's failure.
+    const raw = {
+      data: { repository: { b0: { nodes: [prNode('OPEN', 11)] }, b1: null } },
+      errors: [{ type: 'SERVICE_UNAVAILABLE', path: ['repository', 'b1'] }],
+    };
+    const map = parseBranchPrsResponse(raw, ['feat-a', 'feat-b'], COPILOT);
+    expect(map.get('feat-a')?.pr.number).toBe(11);
+  });
+});
+
+describe('unavailableBranches', () => {
+  test('a clean response leaves every branch trusted', () => {
+    expect(unavailableBranches({ data: {} }, ['a', 'b'])).toEqual(new Set());
+    expect(unavailableBranches({ data: {}, errors: [] }, ['a'])).toEqual(new Set());
+  });
+
+  test('an aliased error distrusts only the branch it names', () => {
+    // Real shape: gh exits non-zero for this, but four of five branches are
+    // perfectly good and must not be held back with the fifth.
+    const raw = {
+      errors: [
+        {
+          type: 'SERVICE_UNAVAILABLE',
+          path: ['repository', 'b2'],
+          message: 'timedout',
+        },
+      ],
+    };
+    expect(unavailableBranches(raw, ['a', 'b', 'c', 'd'])).toEqual(new Set(['c']));
+  });
+
+  test('several aliased errors distrust exactly their own branches', () => {
+    const raw = {
+      errors: [{ path: ['repository', 'b0'] }, { path: ['repository', 'b3'] }],
+    };
+    expect(unavailableBranches(raw, ['a', 'b', 'c', 'd'])).toEqual(
+      new Set(['a', 'd']),
+    );
+  });
+
+  test('an error naming no alias poisons the whole batch', () => {
+    // RATE_LIMITED and MAX_NODE_LIMIT_EXCEEDED arrive without a path: nothing
+    // in the payload can be trusted, so null says "hold every card".
+    expect(unavailableBranches({ errors: [{ type: 'RATE_LIMITED' }] }, ['a'])).toBeNull();
+  });
+
+  test('an alias outside the queried range poisons the batch', () => {
+    expect(unavailableBranches({ errors: [{ path: ['repository', 'b9'] }] }, ['a'])).toBeNull();
   });
 });
 

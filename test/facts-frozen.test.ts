@@ -29,7 +29,13 @@ const openPr: BranchPrFacts = {
   review: { decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 },
 };
 function batch(over: Partial<BatchedBranchPrs> = {}): BatchedBranchPrs {
-  return { ok: true, byBranch: new Map(), rateLimit: null, ...over };
+  return {
+    ok: true,
+    byBranch: new Map(),
+    unavailable: new Set(),
+    rateLimit: null,
+    ...over,
+  };
 }
 
 beforeEach(() => {
@@ -74,5 +80,32 @@ describe('gatherFacts — active task', () => {
         batch({ ok: false }),
       ),
     ).rejects.toThrow();
+  });
+
+  test('a branch whose own alias errored throws', async () => {
+    await expect(
+      gatherFacts(
+        config,
+        task({ prState: 'OPEN', mergedAt: null }),
+        new Set(['b']),
+        batch({ unavailable: new Set(['b']) }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  test('a healthy branch resolves even when a sibling alias errored', async () => {
+    // The bug this guards: one timed-out alias used to mark every active card
+    // unavailable, so the whole board froze on a single bad branch.
+    const facts = await gatherFacts(
+      config,
+      task({ prState: 'OPEN', mergedAt: null }),
+      new Set(['b']),
+      batch({
+        byBranch: new Map([['b', openPr]]),
+        unavailable: new Set(['some-other-branch']),
+      }),
+    );
+    expect(facts.pr.state).toBe('OPEN');
+    expect(facts.checks).toBe('success');
   });
 });
