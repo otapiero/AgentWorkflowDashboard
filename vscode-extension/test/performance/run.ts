@@ -74,8 +74,9 @@ async function measureRuntimeFlow(): Promise<{ healthyTreeMs: number; sseDispatc
   const store = new TaskStore();
   let treeDispatches = 0; let statusDispatches = 0;
   class Emitter<T> { private listeners: ((value: T) => void)[] = []; event = (listener: (value: T) => void) => { this.listeners.push(listener); return { dispose() {} }; }; fire(value: T) { for (const listener of this.listeners) listener(value); } dispose() {} }
-  const tree = new MissionControlTreeProvider(store, () => undefined, { TreeItem: class { constructor(_label: string, _state: number) {} } as never, ThemeIcon: class {} as never, EventEmitter: Emitter as never, Uri: { file: (path: string) => path }, CollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 } as never }, () => { treeDispatches += 1; });
-  const status = new MissionControlStatusBar(store, () => undefined, { StatusBarAlignment: { Left: 1, Right: 2 } as never, createStatusBarItem: () => ({ text: '', show() {}, dispose() {} }) }, () => { statusDispatches += 1; });
+  const workspace = () => ({ scheme: 'file', fsPath: 'C:\\mc\\worktrees\\issue-1' });
+  const tree = new MissionControlTreeProvider(store, workspace, { TreeItem: class { constructor(_label: string, _state: number) {} } as never, ThemeIcon: class {} as never, EventEmitter: Emitter as never, Uri: { file: (path: string) => path }, CollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 } as never }, () => { treeDispatches += 1; });
+  const status = new MissionControlStatusBar(store, workspace, { StatusBarAlignment: { Left: 1, Right: 2 } as never, createStatusBarItem: () => ({ text: '', show() {}, dispose() {} }) }, () => { statusDispatches += 1; });
   tree.getChildren();
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
   const encoder = new TextEncoder();
@@ -95,9 +96,9 @@ async function measureRuntimeFlow(): Promise<{ healthyTreeMs: number; sseDispatc
   await connected.promise;
   tree.getChildren();
   treeDispatches = 0; statusDispatches = 0;
-  const marker = 'sse-causal-marker'; const sseTasks = makeTasks(1, 1); sseTasks[0]!.title = marker;
+  const marker = 'sse-causal-marker'; const sseTasks = makeTasks(500, 1); for (let index = 0; index < 100; index += 1) sseTasks[index]!.title = `${marker}-${index}`;
   const dispatched = deferred<void>(); let parsedAndApplied = false;
-  const observe = store.onDidChange(() => { parsedAndApplied = store.task(1)?.title === marker; if (parsedAndApplied && treeDispatches > 0 && statusDispatches > 0) dispatched.resolve(); });
+  const observe = store.onDidChange(() => { parsedAndApplied = store.task(1)?.title === `${marker}-0` && store.task(100)?.title === `${marker}-99`; if (parsedAndApplied && treeDispatches > 0 && statusDispatches > 0) dispatched.resolve(); });
   const sseStart = performance.now();
   controller!.enqueue(encoder.encode(`event: tasks\ndata: ${JSON.stringify(sseTasks)}\n\n`));
   await withTimeout(dispatched.promise, 1_000, 'SSE causal marker was not parsed, applied, and dispatched');

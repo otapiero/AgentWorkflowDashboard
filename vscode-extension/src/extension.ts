@@ -27,6 +27,9 @@ export function activate(context: vscode.ExtensionContext): MissionControlTestAp
       runtime.start();
   });
   void deferred.ready.catch(() => undefined);
+  for (const id of ['openTask', 'runCurrentPhase', 'openDashboard', 'restartServer', 'showLogs', 'viewSession', 'refresh', 'filter']) {
+    context.subscriptions.push(vscode.commands.registerCommand(`missionControl.${id}`, async (...args) => { await deferred.ready; return await vscode.commands.executeCommand(`missionControl.internal.${id}`, ...args); }));
+  }
   context.subscriptions.push({ dispose: () => deferred.dispose() });
   deferred.schedule();
   syncActivationMs = performance.now() - started;
@@ -68,7 +71,7 @@ function createRuntime(context: vscode.ExtensionContext): MissionControlRuntime 
   }, notificationOptions);
   const runtime = new MissionControlRuntime({ readSettings: settings, createClient: (url) => { client = new MissionControlClient(url); return client; }, createServerManager: (nextClient, nextSettings) => { server = makeServer(nextClient as MissionControlClient, nextSettings, context.globalStorageUri.fsPath); return server; }, store, notifications,
     delay: (ms, signal) => abortableDelay(ms, signal), jitter: value => value * (0.8 + Math.random() * 0.4), presentConnectionFailure: async result => presentFailure(result, output), lastOpenFolderArgsForTests: () => lastOpenFolderArgs, seedTasksForTests: tasks => store.applyTasks(tasks) });
-  const register = (id: string, callback: (...args: never[]) => unknown) => context.subscriptions.push(vscode.commands.registerCommand(id, callback));
+  const register = (id: string, callback: (...args: never[]) => unknown) => context.subscriptions.push(vscode.commands.registerCommand(id.replace('missionControl.', 'missionControl.internal.'), callback));
   register('missionControl.openTask', (task) => commands.openTask(task)); register('missionControl.runCurrentPhase', (task) => commands.runCurrentPhase(task));
   register('missionControl.openDashboard', () => commands.openDashboard()); register('missionControl.restartServer', () => commands.restartServer()); register('missionControl.showLogs', () => commands.showLogs()); register('missionControl.viewSession', (task) => commands.viewSession(task));
   register('missionControl.refresh', async () => { const signal = runtime.requestSignal(); if (!signal) return; const tasks = await client.reconcile(signal); if (signal.aborted) return; store.applyTasks(tasks); await notifications.apply(tasks); });

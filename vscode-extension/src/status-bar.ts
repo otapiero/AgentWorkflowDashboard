@@ -39,11 +39,13 @@ export class MissionControlStatusBar implements vscode.Disposable {
   }
 
   refresh(): void {
+    const previousTask = this.lastTaskText;
+    const previousConnection = this.lastConnectionText;
     const snapshot = this.store.snapshot();
     const current = matchWorkspace(this.currentWorkspaceUri(), snapshot.tasks);
     this.updateTask(current ? taskStatus(current) : '');
     this.updateConnection(snapshot.connection === 'connected' ? '$(check) Mission Control' : '$(warning) Mission Control disconnected');
-    this.onDispatchForTests?.();
+    if (previousTask !== this.lastTaskText || previousConnection !== this.lastConnectionText) this.onDispatchForTests?.();
   }
 
   dispose(): void {

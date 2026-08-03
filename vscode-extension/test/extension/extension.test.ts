@@ -9,7 +9,10 @@ suite('Mission Control extension', () => {
     assert.ok(extension);
     const api = await extension.activate() as MissionControlTestApi;
     assert.ok(api.activationMetricsForTests().syncActivationMs <= 50, `synchronous activation ${api.activationMetricsForTests().syncActivationMs.toFixed(2)}ms exceeded 50ms`);
+    const queued = task({ workspacePath: 'C:\\mc\\worktrees\\queued-task' });
+    const opened = vscode.commands.executeCommand('missionControl.openTask', queued);
     await api.readyForTests();
+    await opened;
     const commands = await vscode.commands.getCommands(true);
     assert.ok(commands.includes('missionControl.openTask'));
     assert.ok(commands.includes('missionControl.runCurrentPhase'));
