@@ -89,4 +89,16 @@ describe('CommandController', () => {
     expect(server.restartOwned).toHaveBeenCalledOnce();
     expect(api.showInformationMessage).toHaveBeenCalledWith('Mission Control server restart requested.');
   });
+
+  test('uses retargeted client and server after a runtime reconfiguration', async () => {
+    const replacementClient = { spawn: vi.fn().mockResolvedValue({ spawned: {} }) };
+    const replacementServer = { restartOwned: vi.fn().mockResolvedValue(undefined) };
+    const { commands, current, client, server } = controller({ currentClient: () => replacementClient, currentServer: () => replacementServer });
+    await commands.runCurrentPhase(current);
+    await commands.restartServer();
+    expect(replacementClient.spawn).toHaveBeenCalledOnce();
+    expect(replacementServer.restartOwned).toHaveBeenCalledOnce();
+    expect(client.spawn).not.toHaveBeenCalled();
+    expect(server.restartOwned).not.toHaveBeenCalled();
+  });
 });

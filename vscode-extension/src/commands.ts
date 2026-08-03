@@ -24,12 +24,14 @@ export interface CommandDependencies {
   api: CommandsApi;
   store: Pick<TaskStore, 'task' | 'tasks'>;
   client: Pick<MissionControlClient, 'spawn'>;
+  currentClient?: () => Pick<MissionControlClient, 'spawn'>;
   config: () => BoardConfig | null;
   serverUrl: () => string;
   runLaunchFlow?: (task: TaskWithDerived, config: BoardConfig, picker: LaunchPicker) => Promise<SpawnRequest | null>;
   launchPicker?: LaunchPicker;
   output: { show(): void };
   server: Pick<ServerManager, 'restartOwned'>;
+  currentServer?: () => Pick<ServerManager, 'restartOwned'>;
 }
 
 export class CommandController {
@@ -65,7 +67,7 @@ export class CommandController {
     const request = await this.launch(task, config, picker);
     if (!request) return;
     try {
-      await this.deps.client.spawn(task.issue, request, new AbortController().signal);
+      await (this.deps.currentClient?.() ?? this.deps.client).spawn(task.issue, request, new AbortController().signal);
     } catch (error) {
       const choice = await this.deps.api.showWarningMessage(error instanceof Error ? error.message : String(error), 'Show Logs');
       if (choice === 'Show Logs') await this.showLogs();
@@ -91,7 +93,7 @@ export class CommandController {
 
   async restartServer(): Promise<void> {
     this.deps.output.show();
-    await this.deps.server.restartOwned();
+    await (this.deps.currentServer?.() ?? this.deps.server).restartOwned();
     await this.deps.api.showInformationMessage('Mission Control server restart requested.');
   }
 

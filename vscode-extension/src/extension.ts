@@ -40,11 +40,12 @@ function createRuntime(context: vscode.ExtensionContext): MissionControlRuntime 
   };
   let client = new MissionControlClient(settings().serverUrl);
   let server = makeServer(client, settings(), context.globalStorageUri.fsPath);
+  let lastOpenFolderArgs: readonly unknown[] | null = null;
   const commands = new CommandController({ api: {
-    executeCommand: vscode.commands.executeCommand, uriFile: vscode.Uri.file, uriParse: vscode.Uri.parse, openExternal: vscode.env.openExternal,
+    executeCommand: (command, ...args) => { if (command === 'vscode.openFolder') lastOpenFolderArgs = args; return vscode.commands.executeCommand(command, ...args); }, uriFile: vscode.Uri.file, uriParse: vscode.Uri.parse, openExternal: vscode.env.openExternal,
     showInformationMessage: vscode.window.showInformationMessage, showWarningMessage: vscode.window.showWarningMessage,
     showQuickPick: vscode.window.showQuickPick as never, terminals: vscode.window.terminals, workspaceUri: folder,
-  }, store, client, config: () => store.snapshot().config, serverUrl: () => settings().serverUrl, output, server,
+  }, store, client, currentClient: () => client, config: () => store.snapshot().config, serverUrl: () => settings().serverUrl, output, server, currentServer: () => server,
     launchPicker: { pick: vscode.window.showQuickPick as never },
   });
   const notificationOptions = notificationSettings();
@@ -57,7 +58,7 @@ function createRuntime(context: vscode.ExtensionContext): MissionControlRuntime 
     if (choice === 'View PR' && event.prUrl) await vscode.env.openExternal(vscode.Uri.parse(event.prUrl));
   }, notificationOptions);
   const runtime = new MissionControlRuntime({ readSettings: settings, createClient: (url) => { client = new MissionControlClient(url); return client; }, createServerManager: (nextClient, nextSettings) => { server = makeServer(nextClient as MissionControlClient, nextSettings, context.globalStorageUri.fsPath); return server; }, store, notifications,
-    delay: (ms, signal) => abortableDelay(ms, signal), jitter: value => value * (0.8 + Math.random() * 0.4), presentConnectionFailure: async result => presentFailure(result, output) });
+    delay: (ms, signal) => abortableDelay(ms, signal), jitter: value => value * (0.8 + Math.random() * 0.4), presentConnectionFailure: async result => presentFailure(result, output), lastOpenFolderArgsForTests: () => lastOpenFolderArgs });
   const register = (id: string, callback: (...args: never[]) => unknown) => context.subscriptions.push(vscode.commands.registerCommand(id, callback));
   register('missionControl.openTask', (task) => commands.openTask(task)); register('missionControl.runCurrentPhase', (task) => commands.runCurrentPhase(task));
   register('missionControl.openDashboard', () => commands.openDashboard()); register('missionControl.restartServer', () => commands.restartServer()); register('missionControl.showLogs', () => commands.showLogs()); register('missionControl.viewSession', (task) => commands.viewSession(task));
@@ -65,7 +66,7 @@ function createRuntime(context: vscode.ExtensionContext): MissionControlRuntime 
   register('missionControl.filter', async () => tree.setFilter(await vscode.window.showInputBox({ prompt: 'Filter Mission Control tasks' }) ?? ''));
   const updateContexts = () => { const snapshot = store.snapshot(); void vscode.commands.executeCommand('setContext', 'missionControl.connected', snapshot.connection === 'connected'); void vscode.commands.executeCommand('setContext', 'missionControl.configured', Boolean(snapshot.config)); void vscode.commands.executeCommand('setContext', 'missionControl.currentTask', Boolean(matchWorkspace(folder(), snapshot.tasks)?.integration.liveSpawn)); };
   context.subscriptions.push(output, tree, view, status, vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('missionControl.notifications')) Object.assign(notificationOptions, notificationSettings()); runtime.reconfigure(new Set(['missionControl.serverUrl', 'missionControl.installationPath', 'missionControl.autoStart'].filter(key => event.affectsConfiguration(key)))); }), vscode.workspace.onDidChangeWorkspaceFolders(updateContexts));
-  store.onDidChange(updateContexts); updateContexts();
+  context.subscriptions.push({ dispose: store.onDidChange(updateContexts) }); updateContexts();
   return runtime;
 }
 function notificationSettings() { const c = vscode.workspace.getConfiguration('missionControl.notifications'); const enabled = c.get<boolean>('enabled', true); return { agentFinished: enabled && c.get<boolean>('agentFinished', true), ciFailed: enabled && c.get<boolean>('ci', true), ciPassed: enabled && c.get<boolean>('ci', true), reviewComments: enabled && c.get<boolean>('review', true), approvalRequired: enabled && c.get<boolean>('review', true) }; }
