@@ -9,5 +9,6 @@ describe('extension manifest', () => {
     expect(manifest.extensionKind).toEqual(['ui']);
     expect(manifest.activationEvents).toContain('onStartupFinished');
     expect(manifest.main).toBe('./dist/extension.cjs');
+    expect(manifest).not.toHaveProperty('icon');
   });
 });
