@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, rename, rmdir, rm, stat, unlink } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, rmdir, rm, stat, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -9,33 +9,49 @@ export interface AtomicLease {
 
 interface LeaseRecord { token: string; createdAt: number }
 
-/** Serializes check-and-remove mutations without ever deleting a replacement. */
+/**
+ * Serializes mutations with generation-named owner directories. Owners are
+ * never replaced in-place: stale recovery removes only a specific generation.
+ */
 async function withMutationLock<T>(
   file: string,
   staleMs: number,
   now: () => number,
   action: () => Promise<T>,
 ): Promise<T | null> {
-  const guard = `${file}.mutation`;
-  try {
-    await mkdir(guard);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    let modifiedAt: number;
-    try { modifiedAt = (await stat(guard)).mtimeMs; } catch { return null; }
-    if (now() - modifiedAt <= staleMs) return null;
+  const guardRoot = `${file}.mutation`;
+  await mkdir(guardRoot, { recursive: true });
+  const ownerName = randomUUID();
+  const owner = `${guardRoot}/${ownerName}`;
+  await mkdir(owner);
 
-    // Moving, rather than deleting, the observed guard means an old contender
-    // can only clean up its own quarantined directory, never a new guard.
-    const orphanedGuard = `${guard}.orphan.${randomUUID()}`;
-    try { await rename(guard, orphanedGuard); } catch { return null; }
-    await rm(orphanedGuard, { recursive: true, force: true });
-    try { await mkdir(guard); } catch { return null; }
+  const entries = await readdir(guardRoot, { withFileTypes: true });
+  const liveOwners: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const candidate = `${guardRoot}/${entry.name}`;
+    if (entry.name === ownerName) {
+      liveOwners.push(entry.name);
+      continue;
+    }
+    try {
+      if (now() - (await stat(candidate)).mtimeMs > staleMs) {
+        await rm(candidate, { recursive: true, force: true });
+      } else {
+        liveOwners.push(entry.name);
+      }
+    } catch {
+      // A concurrent owner may have finished; a fresh contender will decide.
+    }
+  }
+  if (ownerName !== liveOwners.sort()[0]) {
+    await rmdir(owner);
+    return null;
   }
   try {
     return await action();
   } finally {
-    await rmdir(guard);
+    await rmdir(owner);
   }
 }
 

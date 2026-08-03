@@ -67,6 +67,22 @@ test('recovers an orphaned mutation guard before safely taking over a stale leas
   expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ token: lease!.token });
 });
 
+test('two contenders safely elect one mutation owner after a stale guard generation', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'start.lock');
+  const now = Date.now();
+  await writeFile(file, JSON.stringify({ token: 'stale-owner', createdAt: now - 10_000 }));
+  const guard = join(`${file}.mutation`, 'orphaned-owner');
+  await mkdir(guard, { recursive: true });
+  await utimes(guard, new Date(now - 10_000), new Date(now - 10_000));
+
+  const contenders = await Promise.all([acquireAtomicLease(file, 1_000, () => now), acquireAtomicLease(file, 1_000, () => now)]);
+  const owners = contenders.filter((lease): lease is NonNullable<typeof lease> => lease !== null);
+
+  expect(owners).toHaveLength(1);
+  expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ token: owners[0]!.token });
+});
+
 test('release leaves a newer lock intact', async () => {
   const directory = await temporaryDirectory();
   const file = join(directory, 'start.lock');
@@ -81,10 +97,11 @@ test('release cannot remove a replacement while a serialized mutation is in prog
   const directory = await temporaryDirectory();
   const file = join(directory, 'start.lock');
   const original = await acquireAtomicLease(file, 1, () => 0);
-  await mkdir(`${file}.mutation`);
+  const guard = join(`${file}.mutation`, '!active-owner');
+  await mkdir(guard, { recursive: true });
   const release = original!.release();
   await writeFile(file, JSON.stringify({ token: 'replacement', createdAt: 10 }));
-  await rmdir(`${file}.mutation`);
+  await rmdir(guard);
   await release;
 
   expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ token: 'replacement', createdAt: 10 });
