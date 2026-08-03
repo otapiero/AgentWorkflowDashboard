@@ -36,6 +36,13 @@ describe('MissionControlTreeProvider', () => {
     expect(vscode.fires).toEqual([undefined]);
   });
 
+  test('marks task items with their server-provided worktree availability', () => {
+    const store = new TaskStore(); store.applyBaseline(config, [task({ worktreeExists: true }), task({ issue: 2, worktreeExists: false })]);
+    const provider = new MissionControlTreeProvider(store, () => undefined, fakeVscode());
+    expect(provider.getTreeItem({ kind: 'task', id: 'task:3060', issue: 3060, label: 'one', description: '', severity: 'normal' }).contextValue).toBe('task:normal:worktree');
+    expect(provider.getTreeItem({ kind: 'task', id: 'task:2', issue: 2, label: 'two', description: '', severity: 'normal' }).contextValue).toBe('task:normal:missing-worktree');
+  });
+
   test('refreshes cached Current Worktree when a task is added for this workspace', () => {
     const store = new TaskStore(); store.applyBaseline(config, []);
     const vscode = fakeVscode();

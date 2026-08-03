@@ -40,7 +40,7 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
     if (node.kind === 'task') {
       item.description = node.description;
       item.iconPath = new this.api.ThemeIcon(node.severity === 'bad' ? 'error' : node.severity === 'warn' ? 'warning' : 'circle-outline');
-      item.contextValue = `task:${node.severity}`;
+      item.contextValue = `task:${node.severity}:${this.store.task(node.issue)?.integration.worktreeExists ? 'worktree' : 'missing-worktree'}`;
     }
     if (node.kind === 'action') item.command = { command: node.command, title: node.label, arguments: [...node.args] };
     return item as vscode.TreeItem;
