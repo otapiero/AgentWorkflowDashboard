@@ -5,5 +5,5 @@ export default defineConfig({
   version: 'stable',
   workspaceFolder: 'test/fixtures/workspace',
   mocha: { ui: 'tdd', timeout: 20_000 },
-  launchArgs: ['--disable-extensions'],
+  launchArgs: ['--disable-extensions', '--js-flags=--expose-gc'],
 });

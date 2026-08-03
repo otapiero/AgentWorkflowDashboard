@@ -35,13 +35,15 @@ suite('Mission Control extension', () => {
   test('retains at most 25 MiB after seeding 500 Extension Host tasks', async () => {
     const extension = vscode.extensions.getExtension('otapiero.mission-control'); assert.ok(extension);
     const api = await extension.activate() as MissionControlTestApi;
-    global.gc?.();
+    const collect = global.gc;
+    assert.equal(typeof collect, 'function', 'Extension Host must launch with --expose-gc');
+    if (!collect) throw new Error('Extension Host must launch with --expose-gc');
+    for (let index = 0; index < 3; index += 1) collect();
     const before = process.memoryUsage().heapUsed;
     api.seedTasksForTests(Array.from({ length: 500 }, (_, index) => task({ issue: 10_000 + index })));
     await new Promise<void>(resolve => setImmediate(resolve));
-    global.gc?.();
-    const samples = await Promise.all(Array.from({ length: 3 }, async () => { await new Promise<void>(resolve => setImmediate(resolve)); return process.memoryUsage().heapUsed; }));
-    const retainedMiB = (Math.min(...samples) - before) / 1024 / 1024;
+    for (let index = 0; index < 3; index += 1) { await new Promise<void>(resolve => setImmediate(resolve)); collect(); }
+    const retainedMiB = (process.memoryUsage().heapUsed - before) / 1024 / 1024;
     assert.ok(retainedMiB <= 25, `Extension Host retained ${retainedMiB.toFixed(2)} MiB, exceeding 25 MiB`);
   });
 });

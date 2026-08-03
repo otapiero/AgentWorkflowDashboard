@@ -86,17 +86,27 @@ async function measureRuntimeFlow(): Promise<{ healthyTreeMs: number; sseDispatc
     const body = path === '/api/config' ? config : makeTasks(1);
     return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
   });
-  const ready = deferred<void>(); const baselineStart = performance.now();
+  const ready = deferred<void>(); const connected = deferred<void>(); const baselineStart = performance.now();
   const runtime = new MissionControlRuntime({ readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }), createClient: () => client, createServerManager: () => ({ ensureReady: async () => ({ kind: 'ready', health: {} }) }) as never, store, notifications: { prime: () => {}, apply: async () => {} } as never, delay: async () => {}, jitter: value => value, presentConnectionFailure: async () => undefined });
-  const stop = store.onDidChange(() => { if (store.snapshot().isBaselineReady && treeDispatches > 0) ready.resolve(); });
-  runtime.start(); await ready.promise; const healthyTreeMs = performance.now() - baselineStart; stop();
-  const dispatched = deferred<void>(); const sseStart = performance.now();
-  const observe = store.onDidChange(() => { if (treeDispatches > 1 && statusDispatches > 2) dispatched.resolve(); });
-  controller!.enqueue(encoder.encode(`event: tasks\ndata: ${JSON.stringify(makeTasks(1, 1))}\n\n`));
-  await dispatched.promise; const sseDispatchMs = performance.now() - sseStart; observe(); runtime.dispose(); tree.dispose(); status.dispose();
+  const stop = store.onDidChange(() => { if (store.snapshot().isBaselineReady && treeDispatches > 0) ready.resolve(); if (store.snapshot().connection === 'connected') connected.resolve(); });
+  runtime.start(); await ready.promise; const healthyTreeMs = performance.now() - baselineStart;
+  await connected.promise;
+  tree.getChildren();
+  treeDispatches = 0; statusDispatches = 0;
+  const marker = 'sse-causal-marker'; const sseTasks = makeTasks(1, 1); sseTasks[0]!.title = marker;
+  const dispatched = deferred<void>(); let parsedAndApplied = false;
+  const observe = store.onDidChange(() => { parsedAndApplied = store.task(1)?.title === marker; if (parsedAndApplied && treeDispatches > 0 && statusDispatches > 0) dispatched.resolve(); });
+  const sseStart = performance.now();
+  controller!.enqueue(encoder.encode(`event: tasks\ndata: ${JSON.stringify(sseTasks)}\n\n`));
+  await withTimeout(dispatched.promise, 1_000, 'SSE causal marker was not parsed, applied, and dispatched');
+  const sseDispatchMs = performance.now() - sseStart;
+  if (!parsedAndApplied) throw new Error('SSE causal marker was not delivered');
+  observe(); stop(); runtime.dispose(); tree.dispose(); status.dispose();
   return { healthyTreeMs, sseDispatchMs };
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } { let resolve!: (value: T) => void; return { promise: new Promise<T>(value => { resolve = value; }), resolve }; }
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> { return await Promise.race([promise, new Promise<T>((_resolve, reject) => setTimeout(() => reject(new Error(message)), ms))]); }
 
 void main();
