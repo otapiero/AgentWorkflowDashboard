@@ -1,4 +1,4 @@
-import { mkdir, open, readdir, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, open, readFile, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
@@ -10,7 +10,7 @@ export interface AtomicLease {
 
 interface LeaseRecord { token: string; createdAt: number }
 
-interface MutationOwner { pid: number; host: string }
+interface MutationTicket { ticket: string; pid: number; host: string; released?: boolean }
 
 export interface AtomicLeaseTestHooks {
   token?: () => string;
@@ -18,9 +18,8 @@ export interface AtomicLeaseTestHooks {
 }
 
 /**
- * Serializes mutations with generation-named owner directories. Owners are
- * never replaced in-place: stale recovery removes only a dead/orphaned
- * generation. Live owners are never expired by age.
+ * Serializes mutations by append order. The journal is never rewritten while
+ * acquiring, so concurrent contenders cannot replace or reorder one another.
  */
 async function withMutationLock<T>(
   file: string,
@@ -29,51 +28,32 @@ async function withMutationLock<T>(
   hooks: AtomicLeaseTestHooks | undefined,
   action: () => Promise<T>,
 ): Promise<T | null> {
-  const guardRoot = `${file}.mutation`;
-  await mkdir(guardRoot, { recursive: true });
-  const ownerName = hooks?.token?.() ?? randomUUID();
-  const owner = `${guardRoot}/${ownerName}`;
-  await mkdir(owner);
-  await writeFile(`${owner}/owner.json`, JSON.stringify({ pid: process.pid, host: hostname() } satisfies MutationOwner));
-
-  const entries = await readdir(guardRoot, { withFileTypes: true });
-  const liveOwners: Array<{ name: string; birthtimeNs: bigint }> = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const candidate = `${guardRoot}/${entry.name}`;
-    const candidateStat = await stat(candidate, { bigint: true });
-    let alive = entry.name === ownerName;
-    try {
-      const record = JSON.parse(await readFile(`${candidate}/owner.json`, 'utf8')) as Partial<MutationOwner>;
-      if (typeof record.pid === 'number' && typeof record.host === 'string') {
-        if (record.host !== hostname()) {
-          alive = true;
-        } else {
-          try { process.kill(record.pid, 0); alive = true; } catch (error) {
-            alive = (error as NodeJS.ErrnoException).code !== 'ESRCH';
-          }
-        }
-      } else if (entry.name !== ownerName) {
-        alive = now() - Number(candidateStat.mtimeMs) <= staleMs;
-      }
-    } catch {
-      if (entry.name !== ownerName) alive = now() - Number(candidateStat.mtimeMs) <= staleMs;
-    }
-    if (alive) liveOwners.push({ name: entry.name, birthtimeNs: candidateStat.birthtimeNs });
-    else await rm(candidate, { recursive: true, force: true });
-  }
-  liveOwners.sort((left, right) => left.birthtimeNs === right.birthtimeNs
-    ? left.name.localeCompare(right.name)
-    : left.birthtimeNs < right.birthtimeNs ? -1 : 1);
-  if (ownerName !== liveOwners[0]?.name) {
-    await rm(owner, { recursive: true, force: true });
-    return null;
-  }
+  const journal = `${file}.mutation.journal`;
+  const ticket = hooks?.token?.() ?? randomUUID();
+  await appendFile(journal, `${JSON.stringify({ ticket, pid: process.pid, host: hostname() } satisfies MutationTicket)}\n`);
   try {
     await hooks?.afterMutationOwnership?.();
+    const text = await readFile(journal, 'utf8');
+    const tickets = new Map<string, MutationTicket>();
+    for (const line of text.split('\n')) {
+      if (!line) continue;
+      try {
+        const entry = JSON.parse(line) as MutationTicket;
+        if (entry.released) tickets.delete(entry.ticket);
+        else if (typeof entry.ticket === 'string' && typeof entry.pid === 'number' && typeof entry.host === 'string') tickets.set(entry.ticket, entry);
+      } catch { /* Ignore a torn final append; it cannot own the mutation. */ }
+    }
+    let owner: string | undefined;
+    for (const entry of tickets.values()) {
+      if (entry.host !== hostname()) { owner = entry.ticket; break; }
+      try { process.kill(entry.pid, 0); owner = entry.ticket; break; } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') { owner = entry.ticket; break; }
+      }
+    }
+    if (owner !== ticket) return null;
     return await action();
   } finally {
-    await rm(owner, { recursive: true, force: true });
+    await appendFile(journal, `${JSON.stringify({ ticket, released: true })}\n`);
   }
 }
 
