@@ -49,7 +49,7 @@ export class ServerManager {
     if (!this.options.autoStart) return { kind: 'unavailable', message: 'Mission Control is unavailable and automatic startup is disabled.' };
 
     const lease = await acquireAtomicLease(join(this.options.storagePath, 'server-start.lock'), startupLockStaleMs);
-    if (!lease) return { kind: 'unavailable', message: 'Mission Control is starting in another VS Code window.' };
+    if (!lease) return this.waitForReadiness('Mission Control did not become ready while another VS Code window was starting it.');
     try {
       const afterLease = await this.health();
       if (afterLease) return this.fromHealth(afterLease);
@@ -96,7 +96,9 @@ export class ServerManager {
   private validateServerUrl(): URL | string {
     try {
       const url = new URL(this.options.serverUrl);
-      if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname)) return 'Mission Control server URL must use loopback HTTP.';
+      if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(url.hostname)
+        || url.username !== '' || url.password !== '' || url.pathname !== '/'
+        || url.search !== '' || url.hash !== '') return 'Mission Control server URL must be a credential-free loopback HTTP origin.';
       return url;
     } catch { return 'Mission Control server URL is malformed.'; }
   }
@@ -113,6 +115,14 @@ export class ServerManager {
 
   private async health(): Promise<HealthResponse | null> {
     try { return await this.options.client.health(this.controller.signal); } catch { return null; }
+  }
+  private async waitForReadiness(message: string): Promise<EnsureReadyResult> {
+    for (const wait of readinessSchedule) {
+      try { await this.options.delay(wait, this.controller.signal); } catch { return { kind: 'unavailable', message: 'Mission Control startup was cancelled.' }; }
+      const ready = await this.health();
+      if (ready) return this.fromHealth(ready);
+    }
+    return { kind: 'unavailable', message };
   }
   private fromHealth(health: HealthResponse): EnsureReadyResult { return health.apiVersion === this.options.expectedApiVersion ? { kind: 'ready', health } : { kind: 'incompatible', health }; }
   private ownerFile(): string { return join(this.options.storagePath, 'server-owner.json'); }

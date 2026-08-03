@@ -8,7 +8,7 @@ export interface AtomicLease {
   release(): Promise<void>;
 }
 
-interface LeaseRecord { token: string; createdAt: number }
+interface LeaseRecord { token: string; createdAt: number; heartbeat?: number }
 
 interface MutationTicket { ticket: string; pid?: number; host?: string; heartbeat?: number; released?: boolean }
 const JOURNAL_RECORD_CAP = 1_000;
@@ -48,7 +48,8 @@ async function withMutationLock<T>(
     }
   };
   await append({ ticket, pid: process.pid, host: hostname(), heartbeat: now() });
-  const heartbeatInterval = setInterval(() => { void append({ ticket, heartbeat: now() }); }, Math.max(1, Math.floor(staleMs / 3)));
+  const heartbeatInterval = setInterval(() => { void append({ ticket, heartbeat: now() }); }, Math.max(25, Math.floor(staleMs / 3)));
+  heartbeatInterval.unref();
   try {
     await hooks?.afterMutationOwnership?.();
     const text = await readFile(journal, 'utf8');
@@ -140,11 +141,27 @@ export async function acquireAtomicLease(
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const handle = await open(file, 'wx');
-      await handle.writeFile(JSON.stringify({ token, createdAt }));
+      await handle.writeFile(JSON.stringify({ token, createdAt, heartbeat: createdAt }));
       await handle.close();
+      let renewal = Promise.resolve();
+      const renew = (): void => {
+        renewal = renewal.then(async () => {
+          await withMutationLock(file, staleMs, now, undefined, async () => {
+            const current = await readRecord(file);
+            if (current?.token === token) await writeFile(file, JSON.stringify({ token, createdAt, heartbeat: now() }));
+          });
+        }).catch(() => undefined);
+      };
+      const leaseHeartbeat = setInterval(renew, Math.max(25, Math.floor(staleMs / 3)));
+      leaseHeartbeat.unref();
+      let released = false;
       return {
         token,
         async release(): Promise<void> {
+          if (released) return;
+          released = true;
+          clearInterval(leaseHeartbeat);
+          await renewal;
           await withMutationLock(file, staleMs, now, hooks, async () => {
             const current = await readRecord(file);
             if (current?.token === token) {
@@ -159,7 +176,7 @@ export async function acquireAtomicLease(
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
       const removed = await withMutationLock(file, staleMs, now, hooks, async () => {
         const existing = await readRecord(file);
-        if (!existing || now() - existing.createdAt <= staleMs) return false;
+        if (!existing || now() - (existing.heartbeat ?? existing.createdAt) <= staleMs) return false;
         try { await unlink(file); return true; } catch (unlinkError) {
           return (unlinkError as NodeJS.ErrnoException).code === 'ENOENT';
         }

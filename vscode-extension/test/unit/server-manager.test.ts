@@ -42,10 +42,34 @@ test('reports an API mismatch without spawning', async () => {
   expect(dependencies.process.spawn).not.toHaveBeenCalled();
 });
 
-test.each(['https://127.0.0.1:4317', 'http://0.0.0.0:4317', 'not a url'])('rejects unsafe or malformed server URL %s', async (serverUrl) => {
+test.each(['https://127.0.0.1:4317', 'http://0.0.0.0:4317', 'not a url', 'http://user@localhost:4317', 'http://localhost:4317/path', 'http://localhost:4317/?query=1', 'http://localhost:4317/#hash'])('rejects unsafe or malformed server URL %s', async (serverUrl) => {
   const dependencies = options({ serverUrl });
   await expect(new ServerManager(dependencies).ensureReady()).resolves.toMatchObject({ kind: 'configuration-error' });
   expect(dependencies.process.spawn).not.toHaveBeenCalled();
+});
+
+test.each(['http://localhost', 'http://localhost:4317/', 'http://127.0.0.1:4317'])('accepts credential-free loopback origins %s', async (serverUrl) => {
+  await expect(new ServerManager(options({ serverUrl })).ensureReady()).resolves.toMatchObject({ kind: 'ready' });
+});
+
+test('a second manager waits for the first manager startup and returns ready without spawning', async () => {
+  const installationPath = await directory(); const storagePath = await directory();
+  await writeFile(join(installationPath, 'package.json'), JSON.stringify({ name: 'mission-control', scripts: { start: 'node' } }));
+  let ready = false;
+  let unblockFirst!: () => void;
+  const healthClient = { health: vi.fn(async () => ready ? health() : Promise.reject(new Error('offline'))) };
+  const spawned = { pid: 42, unref: vi.fn() } as unknown as ChildProcess;
+  const processDependency = { spawn: vi.fn(() => spawned) };
+  const common = { client: healthClient, installationPath, storagePath, serverUrl: 'http://localhost:4317', autoStart: true, expectedApiVersion: 1 as const, process: processDependency, kill: vi.fn() };
+  const firstManager = new ServerManager({ ...common, delay: vi.fn(() => new Promise<void>((resolve) => { unblockFirst = resolve; })) });
+  const first = firstManager.ensureReady();
+  await vi.waitFor(() => expect(processDependency.spawn).toHaveBeenCalledOnce());
+  const secondManager = new ServerManager({ ...common, delay: vi.fn(async () => { ready = true; }) });
+
+  await expect(secondManager.ensureReady()).resolves.toEqual({ kind: 'ready', health: health() });
+  expect(processDependency.spawn).toHaveBeenCalledOnce();
+  unblockFirst();
+  await first;
 });
 
 test('does not spawn from an invalid installation package', async () => {

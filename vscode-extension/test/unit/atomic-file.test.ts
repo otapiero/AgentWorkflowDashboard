@@ -40,6 +40,39 @@ test('replaces only a stale lock', async () => {
   expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ token: lease!.token, createdAt: 1_101 });
 });
 
+test('renews a live lease so it cannot be reclaimed after staleMs', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'start.lock');
+  let now = 0;
+  const lease = await acquireAtomicLease(file, 30, () => now);
+  now = 100;
+  await expect.poll(async () => JSON.parse(await readFile(file, 'utf8')).heartbeat).toBe(100);
+
+  expect(await acquireAtomicLease(file, 30, () => now)).toBeNull();
+  await lease!.release();
+});
+
+test('takes over after a stopped heartbeat becomes stale', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'start.lock');
+  await writeFile(file, JSON.stringify({ token: 'dead', createdAt: 0, heartbeat: 10 }));
+
+  expect(await acquireAtomicLease(file, 30, () => 100)).not.toBeNull();
+});
+
+test('stops lease heartbeat writes after release', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'start.lock');
+  const lease = await acquireAtomicLease(file, 30);
+  await lease!.release();
+  const journal = `${file}.mutation.journal`;
+  const sizeAfterRelease = (await stat(journal)).size;
+
+  await new Promise((resolve) => setTimeout(resolve, 60));
+
+  expect((await stat(journal)).size).toBe(sizeAfterRelease);
+});
+
 test('serializes concurrent stale takeovers so exactly one contender owns the lock', async () => {
   const directory = await temporaryDirectory();
   const file = join(directory, 'start.lock');
