@@ -95,7 +95,7 @@ export class MissionControlClient {
     let closedError: Error | null = null;
 
     try {
-      const response = await this.fetchImpl(`${this.baseUrl}/api/events`, {
+      const response = await this.fetchImpl(`${this.baseUrl}/api/events?replay=0`, {
         method: 'GET',
         headers: { Accept: 'text/event-stream' },
         signal,

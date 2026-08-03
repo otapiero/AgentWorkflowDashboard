@@ -6,7 +6,8 @@ export type Severity = 'bad' | 'warn' | 'normal';
 
 export interface SectionNode { kind: 'section'; id: string; label: string; expanded: boolean }
 export interface PhaseNode { kind: 'phase'; id: string; phase: Phase; label: string }
-export interface TaskNode { kind: 'task'; id: string; issue: number; label: string; description: string; severity: Severity }
+export type TaskScope = 'current' | 'attention' | `all:${Phase}`;
+export interface TaskNode { kind: 'task'; id: string; scope: TaskScope; issue: number; label: string; description: string; severity: Severity }
 export interface ActionNode { kind: 'action'; id: string; label: string; command: string; args: readonly unknown[] }
 export interface MessageNode { kind: 'message'; id: string; label: string }
 export type TreeNode = SectionNode | PhaseNode | TaskNode | ActionNode | MessageNode;
@@ -27,7 +28,7 @@ export function buildChildren(snapshot: TaskStoreSnapshot, currentUri: Workspace
     return current ? currentWorktreeNodes(snapshot, current) : [{ kind: 'message', id: 'message:current:unrelated', label: 'This workspace is not a Mission Control worktree.' }];
   }
   if (parentId === 'section:attention') {
-    return [...filtered(snapshot.tasks.filter((task) => task.derived.needsYou), filter)].sort(attentionOrder).map(taskNode);
+    return [...filtered(snapshot.tasks.filter((task) => task.derived.needsYou), filter)].sort((left, right) => attentionOrder(snapshot, left, right)).map((task) => buildTaskNode(task, 'attention'));
   }
   if (parentId === 'section:all') {
     if (!snapshot.config) return [{ kind: 'message', id: 'message:all:loading', label: 'Waiting for Mission Control data…' }];
@@ -37,7 +38,7 @@ export function buildChildren(snapshot: TaskStoreSnapshot, currentUri: Workspace
   }
   if (parentId.startsWith('phase:')) {
     const phase = parentId.slice('phase:'.length) as Phase;
-    return [...filtered(snapshot.tasks.filter((task) => task.derived.displayPhase === phase), filter)].sort(issueOrder).map(taskNode);
+    return [...filtered(snapshot.tasks.filter((task) => task.derived.displayPhase === phase), filter)].sort(issueOrder).map((task) => buildTaskNode(task, `all:${phase}`));
   }
   return [];
 }
@@ -52,14 +53,12 @@ export function phaseLabel(phase: Phase): string {
   return phase.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export function buildTaskNode(task: TaskWithDerived): TaskNode {
-  return { kind: 'task', id: `task:${task.issue}`, issue: task.issue, label: `#${task.issue} ${task.title}`, description: phaseLabel(task.derived.displayPhase), severity: severityFor(task) };
+export function buildTaskNode(task: TaskWithDerived, scope: TaskScope): TaskNode {
+  return { kind: 'task', id: `task:${scope}:${task.issue}`, scope, issue: task.issue, label: `#${task.issue} ${task.title}`, description: phaseLabel(task.derived.displayPhase), severity: severityFor(task) };
 }
 
-const taskNode = buildTaskNode;
-
 function currentWorktreeNodes(snapshot: TaskStoreSnapshot, task: TaskWithDerived): TreeNode[] {
-  const nodes: TreeNode[] = [taskNode(task)];
+  const nodes: TreeNode[] = [buildTaskNode(task, 'current')];
   const agent = [task.pinned.agent, task.pinned.model, task.pinned.effort].filter(Boolean).join(' · ');
   if (agent) nodes.push({ kind: 'message', id: `message:agent:${task.issue}`, label: `Agent: ${agent}` });
   if (task.integration.liveSpawn) {
@@ -83,10 +82,10 @@ function filtered(tasks: readonly TaskWithDerived[], filter: string): readonly T
 }
 
 function issueOrder(left: TaskWithDerived, right: TaskWithDerived): number { return left.issue - right.issue; }
-function attentionOrder(left: TaskWithDerived, right: TaskWithDerived): number {
+function attentionOrder(snapshot: TaskStoreSnapshot, left: TaskWithDerived, right: TaskWithDerived): number {
   const severity = ({ bad: 0, warn: 1, normal: 2 } as const);
   const severityOrder = severity[severityFor(left)] - severity[severityFor(right)];
   if (severityOrder) return severityOrder;
-  const timeOrder = (right.lastReconciledAt ?? '').localeCompare(left.lastReconciledAt ?? '');
+  const timeOrder = (snapshot.attentionTransitions.get(right.issue) ?? '').localeCompare(snapshot.attentionTransitions.get(left.issue) ?? '');
   return timeOrder || issueOrder(left, right);
 }

@@ -29,8 +29,9 @@ export function activate(context: vscode.ExtensionContext): MissionControlTestAp
       runtime.start();
   });
   void deferred.ready.catch(() => undefined);
+  const connectionGated = new Set(['openTask', 'runCurrentPhase', 'viewSession', 'refresh']);
   for (const id of ['openTask', 'runCurrentPhase', 'openDashboard', 'restartServer', 'showLogs', 'viewSession', 'refresh', 'filter', 'connectionActions']) {
-    context.subscriptions.push(vscode.commands.registerCommand(`missionControl.${id}`, async (...args) => { await deferred.ready; return await vscode.commands.executeCommand(`missionControl.internal.${id}`, ...args); }));
+    context.subscriptions.push(vscode.commands.registerCommand(`missionControl.${id}`, async (...args) => { await deferred.ready; if (connectionGated.has(id)) await activeRuntime?.whenConnected(); return await vscode.commands.executeCommand(`missionControl.internal.${id}`, ...args); }));
   }
   context.subscriptions.push({ dispose: () => deferred.dispose() });
   deferred.schedule();
@@ -54,12 +55,13 @@ function createRuntime(context: vscode.ExtensionContext): MissionControlRuntime 
   };
   let client = new MissionControlClient(settings().serverUrl);
   let server = makeServer(client, settings(), context.globalStorageUri.fsPath);
+  let runtime!: MissionControlRuntime;
   let lastOpenFolderArgs: readonly unknown[] | null = null;
   const commands = new CommandController({ api: {
     executeCommand: (command, ...args) => { if (command === 'vscode.openFolder') lastOpenFolderArgs = args; return vscode.commands.executeCommand(command, ...args); }, uriFile: vscode.Uri.file, uriParse: vscode.Uri.parse, openExternal: vscode.env.openExternal,
     showInformationMessage: vscode.window.showInformationMessage, showWarningMessage: vscode.window.showWarningMessage,
     showQuickPick: vscode.window.showQuickPick as never, terminals: vscode.window.terminals, workspaceUri: folder,
-  }, store, client, currentClient: () => client, canMutate: () => store.snapshot().connection === 'connected', config: () => store.snapshot().config, serverUrl: () => settings().serverUrl, output, server, currentServer: () => server,
+  }, store, client, currentClient: () => client, mutationTarget: () => runtime.mutationTarget(), canMutate: () => store.snapshot().connection === 'connected', config: () => store.snapshot().config, serverUrl: () => settings().serverUrl, output, server, currentServer: () => server,
     launchPicker: launchPickerFrom(vscode.window.showQuickPick as never),
   });
   const notificationOptions = notificationSettings();
@@ -74,8 +76,8 @@ function createRuntime(context: vscode.ExtensionContext): MissionControlRuntime 
     if (choice === 'Open Dashboard') await commands.openDashboard();
     if (choice === 'View PR' && event.prUrl) await vscode.env.openExternal(vscode.Uri.parse(event.prUrl));
   }, notificationOptions);
-  const runtime = new MissionControlRuntime({ readSettings: settings, createClient: (url) => { client = new MissionControlClient(url); return client; }, createServerManager: (nextClient, nextSettings) => { server = makeServer(nextClient as MissionControlClient, nextSettings, context.globalStorageUri.fsPath); return server; }, store, notifications,
-    delay: (ms, signal) => abortableDelay(ms, signal), jitter: value => value * (0.8 + Math.random() * 0.4), presentConnectionFailure: async result => presentFailure(result, output), log: message => output.appendLine(message), lastOpenFolderArgsForTests: () => lastOpenFolderArgs, seedTasksForTests: tasks => store.applyTasks(tasks) });
+  runtime = new MissionControlRuntime({ readSettings: settings, createClient: (url) => { client = new MissionControlClient(url); return client; }, createServerManager: (nextClient, nextSettings) => { server = makeServer(nextClient as MissionControlClient, nextSettings, context.globalStorageUri.fsPath); return server; }, store, notifications,
+    delay: (ms, signal) => abortableDelay(ms, signal), jitter: value => value * (0.8 + Math.random() * 0.4), presentConnectionFailure: async result => presentFailure(result, output), log: message => output.appendLine(message), lastOpenFolderArgsForTests: () => lastOpenFolderArgs, seedTasksForTests: tasks => { store.applyTasks(tasks); store.setConnection('connected'); } });
   const register = (id: string, callback: (...args: never[]) => unknown) => context.subscriptions.push(vscode.commands.registerCommand(id.replace('missionControl.', 'missionControl.internal.'), callback));
   register('missionControl.openTask', (task) => commands.openTask(task)); register('missionControl.runCurrentPhase', (task) => commands.runCurrentPhase(task));
   register('missionControl.openDashboard', () => commands.openDashboard()); register('missionControl.restartServer', () => commands.restartServer()); register('missionControl.showLogs', () => commands.showLogs()); register('missionControl.viewSession', (task) => commands.viewSession(task));
@@ -89,5 +91,5 @@ function createRuntime(context: vscode.ExtensionContext): MissionControlRuntime 
 }
 function notificationSettings() { const c = vscode.workspace.getConfiguration('missionControl.notifications'); const enabled = c.get<boolean>('enabled', true); return { agentFinished: enabled && c.get<boolean>('agentFinished', true), ciFailed: enabled && c.get<boolean>('ci', true), ciPassed: enabled && c.get<boolean>('ci', true), reviewComments: enabled && c.get<boolean>('review', true), approvalRequired: enabled && c.get<boolean>('review', true) }; }
 function makeServer(client: MissionControlClient, settings: RuntimeSettings, storagePath: string) { return new ServerManager({ client, storagePath, serverUrl: settings.serverUrl, installationPath: settings.installationPath, autoStart: settings.autoStart, expectedApiVersion: 1, process: { spawn: require('node:child_process').spawn }, kill: process.kill, delay: abortableDelay }); }
-function abortableDelay(ms: number, signal: AbortSignal) { return new Promise<void>((resolve, reject) => { const timer = setTimeout(resolve, ms); signal.addEventListener('abort', () => { clearTimeout(timer); reject(new Error('aborted')); }, { once: true }); }); }
+export function abortableDelay(ms: number, signal: AbortSignal) { return new Promise<void>((resolve, reject) => { if (signal.aborted) { reject(new Error('aborted')); return; } const onAbort = () => { clearTimeout(timer); signal.removeEventListener('abort', onAbort); reject(new Error('aborted')); }; const timer = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(); }, ms); signal.addEventListener('abort', onAbort, { once: true }); }); }
 async function presentFailure(result: import('./server-manager.ts').EnsureReadyResult, output: vscode.OutputChannel): Promise<'retry' | 'configure' | 'logs' | undefined> { if (result.kind === 'ready') return undefined; const message = result.kind === 'incompatible' ? `Mission Control API version is incompatible (expected 1, got ${result.health.apiVersion}).` : result.message; const choices = result.kind === 'unavailable' ? ['Retry', 'Configure Installation', 'Show Logs'] : result.kind === 'configuration-error' ? ['Configure Installation', 'Show Logs'] : ['Show Logs']; const picked = await vscode.window.showWarningMessage(message, ...choices); if (picked === 'Configure Installation') { await vscode.commands.executeCommand('workbench.action.openSettings', 'missionControl.installationPath'); return 'configure'; } if (picked === 'Show Logs') { output.show(); return 'logs'; } return picked === 'Retry' ? 'retry' : undefined; }

@@ -21,7 +21,9 @@ test('atomically allows one window to claim an event', async () => {
 
 test('uses every configured backoff then makes a final lease attempt', async () => {
   const storage = await directory();
-  const held = await acquireAtomicLease(join(storage, 'notifications.lock'), 10_000);
+  // The holder must heartbeat faster than the 1 s window DeliveryLedger acquires with,
+  // or it reads as stale between beats and gets taken over before the last backoff.
+  const held = await acquireAtomicLease(join(storage, 'notifications.lock'), 600);
   const delays: number[] = [];
   const ledger = new DeliveryLedger(storage, async (ms) => {
     delays.push(ms);

@@ -1,9 +1,13 @@
 import * as assert from 'node:assert/strict';
 import * as vscode from 'vscode';
-import type { MissionControlTestApi } from '../../src/extension.ts';
+import { abortableDelay, type MissionControlTestApi } from '../../src/extension.ts';
 import { task } from '../unit/fixtures.ts';
 
 suite('Mission Control extension', () => {
+  test('rejects an already-aborted lifecycle delay immediately', async () => {
+    const controller = new AbortController(); controller.abort();
+    await assert.rejects(abortableDelay(60_000, controller.signal), /aborted/);
+  });
   test('activates within the synchronous budget and registers commands', async () => {
     const extension = vscode.extensions.getExtension('otapiero.mission-control');
     assert.ok(extension);

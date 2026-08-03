@@ -7,7 +7,7 @@ import type { EnsureReadyResult, ServerManager } from './server-manager.ts';
 import type { TaskStore } from './task-store.ts';
 
 export interface RuntimeSettings { serverUrl: string; installationPath: string | undefined; autoStart: boolean; }
-type Client = Pick<MissionControlClient, 'config' | 'tasks' | 'reconcile' | 'connect'>;
+type Client = Pick<MissionControlClient, 'config' | 'tasks' | 'reconcile' | 'connect' | 'spawn'>;
 type Manager = Pick<ServerManager, 'ensureReady'> & Partial<Pick<ServerManager, 'dispose'>>;
 
 export interface RuntimeDependencies {
@@ -52,6 +52,32 @@ export class MissionControlRuntime implements vscode.Disposable {
 
   lastOpenFolderArgsForTests(): readonly unknown[] | null { return this.deps.lastOpenFolderArgsForTests?.() ?? null; }
   requestSignal(): AbortSignal | undefined { return this.controller?.signal; }
+  mutationTarget(): { client: Pick<MissionControlClient, 'spawn'>; signal: AbortSignal; generation: number } | null {
+    if (this.deps.store.snapshot().connection !== 'connected' || !this.client || !this.controller || this.controller.signal.aborted) return null;
+    return { client: this.client, signal: this.controller.signal, generation: this.generation };
+  }
+  /**
+   * Waits only while the first connection attempt is still in flight, so a command
+   * fired during startup gets a verdict instead of racing it. Settling on
+   * 'disconnected' or 'incompatible' resolves too: the command guards own the
+   * disconnected message, and waiting past a verdict would hang the command for
+   * the whole reconnect backoff.
+   */
+  async whenConnected(): Promise<void> {
+    const settling = () => this.deps.store.snapshot().connection === 'starting';
+    if (!settling()) return;
+    const signal = this.controller?.signal;
+    if (!signal || signal.aborted) return;
+    await new Promise<void>((resolve) => {
+      let unsubscribe: (() => void) | undefined;
+      const onAbort = () => finish();
+      const finish = () => { unsubscribe?.(); signal.removeEventListener('abort', onAbort); resolve(); };
+      unsubscribe = this.deps.store.onDidChange(() => { if (!settling()) finish(); });
+      // Re-check: the state can settle between the guard above and this subscription.
+      if (!settling()) { finish(); return; }
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }
   retry(): void { this.abort(); if (this.started) { this.deps.store.setConnection('starting'); this.begin(); } }
   seedTasksForTests = (tasks: readonly TaskWithDerived[]): void => { this.deps.seedTasksForTests?.(tasks); };
 

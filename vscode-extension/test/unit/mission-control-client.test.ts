@@ -1,5 +1,8 @@
+import { EventEmitter } from 'node:events';
+
 import { expect, test, vi } from 'vitest';
 
+import { Broadcaster } from '../../../src/server/sse.ts';
 import { ApiContractError, ApiError, MissionControlClient } from '../../src/client/mission-control-client.ts';
 import { config, task } from './fixtures.ts';
 
@@ -134,7 +137,59 @@ test('connect dispatches known events and reports a normal close once', async ()
   expect(onTasks).toHaveBeenCalledWith([task()]);
   expect(onPoll).toHaveBeenCalledWith({ checkedAt: '2026-08-03T10:00:00.000Z', rateLimit: null });
   expect(onClosed).toHaveBeenCalledExactlyOnceWith(null);
-  expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:4317/api/events', expect.objectContaining({ headers: { Accept: 'text/event-stream' } }));
+  expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:4317/api/events?replay=0', expect.objectContaining({ headers: { Accept: 'text/event-stream' } }));
+});
+
+test('replay-disabled stream applies an in-flight transition only after the authoritative baseline', async () => {
+  const cached = task({ phase: 'plan' });
+  const baseline = task({ phase: 'implement' });
+  const transitioned = task({ phase: 'ci' });
+  const broadcaster = new Broadcaster();
+  broadcaster.send('tasks', [cached]);
+  const encoder = new TextEncoder();
+  let streamController!: ReadableStreamDefaultController<Uint8Array>;
+  const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input) => new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      streamController = controller;
+      const raw = new EventEmitter() as EventEmitter & { write(chunk: string): boolean };
+      raw.write = (chunk) => { controller.enqueue(encoder.encode(chunk)); return true; };
+      const replay = new URL(String(input)).searchParams.get('replay') !== '0';
+      (broadcaster.add as unknown as (reply: never, options: { replay: boolean }) => void)({ raw } as never, { replay });
+    },
+  }), { status: 200, headers: { 'content-type': 'text/event-stream' } }));
+  let releaseBaseline!: () => void;
+  let baselineStarted!: () => void;
+  const started = new Promise<void>((resolve) => { baselineStarted = resolve; });
+  const waitForBaseline = new Promise<void>((resolve) => { releaseBaseline = resolve; });
+  const order: string[] = [];
+  const notifications: string[] = [];
+  let currentPhase = cached.derived.displayPhase;
+  const client = new MissionControlClient('http://127.0.0.1:4317', fetchMock);
+
+  const connected = client.connect({
+    onOpen: async () => {
+      order.push('reconcile:start');
+      baselineStarted();
+      await waitForBaseline;
+      currentPhase = baseline.derived.displayPhase;
+      order.push(`baseline:${currentPhase}`);
+    },
+    onTasks: async ([next]) => {
+      notifications.push(`${currentPhase}->${next!.derived.displayPhase}`);
+      currentPhase = next!.derived.displayPhase;
+      order.push(`sse:${currentPhase}`);
+    },
+    onPoll: vi.fn(),
+    onClosed: vi.fn(),
+  }, new AbortController().signal);
+  await started;
+  broadcaster.send('tasks', [transitioned]);
+  streamController.close();
+  releaseBaseline();
+  await connected;
+
+  expect(order).toEqual(['reconcile:start', 'baseline:implement', 'sse:ci']);
+  expect(notifications).toEqual(['implement->ci']);
 });
 
 test('connect stops after aborting the stream and reports closed once', async () => {

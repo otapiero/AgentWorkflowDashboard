@@ -73,6 +73,43 @@ test('stops lease heartbeat writes after release', async () => {
   expect((await stat(journal)).size).toBe(sizeAfterRelease);
 });
 
+test('release waits behind an earlier live mutation ticket then removes its own lock', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'start.lock');
+  const lease = await acquireAtomicLease(file, 1_000);
+  const blocker = { ticket: 'earlier', pid: process.pid, host: (await import('node:os')).hostname(), heartbeat: Date.now() };
+  await writeFile(`${file}.mutation.journal`, `\n${JSON.stringify(blocker)}\n`);
+
+  const releasing = lease!.release();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await writeFile(`${file}.mutation.journal`, `\n${JSON.stringify(blocker)}\n${JSON.stringify({ ticket: 'earlier', released: true })}\n`);
+  await releasing;
+
+  expect(await acquireAtomicLease(file, 1_000)).not.toBeNull();
+});
+
+test('a timed-out release remains retryable and keeps renewing until removal succeeds', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'start.lock');
+  // staleMs must outlast the whole retry sweep below, or the blocker ages out mid-release
+  // and the removal succeeds instead of timing out. Renewals stay blocked until it does
+  // age out, which is what the heartbeat poll then observes. The sweep needs enough
+  // attempts for the final release to step around a renewal holding the mutation lock,
+  // while still summing to far less than staleMs so the first release fails.
+  const staleMs = 600;
+  const lease = await acquireAtomicLease(file, staleMs, Date.now, { releaseRetryDelays: [0, 1, 2, 4, 8, 16] });
+  const blocker = { ticket: 'earlier', pid: process.pid, host: (await import('node:os')).hostname(), heartbeat: Date.now() };
+  await writeFile(`${file}.mutation.journal`, `\n${JSON.stringify(blocker)}\n`);
+
+  await expect(lease!.release()).rejects.toThrow('Timed out releasing atomic lease');
+  const firstHeartbeat = JSON.parse(await readFile(file, 'utf8')).heartbeat as number;
+  await expect.poll(async () => JSON.parse(await readFile(file, 'utf8')).heartbeat, { timeout: 2_000 }).not.toBe(firstHeartbeat);
+  await writeFile(`${file}.mutation.journal`, `\n${JSON.stringify(blocker)}\n${JSON.stringify({ ticket: 'earlier', released: true })}\n`);
+
+  await lease!.release();
+  await expect(readFile(file, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
 test('serializes concurrent stale takeovers so exactly one contender owns the lock', async () => {
   const directory = await temporaryDirectory();
   const file = join(directory, 'start.lock');

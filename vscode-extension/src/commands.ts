@@ -33,6 +33,7 @@ export interface CommandDependencies {
   server: Pick<ServerManager, 'restartOwned'>;
   currentServer?: () => Pick<ServerManager, 'restartOwned'>;
   canMutate?: () => boolean;
+  mutationTarget?: () => { client: Pick<MissionControlClient, 'spawn'>; signal: AbortSignal; generation: number } | null;
 }
 
 export class CommandController {
@@ -68,8 +69,10 @@ export class CommandController {
     if (!picker) throw new Error('Mission Control launch picker is not configured.');
     const request = await this.launch(task, config, picker);
     if (!request) return;
+    const target = this.deps.mutationTarget?.();
+    if (this.deps.mutationTarget && !target) { await this.deps.api.showWarningMessage('Mission Control is reconnecting. Try again when connected.'); return; }
     try {
-      await (this.deps.currentClient?.() ?? this.deps.client).spawn(task.issue, request, new AbortController().signal);
+      await (target?.client ?? this.deps.currentClient?.() ?? this.deps.client).spawn(task.issue, request, target?.signal ?? new AbortController().signal);
     } catch (error) {
       const choice = await this.deps.api.showWarningMessage(error instanceof Error ? error.message : String(error), 'Show Logs');
       if (choice === 'Show Logs') await this.showLogs();

@@ -118,4 +118,25 @@ describe('CommandController', () => {
     expect(client.spawn).not.toHaveBeenCalled();
     expect(server.restartOwned).not.toHaveBeenCalled();
   });
+
+  test('does not spawn when runtime generation changes during launch picks', async () => {
+    let finishPick!: (value: any) => void;
+    const flow = vi.fn(() => new Promise<any>(resolve => { finishPick = resolve; }));
+    const { commands, current, client, api } = controller({ runLaunchFlow: flow, mutationTarget: () => null });
+    const pending = commands.runCurrentPhase(current);
+    await Promise.resolve();
+    finishPick({ phase: 'implement' });
+    await pending;
+    expect(client.spawn).not.toHaveBeenCalled();
+    expect(api.showWarningMessage).toHaveBeenCalledWith('Mission Control is reconnecting. Try again when connected.');
+  });
+
+  test('passes the active runtime generation signal to spawn and observes abort', async () => {
+    const lifecycle = new AbortController();
+    const targetClient = { spawn: vi.fn((_issue, _request, signal: AbortSignal) => new Promise<{ spawned: unknown }>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }))) };
+    const { commands, current, api } = controller({ mutationTarget: () => ({ client: targetClient, signal: lifecycle.signal, generation: 7 }) });
+    const pending = commands.runCurrentPhase(current); await Promise.resolve(); lifecycle.abort(); await pending;
+    expect(targetClient.spawn).toHaveBeenCalledWith(current.issue, expect.any(Object), lifecycle.signal);
+    expect(api.showWarningMessage).toHaveBeenCalledWith('aborted', 'Show Logs');
+  });
 });

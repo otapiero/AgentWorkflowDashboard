@@ -22,6 +22,7 @@ export interface ServerManagerOptions {
   process: { spawn: Spawn };
   kill: (pid: number) => void;
   delay: (ms: number, signal: AbortSignal) => Promise<void>;
+  acquireLease?: typeof acquireAtomicLease;
 }
 
 export type EnsureReadyResult =
@@ -41,21 +42,28 @@ export class ServerManager {
   constructor(private readonly options: ServerManagerOptions) {}
 
   async ensureReady(): Promise<EnsureReadyResult> {
+    this.throwIfAborted();
     const url = this.validateServerUrl();
     if (typeof url === 'string') return { kind: 'configuration-error', message: url };
 
     const current = await this.health();
+    this.throwIfAborted();
     if (current) return this.fromHealth(current);
     if (!this.options.autoStart) return { kind: 'unavailable', message: 'Mission Control is unavailable and automatic startup is disabled.' };
 
-    const lease = await acquireAtomicLease(join(this.options.storagePath, 'server-start.lock'), startupLockStaleMs);
+    this.throwIfAborted();
+    const lease = await (this.options.acquireLease ?? acquireAtomicLease)(join(this.options.storagePath, 'server-start.lock'), startupLockStaleMs);
     if (!lease) return this.waitForReadiness('Mission Control did not become ready while another VS Code window was starting it.');
     try {
+      this.throwIfAborted();
       const afterLease = await this.health();
+      this.throwIfAborted();
       if (afterLease) return this.fromHealth(afterLease);
 
       const installationError = await this.validateInstallation();
+      this.throwIfAborted();
       if (installationError) return { kind: 'configuration-error', message: installationError };
+      this.throwIfAborted();
       const child = this.options.process.spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['start'], {
         cwd: this.options.installationPath!, detached: true, windowsHide: true, stdio: 'ignore',
         env: { ...process.env, MC_PORT: url.port || '4317' },
@@ -63,14 +71,21 @@ export class ServerManager {
       child.unref();
 
       for (const wait of readinessSchedule) {
+        this.throwIfAborted();
         try {
           await this.options.delay(wait, this.controller.signal);
         } catch {
+          this.throwIfAborted();
           return { kind: 'unavailable', message: 'Mission Control startup was cancelled.' };
         }
+        this.throwIfAborted();
         const ready = await this.health();
+        this.throwIfAborted();
         if (ready) {
-          if (ready.pid === child.pid) await this.writeOwner({ pid: ready.pid, startedAt: ready.startedAt });
+          if (ready.pid === child.pid) {
+            this.throwIfAborted();
+            await this.writeOwner({ pid: ready.pid, startedAt: ready.startedAt });
+          }
           return this.fromHealth(ready);
         }
       }
@@ -116,16 +131,23 @@ export class ServerManager {
   }
 
   private async health(): Promise<HealthResponse | null> {
-    try { return await this.options.client.health(this.controller.signal); } catch { return null; }
+    try { return await this.options.client.health(this.controller.signal); } catch (error) {
+      if (this.controller.signal.aborted) throw this.controller.signal.reason ?? error;
+      throwIfAbortError(error);
+      return null;
+    }
   }
   private async waitForReadiness(message: string): Promise<EnsureReadyResult> {
     for (const wait of readinessSchedule) {
-      try { await this.options.delay(wait, this.controller.signal); } catch { return { kind: 'unavailable', message: 'Mission Control startup was cancelled.' }; }
+      this.throwIfAborted();
+      try { await this.options.delay(wait, this.controller.signal); } catch { this.throwIfAborted(); return { kind: 'unavailable', message: 'Mission Control startup was cancelled.' }; }
+      this.throwIfAborted();
       const ready = await this.health();
       if (ready) return this.fromHealth(ready);
     }
     return { kind: 'unavailable', message };
   }
+  private throwIfAborted(): void { this.controller.signal.throwIfAborted(); }
   private fromHealth(health: HealthResponse): EnsureReadyResult { return health.apiVersion === this.options.expectedApiVersion ? { kind: 'ready', health } : { kind: 'incompatible', health }; }
   private ownerFile(): string { return join(this.options.storagePath, 'server-owner.json'); }
   private async readOwner(): Promise<ServerOwner | null> {
@@ -140,4 +162,8 @@ export class ServerManager {
     await writeFile(temporaryFile, JSON.stringify(owner));
     await rename(temporaryFile, this.ownerFile());
   }
+}
+
+function throwIfAbortError(error: unknown): void {
+  if (error instanceof Error && error.name === 'AbortError') throw error;
 }

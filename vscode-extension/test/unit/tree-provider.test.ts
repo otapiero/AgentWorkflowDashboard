@@ -18,14 +18,14 @@ function fakeVscode() {
 
 describe('MissionControlTreeProvider', () => {
   test('refreshes only cached changed task, Current Worktree, and named sections', () => {
-    const store = new TaskStore(); store.applyBaseline(config, [task()]);
+    const store = new TaskStore(); store.applyBaseline(config, [task({ needsYou: true })]);
     const vscode = fakeVscode();
     const provider = new MissionControlTreeProvider(store, () => undefined, vscode);
     provider.getChildren();
     provider.getChildren({ kind: 'section', id: 'section:attention', label: 'Needs Attention', expanded: true });
-    provider.getTreeItem({ kind: 'task', id: 'task:3060', issue: 3060, label: '#3060 Task', description: 'Implement', severity: 'normal' });
+    provider.getTreeItem({ kind: 'task', id: 'task:attention:3060', scope: 'attention', issue: 3060, label: '#3060 Task', description: 'Implement', severity: 'normal' });
     provider.applyStoreChange({ kind: 'targeted', issues: new Set([3060]), sections: new Set(['attention']) });
-    expect(vscode.fires.map((node: any) => node?.id)).toEqual(['task:3060', 'section:current', 'section:attention']);
+    expect(vscode.fires.map((node: any) => node?.id)).toEqual(['task:attention:3060', 'section:current', 'section:attention']);
   });
 
   test('uses a full refresh only when the filter is replaced', () => {
@@ -47,8 +47,8 @@ describe('MissionControlTreeProvider', () => {
   test('marks task items with their server-provided worktree availability', () => {
     const store = new TaskStore(); store.applyBaseline(config, [task({ worktreeExists: true }), task({ issue: 2, worktreeExists: false })]);
     const provider = new MissionControlTreeProvider(store, () => undefined, fakeVscode());
-    expect(provider.getTreeItem({ kind: 'task', id: 'task:3060', issue: 3060, label: 'one', description: '', severity: 'normal' })).toMatchObject({ collapsibleState: 0, contextValue: 'task:normal:other:worktree', command: { command: 'missionControl.openTask', arguments: [3060] } });
-    expect(provider.getTreeItem({ kind: 'task', id: 'task:2', issue: 2, label: 'two', description: '', severity: 'normal' })).toMatchObject({ contextValue: 'task:normal:other:missing-worktree', command: undefined });
+    expect(provider.getTreeItem({ kind: 'task', id: 'task:all:implement:3060', scope: 'all:implement', issue: 3060, label: 'one', description: '', severity: 'normal' })).toMatchObject({ collapsibleState: 0, contextValue: 'task:normal:other:worktree', command: { command: 'missionControl.openTask', arguments: [3060] } });
+    expect(provider.getTreeItem({ kind: 'task', id: 'task:all:implement:2', scope: 'all:implement', issue: 2, label: 'two', description: '', severity: 'normal' })).toMatchObject({ contextValue: 'task:normal:other:missing-worktree', command: undefined });
   });
 
   test('marks only the exact current live task as session eligible', () => {
@@ -56,8 +56,8 @@ describe('MissionControlTreeProvider', () => {
     const other = task({ issue: 2 }); other.integration.liveSpawn = { phase: 'implement', pid: 43, startedAt: '2026-08-03T10:00:00.000Z' };
     const store = new TaskStore(); store.applyBaseline(config, [current, other]);
     const provider = new MissionControlTreeProvider(store, () => ({ scheme: 'file', fsPath: current.integration.workspacePath }), fakeVscode());
-    expect(provider.getTreeItem({ kind: 'task', id: 'task:3060', issue: 3060, label: 'current', description: '', severity: 'normal' }).contextValue).toContain(':current-live:');
-    expect(provider.getTreeItem({ kind: 'task', id: 'task:2', issue: 2, label: 'other', description: '', severity: 'normal' }).contextValue).not.toContain(':current-live:');
+    expect(provider.getTreeItem({ kind: 'task', id: 'task:current:3060', scope: 'current', issue: 3060, label: 'current', description: '', severity: 'normal' }).contextValue).toContain(':current-live:');
+    expect(provider.getTreeItem({ kind: 'task', id: 'task:all:implement:2', scope: 'all:implement', issue: 2, label: 'other', description: '', severity: 'normal' }).contextValue).not.toContain(':current-live:');
   });
 
   test('rebuilds a changed cached task from current store state', () => {
@@ -65,12 +65,12 @@ describe('MissionControlTreeProvider', () => {
     const vscode = fakeVscode();
     const provider = new MissionControlTreeProvider(store, () => undefined, vscode);
     const cached = provider.getChildren({ kind: 'section', id: 'section:attention', label: 'Needs Attention', expanded: true });
-    provider.getTreeItem({ kind: 'task', id: 'task:3060', issue: 3060, label: '#3060 Old', description: 'Implement', severity: 'normal' });
+    provider.getTreeItem({ kind: 'task', id: 'task:attention:3060', scope: 'attention', issue: 3060, label: '#3060 Old', description: 'Implement', severity: 'normal' });
     const changed = task({ needsYou: true, checks: 'failure', worktreeExists: false }); changed.title = 'New title';
 
     store.applyTasks([changed]);
 
-    const fired = vscode.fires.find((node: any) => node?.id === 'task:3060') as any;
+    const fired = vscode.fires.find((node: any) => node?.id === 'task:attention:3060') as any;
     expect(fired).toMatchObject({ label: '#3060 New title', severity: 'bad' });
     expect(fired).not.toBe(cached[0]);
     expect(provider.getTreeItem(fired)).toMatchObject({ contextValue: 'task:bad:other:missing-worktree', command: undefined });
@@ -86,7 +86,7 @@ describe('MissionControlTreeProvider', () => {
 
     store.applyTasks([]);
 
-    expect(vscode.fires.map((node: any) => node?.id)).not.toContain('task:3060');
+    expect(vscode.fires.map((node: any) => node?.id)).not.toContain('task:all:implement:3060');
     expect(vscode.fires.map((node: any) => node?.id)).toEqual(['section:current', 'section:all']);
   });
 
@@ -114,6 +114,38 @@ describe('MissionControlTreeProvider', () => {
     provider.getChildren();
     provider.getChildren({ kind: 'section', id: 'section:current', label: 'Current Worktree', expanded: true });
     provider.applyStoreChange({ kind: 'targeted', issues: new Set([3060]), sections: new Set() });
-    expect(vscode.fires.map((node: any) => node?.id)).toEqual(['task:3060', 'section:current']);
+    expect(vscode.fires.map((node: any) => node?.id)).toEqual(['task:current:3060', 'section:current']);
+  });
+
+  test('refreshes every cached placement of one changed issue', () => {
+    const initial = task({ needsYou: true });
+    const store = new TaskStore(); store.applyBaseline(config, [initial]);
+    const vscode = fakeVscode();
+    const provider = new MissionControlTreeProvider(store, () => ({ scheme: 'file', fsPath: initial.integration.workspacePath }), vscode);
+    const roots = provider.getChildren();
+    provider.getChildren(roots[0]);
+    provider.getChildren(roots[1]);
+    const phases = provider.getChildren(roots[2]);
+    provider.getChildren(phases[0]);
+    const changed = task({ needsYou: true }); changed.title = 'Updated';
+
+    store.applyTasks([changed]);
+
+    expect(vscode.fires.filter((node: any) => node?.kind === 'task').map((node: any) => node.id)).toEqual([
+      'task:current:3060', 'task:attention:3060', 'task:all:implement:3060',
+    ]);
+    expect(vscode.fires.filter((node: any) => node?.kind === 'task').every((node: any) => node.label === '#3060 Updated')).toBe(true);
+  });
+
+  test('does not fire an old placement after a task changes phase', () => {
+    const store = new TaskStore(); store.applyBaseline(config, [task({ phase: 'implement' })]);
+    const vscode = fakeVscode();
+    const provider = new MissionControlTreeProvider(store, () => undefined, vscode);
+    const all = provider.getChildren({ kind: 'section', id: 'section:all', label: 'All Tasks', expanded: false });
+    provider.getChildren(all[0]);
+
+    store.applyTasks([task({ phase: 'ci' })]);
+
+    expect(vscode.fires.map((node: any) => node?.id)).not.toContain('task:all:implement:3060');
   });
 });

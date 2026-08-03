@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ChildProcess } from 'node:child_process';
@@ -40,6 +40,46 @@ test('returns a healthy compatible server without spawning', async () => {
 test('reports an API mismatch without spawning', async () => {
   const dependencies = options({ client: { health: vi.fn().mockResolvedValue(health({ apiVersion: 2 } as never)) } });
   await expect(new ServerManager(dependencies).ensureReady()).resolves.toEqual({ kind: 'incompatible', health: health({ apiVersion: 2 } as never) });
+  expect(dependencies.process.spawn).not.toHaveBeenCalled();
+});
+
+test('aborting pending initial health preserves cancellation with zero filesystem or process side effects', async () => {
+  const storagePath = join(await directory(), 'not-created');
+  const dependencies = options({
+    storagePath,
+    installationPath: await directory(),
+    autoStart: true,
+    client: { health: vi.fn((signal: AbortSignal) => new Promise<HealthResponse>((_resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true }))) },
+  });
+  const manager = new ServerManager(dependencies);
+  const readiness = manager.ensureReady();
+  await vi.waitFor(() => expect(dependencies.client.health).toHaveBeenCalledOnce());
+
+  manager.dispose();
+
+  await expect(readiness).rejects.toMatchObject({ name: 'AbortError' });
+  await expect(stat(storagePath)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(dependencies.process.spawn).not.toHaveBeenCalled();
+  expect(dependencies.delay).not.toHaveBeenCalled();
+  expect(dependencies.kill).not.toHaveBeenCalled();
+});
+
+test('abort immediately after acquiring startup lease still releases it', async () => {
+  const released = vi.fn().mockResolvedValue(undefined);
+  let manager!: ServerManager;
+  const dependencies = options({
+    autoStart: true,
+    client: { health: vi.fn().mockRejectedValue(new Error('offline')) },
+    acquireLease: vi.fn(async () => {
+      manager.dispose();
+      return { token: 'lease', release: released };
+    }),
+  });
+  manager = new ServerManager(dependencies);
+
+  await expect(manager.ensureReady()).rejects.toMatchObject({ name: 'AbortError' });
+
+  expect(released).toHaveBeenCalledOnce();
   expect(dependencies.process.spawn).not.toHaveBeenCalled();
 });
 

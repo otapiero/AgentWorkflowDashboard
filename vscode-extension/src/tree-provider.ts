@@ -2,7 +2,7 @@ import type * as vscode from 'vscode';
 
 import type { StoreChange } from './task-store.ts';
 import { TaskStore } from './task-store.ts';
-import { buildChildren, buildRootNodes, buildTaskNode, type TreeNode } from './tree-model.ts';
+import { buildChildren, buildRootNodes, type TreeNode } from './tree-model.ts';
 import { matchWorkspace } from './workspace-matcher.ts';
 
 type VscodeAdapter = {
@@ -70,11 +70,13 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
     const snapshot = this.store.snapshot();
     const toRefresh = new Map<string, TreeNode>();
     for (const issue of change.issues) {
-      const id = `task:${issue}`;
-      if (!this.cached.has(id)) continue;
       const task = this.store.task(issue);
-      if (task) toRefresh.set(id, buildTaskNode(task));
-      else this.cached.delete(id);
+      for (const [id, node] of this.cached) {
+        if (node.kind !== 'task' || node.issue !== issue) continue;
+        const rebuilt = task ? this.rebuildTaskPlacement(snapshot, node) : undefined;
+        if (rebuilt) toRefresh.set(id, rebuilt);
+        else this.cached.delete(id);
+      }
     }
     if (change.issues.size > 0 && this.cached.has('section:current')) {
       const current = buildRootNodes(snapshot, this.currentWorkspaceUri()).find((node) => node.id === 'section:current');
@@ -98,6 +100,12 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
     this.filter = next;
     this.cached.clear();
     this.emitter.fire(undefined); this.onDispatchForTests?.();
+  }
+
+  private rebuildTaskPlacement(snapshot: ReturnType<TaskStore['snapshot']>, node: Extract<TreeNode, { kind: 'task' }>): Extract<TreeNode, { kind: 'task' }> | undefined {
+    const parentId = node.scope === 'current' ? 'section:current' : node.scope === 'attention' ? 'section:attention' : `phase:${node.scope.slice('all:'.length)}`;
+    return buildChildren(snapshot, this.currentWorkspaceUri(), parentId, this.filter)
+      .find((candidate): candidate is Extract<TreeNode, { kind: 'task' }> => candidate.kind === 'task' && candidate.issue === node.issue);
   }
 
   dispose(): void {

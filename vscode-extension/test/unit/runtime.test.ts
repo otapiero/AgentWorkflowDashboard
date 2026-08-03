@@ -104,6 +104,34 @@ test('disposal aborts the active stream and pending reconnect delay', async () =
   expect(streamAborted).toBe(true); expect(delayAborted).toBe(false);
 });
 
+test('releases a command gate once the connection settles without connecting', async () => {
+  const client = { config: async () => config, tasks: async () => [task()], reconcile: async () => [task()], connect: async () => {} };
+  const store = new TaskStore();
+  const runtime = new MissionControlRuntime({ readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }), createClient: () => client as never, createServerManager: () => ({ ensureReady: async () => ({ kind: 'unavailable', message: 'down' }) }) as never, store, notifications: { prime: () => {}, apply: async () => {} } as never, delay: async () => {}, jitter: value => value, presentConnectionFailure: async () => undefined });
+  runtime.start(); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(store.snapshot().connection).toBe('disconnected');
+  // A gate that outlived the verdict would hang the command for the whole backoff.
+  await expect(Promise.race([runtime.whenConnected(), new Promise((_resolve, reject) => setTimeout(() => reject(new Error('whenConnected hung')), 100))])).resolves.toBeUndefined();
+  runtime.dispose();
+});
+
+test('holds a command issued during startup until the connection settles', async () => {
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  const client = { config: async () => config, tasks: async () => [task()], reconcile: async () => [task()], connect: async (handlers: { onOpen(): Promise<void> }, signal: AbortSignal) => { await handlers.onOpen(); await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })); } };
+  const store = new TaskStore();
+  const runtime = new MissionControlRuntime({ readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }), createClient: () => client as never, createServerManager: () => ({ ensureReady: async () => { await pending; return { kind: 'ready', health: {} }; } }) as never, store, notifications: { prime: () => {}, apply: async () => {} } as never, delay: async () => {}, jitter: value => value, presentConnectionFailure: async () => undefined });
+  runtime.start();
+  let settled = false;
+  const gated = runtime.whenConnected().then(() => { settled = true; });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(settled).toBe(false);
+  expect(store.snapshot().connection).toBe('starting');
+  release(); await gated;
+  expect(store.snapshot().connection).toBe('connected');
+  runtime.dispose();
+});
+
 test('delivers an offline actionable transition once after authoritative reconnect', async () => {
   const baseline = task({ checks: 'success' }); const offline = task({ checks: 'failure' });
   let connection = 0; const presented: string[] = [];

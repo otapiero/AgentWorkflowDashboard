@@ -4,6 +4,10 @@ import { TaskStore, type StoreChange } from '../../src/task-store.ts';
 import { buildChildren } from '../../src/tree-model.ts';
 import { config, task } from './fixtures.ts';
 
+function attentionIssues(store: TaskStore): number[] {
+  return buildChildren(store.snapshot(), undefined, 'section:attention').flatMap((node) => node.kind === 'task' ? [node.issue] : []);
+}
+
 test('keeps task selectors in stable issue order with one task per issue', () => {
   const store = new TaskStore();
   const replaced = { ...task({ issue: 2, phase: 'ci' }), title: 'Newest issue 2' };
@@ -61,7 +65,7 @@ test('refreshes attention when a task remains actionable but its rank changes', 
   ]);
   const changes: StoreChange[] = [];
   store.onDidChange((change) => changes.push(change));
-  expect(buildChildren(store.snapshot(), undefined, 'section:attention').map((node) => node.id)).toEqual(['task:2', 'task:1']);
+  expect(attentionIssues(store)).toEqual([2, 1]);
 
   store.applyTasks([
     task({ issue: 1, needsYou: true, checks: 'failure', lastReconciledAt: '2026-08-03T12:00:00.000Z' }),
@@ -69,7 +73,47 @@ test('refreshes attention when a task remains actionable but its rank changes', 
   ]);
 
   expect(changes).toEqual([{ kind: 'targeted', issues: new Set([1]), sections: new Set(['attention']) }]);
-  expect(buildChildren(store.snapshot(), undefined, 'section:attention').map((node) => node.id)).toEqual(['task:1', 'task:2']);
+  expect(attentionIssues(store)).toEqual([1, 2]);
+});
+
+test('retains attention order across unrelated global reconciliation timestamps and titles', () => {
+  const store = new TaskStore();
+  const one = task({ issue: 1, needsYou: true, lastReconciledAt: '2026-08-03T10:00:00.000Z' });
+  const two = task({ issue: 2, needsYou: true, lastReconciledAt: '2026-08-03T11:00:00.000Z' });
+  store.applyBaseline(config, [one, two]);
+
+  const updatedOne = task({ issue: 1, needsYou: true, lastReconciledAt: '2026-08-03T13:00:00.000Z' }); updatedOne.title = 'Renamed';
+  store.applyTasks([updatedOne, task({ issue: 2, needsYou: true, lastReconciledAt: '2026-08-03T12:00:00.000Z' })]);
+
+  expect(attentionIssues(store)).toEqual([2, 1]);
+});
+
+test('updates attention rank on a structured approval transition', () => {
+  const store = new TaskStore();
+  store.applyBaseline(config, [
+    task({ issue: 1, needsYou: true, lastReconciledAt: '2026-08-03T10:00:00.000Z' }),
+    task({ issue: 2, needsYou: true, lastReconciledAt: '2026-08-03T11:00:00.000Z' }),
+  ]);
+  const transitioned = task({ issue: 1, needsYou: true, lastReconciledAt: '2026-08-03T12:00:00.000Z' }); transitioned.integration.approvalRequired = true;
+
+  store.applyTasks([transitioned, task({ issue: 2, needsYou: true, lastReconciledAt: '2026-08-03T12:30:00.000Z' })]);
+
+  expect(attentionIssues(store)).toEqual([1, 2]);
+});
+
+test('clears attention rank on removal so re-entry gets its new transition time', () => {
+  const store = new TaskStore();
+  store.applyBaseline(config, [
+    task({ issue: 1, needsYou: true, lastReconciledAt: '2026-08-03T10:00:00.000Z' }),
+    task({ issue: 2, needsYou: true, lastReconciledAt: '2026-08-03T11:00:00.000Z' }),
+  ]);
+  store.applyTasks([task({ issue: 2, needsYou: true, lastReconciledAt: '2026-08-03T12:00:00.000Z' })]);
+  store.applyTasks([
+    task({ issue: 1, needsYou: true, lastReconciledAt: '2026-08-03T13:00:00.000Z' }),
+    task({ issue: 2, needsYou: true, lastReconciledAt: '2026-08-03T13:30:00.000Z' }),
+  ]);
+
+  expect(attentionIssues(store)).toEqual([1, 2]);
 });
 
 test('reports connection updates and retains poll metadata separately', () => {

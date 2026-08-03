@@ -14,6 +14,7 @@ export type StoreChange = {
 export interface TaskStoreSnapshot {
   config: BoardConfig | null;
   tasks: readonly TaskWithDerived[];
+  attentionTransitions: ReadonlyMap<number, string>;
   poll: PollMeta | null;
   connection: ConnectionState;
   isBaselineReady: boolean;
@@ -24,6 +25,8 @@ type ChangeListener = (change: StoreChange) => void;
 export class TaskStore {
   private readonly tasksByIssue = new Map<number, TaskWithDerived>();
   private readonly signatures = new Map<number, string>();
+  private readonly attentionSignatures = new Map<number, string>();
+  private readonly attentionTransitions = new Map<number, string>();
   private readonly listeners = new Set<ChangeListener>();
   private orderedTasks: readonly TaskWithDerived[] = Object.freeze([]);
   private config: BoardConfig | null = null;
@@ -70,6 +73,7 @@ export class TaskStore {
     return {
       config: this.config,
       tasks: this.orderedTasks,
+      attentionTransitions: this.attentionTransitions,
       poll: this.poll,
       connection: this.connection,
       isBaselineReady: this.baselineReady,
@@ -103,6 +107,8 @@ export class TaskStore {
       if (incoming.has(issue)) continue;
       this.tasksByIssue.delete(issue);
       this.signatures.delete(issue);
+      this.attentionSignatures.delete(issue);
+      this.attentionTransitions.delete(issue);
       issues.add(issue);
       sections.add('all');
       sections.add(previous.derived.displayPhase);
@@ -119,12 +125,12 @@ export class TaskStore {
         sections.add('all');
         sections.add(next.derived.displayPhase);
         if (next.derived.needsYou) sections.add('attention');
+        this.updateAttentionTransition(undefined, next);
         continue;
       }
 
-      const attentionRankChanged = (previous.derived.needsYou || next.derived.needsYou)
-        && previous.lastReconciledAt !== next.lastReconciledAt;
-      if (this.signatures.get(issue) === nextSignature && !attentionRankChanged) {
+      const attentionChanged = this.updateAttentionTransition(previous, next);
+      if (this.signatures.get(issue) === nextSignature) {
         this.tasksByIssue.set(issue, next);
         continue;
       }
@@ -136,7 +142,7 @@ export class TaskStore {
         sections.add(previous.derived.displayPhase);
         sections.add(next.derived.displayPhase);
       }
-      if (previous.derived.needsYou || next.derived.needsYou) sections.add('attention');
+      if (attentionChanged) sections.add('attention');
     }
 
     this.orderedTasks = Object.freeze([...this.tasksByIssue.values()].sort((left, right) => left.issue - right.issue));
@@ -145,6 +151,22 @@ export class TaskStore {
 
   private emit(change: StoreChange): void {
     for (const listener of this.listeners) listener(change);
+  }
+
+  private updateAttentionTransition(previous: TaskWithDerived | undefined, next: TaskWithDerived): boolean {
+    const issue = next.issue;
+    const previousSignature = this.attentionSignatures.get(issue);
+    if (!next.derived.needsYou) {
+      this.attentionSignatures.delete(issue);
+      this.attentionTransitions.delete(issue);
+      return previous?.derived.needsYou === true;
+    }
+
+    const nextSignature = attentionSignature(next);
+    const changed = previous?.derived.needsYou !== true || previousSignature !== nextSignature;
+    if (changed) this.attentionTransitions.set(issue, next.lastReconciledAt ?? '');
+    this.attentionSignatures.set(issue, nextSignature);
+    return changed;
   }
 }
 
@@ -155,4 +177,15 @@ function pipelineSignature(config: BoardConfig): string {
 function signature(task: TaskWithDerived): string {
   const { lastReconciledAt: _lastReconciledAt, ...stableTask } = task;
   return JSON.stringify(stableTask);
+}
+
+function attentionSignature(task: TaskWithDerived): string {
+  return JSON.stringify({
+    needsYou: task.derived.needsYou,
+    severity: task.integration.checks === 'failure' || task.integration.review.decision === 'CHANGES_REQUESTED' ? 'bad' : 'warn',
+    approvalRequired: task.integration.approvalRequired,
+    reviewDecision: task.integration.review.decision,
+    unresolvedThreads: task.integration.review.unresolvedThreads,
+    copilotUnresolved: task.integration.review.copilotUnresolved,
+  });
 }

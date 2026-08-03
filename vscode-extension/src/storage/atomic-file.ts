@@ -17,6 +17,7 @@ const JOURNAL_BYTE_CAP = 128 * 1024;
 export interface AtomicLeaseTestHooks {
   token?: () => string;
   afterMutationOwnership?: () => Promise<void>;
+  releaseRetryDelays?: readonly number[];
 }
 
 /**
@@ -155,21 +156,44 @@ export async function acquireAtomicLease(
       const leaseHeartbeat = setInterval(renew, Math.max(25, Math.floor(staleMs / 3)));
       leaseHeartbeat.unref();
       let released = false;
+      let releaseAttempt: Promise<void> | null = null;
       return {
         token,
         async release(): Promise<void> {
           if (released) return;
-          released = true;
-          clearInterval(leaseHeartbeat);
-          await renewal;
-          await withMutationLock(file, staleMs, now, hooks, async () => {
-            const current = await readRecord(file);
-            if (current?.token === token) {
-              try { await unlink(file); } catch (error) {
-                if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          if (releaseAttempt) return releaseAttempt;
+          releaseAttempt = (async () => {
+            const retryDelays = hooks?.releaseRetryDelays ?? [0, 10, 25, 50, 100, 200, 400, 400, 400, 400];
+            for (const delayMs of retryDelays) {
+              const current = await readRecord(file);
+              if (current?.token !== token) {
+                clearInterval(leaseHeartbeat);
+                await renewal;
+                released = true;
+                return;
               }
+              const removed = await withMutationLock(file, staleMs, now, hooks, async () => {
+                const checked = await readRecord(file);
+                if (checked?.token !== token) return true;
+                try { await unlink(file); } catch (error) {
+                  if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+                }
+                return true;
+              });
+              if (removed) {
+                clearInterval(leaseHeartbeat);
+                await renewal;
+                released = true;
+                return;
+              }
+              if (delayMs > 0) await new Promise<void>((resolve) => {
+                const timer = setTimeout(resolve, delayMs);
+                timer.unref();
+              });
             }
-          });
+            throw new Error('Timed out releasing atomic lease');
+          })();
+          try { await releaseAttempt; } finally { releaseAttempt = null; }
         },
       };
     } catch (error) {
