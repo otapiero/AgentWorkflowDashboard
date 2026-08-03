@@ -17,7 +17,7 @@ function fakeVscode() {
 }
 
 describe('MissionControlTreeProvider', () => {
-  test('refreshes only cached changed task and named sections', () => {
+  test('refreshes only cached changed task, Current Worktree, and named sections', () => {
     const store = new TaskStore(); store.applyBaseline(config, [task()]);
     const vscode = fakeVscode();
     const provider = new MissionControlTreeProvider(store, () => undefined, vscode);
@@ -25,7 +25,7 @@ describe('MissionControlTreeProvider', () => {
     provider.getChildren({ kind: 'section', id: 'section:attention', label: 'Needs Attention', expanded: true });
     provider.getTreeItem({ kind: 'task', id: 'task:3060', issue: 3060, label: '#3060 Task', description: 'Implement', severity: 'normal' });
     provider.applyStoreChange({ issues: new Set([3060]), sections: new Set(['attention']) });
-    expect(vscode.fires.map((node: any) => node?.id)).toEqual(['task:3060', 'section:attention']);
+    expect(vscode.fires.map((node: any) => node?.id)).toEqual(['task:3060', 'section:current', 'section:attention']);
   });
 
   test('uses a full refresh only when the filter is replaced', () => {
@@ -34,5 +34,24 @@ describe('MissionControlTreeProvider', () => {
     const provider = new MissionControlTreeProvider(store, () => undefined, vscode);
     provider.setFilter('3060');
     expect(vscode.fires).toEqual([undefined]);
+  });
+
+  test('refreshes cached Current Worktree when a task is added for this workspace', () => {
+    const store = new TaskStore(); store.applyBaseline(config, []);
+    const vscode = fakeVscode();
+    const provider = new MissionControlTreeProvider(store, () => ({ scheme: 'file', fsPath: 'C:\\mc\\worktrees\\issue-3060' }), vscode);
+    provider.getChildren();
+    provider.applyStoreChange({ issues: new Set([3060]), sections: new Set() });
+    expect(vscode.fires.map((node: any) => node?.id)).toEqual(['section:current']);
+  });
+
+  test('refreshes cached Current Worktree when its task is removed', () => {
+    const store = new TaskStore(); store.applyBaseline(config, [task()]);
+    const vscode = fakeVscode();
+    const provider = new MissionControlTreeProvider(store, () => ({ scheme: 'file', fsPath: 'C:\\mc\\worktrees\\issue-3060' }), vscode);
+    provider.getChildren();
+    provider.getChildren({ kind: 'section', id: 'section:current', label: 'Current Worktree', expanded: true });
+    provider.applyStoreChange({ issues: new Set([3060]), sections: new Set() });
+    expect(vscode.fires.map((node: any) => node?.id)).toEqual(['task:3060', 'section:current']);
   });
 });

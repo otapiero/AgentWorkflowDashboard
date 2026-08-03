@@ -62,6 +62,10 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
       const node = this.cached.get(id);
       if (node) toRefresh.set(id, node);
     }
+    if (change.issues.size > 0) {
+      const current = this.cached.get('section:current');
+      if (current) toRefresh.set(current.id, current);
+    }
     for (const section of change.sections) {
       const id = section === 'current' || section === 'attention' || section === 'all' ? `section:${section}` : `phase:${section}`;
       const node = this.cached.get(id);
