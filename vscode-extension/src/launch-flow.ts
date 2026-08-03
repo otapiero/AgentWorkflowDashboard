@@ -40,7 +40,7 @@ export async function runLaunchFlow(
     selection = { ...selection, effort: '' };
   }
 
-  const confirmation = confirmationText(phase.value as Phase, selection);
+  const confirmation = confirmationText(task.issue, phase.value as Phase, selection);
   const confirmed = await choose(picker, confirmation, [{ label: 'Run', value: 'confirm' }, { label: 'Cancel', value: 'cancel' }]);
   if (!confirmed || confirmed.value !== 'confirm') return null;
   return { phase: phase.value as Phase, ...selection };
@@ -61,6 +61,6 @@ function choose(picker: LaunchPicker, prompt: string, items: readonly LaunchPick
   return picker.pick(prompt, items);
 }
 
-function confirmationText(phase: Phase, selection: AgentSelection): string {
-  return `Run ${phase} with ${[selection.agent, selection.model, selection.effort].filter(Boolean).join(' · ')}?`;
+function confirmationText(issue: number, phase: Phase, selection: AgentSelection): string {
+  return `Run #${issue} · ${phase} with ${[selection.agent, selection.model, selection.effort].filter(Boolean).join(' · ')}?`;
 }

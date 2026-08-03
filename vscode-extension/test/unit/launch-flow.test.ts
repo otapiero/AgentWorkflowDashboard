@@ -20,7 +20,7 @@ describe('runLaunchFlow', () => {
     const choices = picker(['implement', 'codex', 'gpt-5.6-sol', 'high', 'confirm']);
     const result = await runLaunchFlow(task({ phase: 'ci' }), config, choices);
     expect(result).toEqual({ phase: 'implement', agent: 'codex', model: 'gpt-5.6-sol', effort: 'high' });
-    expect(choices.prompts).toEqual(['Phase', 'Agent', 'Model', 'Reasoning effort', 'Run implement with codex · gpt-5.6-sol · high?']);
+    expect(choices.prompts).toEqual(['Phase', 'Agent', 'Model', 'Reasoning effort', 'Run #3060 · implement with codex · gpt-5.6-sol · high?']);
   });
 
   test('clears unsupported pinned values when changing agent', async () => {
@@ -41,7 +41,7 @@ describe('runLaunchFlow', () => {
     const choices = picker(['implement', 'simple', 'standard', 'confirm']);
     expect(await runLaunchFlow(task(), selected, choices))
       .toEqual({ phase: 'implement', agent: 'simple', model: 'standard', effort: '' });
-    expect(choices.prompts).toEqual(['Phase', 'Agent', 'Model', 'Run implement with simple · standard?']);
+    expect(choices.prompts).toEqual(['Phase', 'Agent', 'Model', 'Run #3060 · implement with simple · standard?']);
   });
 
   test.each([0, 1, 2, 3, 4])('returns null when cancelled at step %i', async (step) => {

@@ -54,6 +54,15 @@ describe('CommandController', () => {
     expect(client.spawn).toHaveBeenCalledWith(current.issue, { phase: 'implement', agent: 'codex', model: 'gpt-5.6-sol', effort: 'high' }, expect.any(AbortSignal));
   });
 
+  test('shows a rejected spawn message and opens logs when requested', async () => {
+    const { commands, api, client, output } = controller();
+    client.spawn.mockRejectedValueOnce(new Error('The selected agent is unavailable.'));
+    api.showWarningMessage.mockResolvedValueOnce('Show Logs');
+    await commands.runCurrentPhase();
+    expect(api.showWarningMessage).toHaveBeenCalledWith('The selected agent is unavailable.', 'Show Logs');
+    expect(output.show).toHaveBeenCalledOnce();
+  });
+
   test('shows an unrelated workspace message without spawning', async () => {
     const { commands, api, client } = controller();
     api.workspaceUri = () => ({ scheme: 'file', fsPath: 'C:\\other' });

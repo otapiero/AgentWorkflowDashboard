@@ -14,7 +14,7 @@ export interface CommandsApi {
   uriParse(value: string): unknown;
   openExternal(uri: unknown): Thenable<boolean> | Promise<boolean>;
   showInformationMessage(message: string): Thenable<unknown> | Promise<unknown>;
-  showWarningMessage(message: string): Thenable<unknown> | Promise<unknown>;
+  showWarningMessage(message: string, ...items: string[]): Thenable<string | undefined> | Promise<string | undefined>;
   showQuickPick(items: readonly TaskChoice[], options: { placeHolder: string }): Thenable<TaskChoice | undefined> | Promise<TaskChoice | undefined>;
   terminals: readonly { shellIntegration?: { cwd?: { fsPath: string } }; show(): void }[];
   workspaceUri(): Uri | undefined;
@@ -64,7 +64,12 @@ export class CommandController {
     if (!picker) throw new Error('Mission Control launch picker is not configured.');
     const request = await this.launch(task, config, picker);
     if (!request) return;
-    await this.deps.client.spawn(task.issue, request, new AbortController().signal);
+    try {
+      await this.deps.client.spawn(task.issue, request, new AbortController().signal);
+    } catch (error) {
+      const choice = await this.deps.api.showWarningMessage(error instanceof Error ? error.message : String(error), 'Show Logs');
+      if (choice === 'Show Logs') await this.showLogs();
+    }
   }
 
   async openDashboard(): Promise<void> {
