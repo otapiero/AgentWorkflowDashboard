@@ -24,7 +24,7 @@ export function Lane({
   onEditDefault,
 }: Props) {
   const needsAttention = tasks.some((t) => t.derived.needsYou);
-  const isAgentPhase = phase.actor === 'claude' || phase.actor === 'copilot';
+  const isAgentPhase = config.agents.some((agent) => agent.name === phase.actor);
   const override = config.phaseDefaults[phase.id];
   const defaultAgent = override?.agent ?? (isAgentPhase ? phase.actor : null);
 

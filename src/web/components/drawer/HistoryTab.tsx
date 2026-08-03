@@ -32,9 +32,10 @@ export function HistoryTab({ task }: TabProps) {
           </div>
           <div className="history">
             {usage.sessions.map((s) => (
-              <div key={s.sessionId}>
+              <div key={`${s.agent}-${s.sessionId}`}>
                 {s.startedAt ? new Date(s.startedAt).toLocaleString() : 'session'} ·{' '}
-                {s.models.join(', ') || 'claude'} · {fmtTokens(s.tokens.total)} tok
+                {s.agent} · {s.models.join(', ') || 'default model'} ·{' '}
+                {fmtTokens(s.tokens.total)} tok
               </div>
             ))}
           </div>
@@ -42,7 +43,7 @@ export function HistoryTab({ task }: TabProps) {
       ) : (
         <p className="note">
           {usage
-            ? 'Usage not tracked for this agent (only Claude Code sessions are counted).'
+            ? 'No Claude Code or Codex CLI usage was found for this worktree.'
             : 'Loading usage…'}
         </p>
       )}

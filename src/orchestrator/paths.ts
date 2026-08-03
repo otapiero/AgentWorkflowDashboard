@@ -90,6 +90,11 @@ export function claudeProjectsDir(): string {
   return process.env.MC_CLAUDE_PROJECTS ?? join(homedir(), '.claude', 'projects');
 }
 
+/** Where Codex CLI writes its date-partitioned rollout transcripts. */
+export function codexSessionsDir(): string {
+  return process.env.MC_CODEX_SESSIONS ?? join(homedir(), '.codex', 'sessions');
+}
+
 export function claudeCommandPath(command: string): string {
   return join(claudeCommandsDir(), `${command}.md`);
 }

@@ -22,7 +22,8 @@ export const PHASES = [
 
 export type Phase = (typeof PHASES)[number];
 
-export type Actor = 'claude' | 'copilot' | 'none' | 'you';
+/** A configured agent name, or one of the two non-agent pipeline actors. */
+export type Actor = string;
 
 export type GateSignal =
   | 'pr_exists'
@@ -220,27 +221,31 @@ export interface StateFile {
 // --- config.yaml ---------------------------------------------------------
 
 /**
- * How to drive one agent CLI. Verified differences the schema must express:
- * `claude` takes its prompt positionally and supports --append-system-prompt;
- * `copilot` takes `-i <prompt>` and has no system-prompt flag at all.
+ * How to drive one agent CLI. Profiles describe invocation differences rather
+ * than baking provider names into the orchestrator.
  */
 export interface AgentProfile {
   launch: string;
-  /** 'positional' => `claude "<prompt>"`; 'flag' => `copilot -i "<prompt>"`. */
+  /** 'positional' => `agent "<prompt>"`; 'flag' => `agent -i "<prompt>"`. */
   promptMode: 'positional' | 'flag';
   promptFlag?: string;
+  /** Where prompt arguments appear relative to all other args. Default 'first'. */
+  promptPosition?: 'first' | 'last';
   modelFlag?: string;
   model?: string;
   /** Models offered in the picker. Falls back to a built-in list per agent. */
   models?: string[];
   /** Flag that sets reasoning effort, e.g. '--effort'. Omit if unsupported. */
   effortFlag?: string;
+  /** Optional argument template, e.g. `model_reasoning_effort="{{effort}}"`. */
+  effortValueTemplate?: string;
   /** Effort levels offered in the picker. Falls back to a built-in list. */
   efforts?: string[];
   effort?: string;
   /** 'flag' => pass via instructionFlag; 'inline' => prepend into the prompt body. */
   instructionMode: 'flag' | 'inline';
   instructionFlag?: string;
+  /** Extra args; {{taskDir}} and {{worktree}} are expanded at spawn time. */
   extraArgs?: string[];
 }
 

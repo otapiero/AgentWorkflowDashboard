@@ -22,9 +22,8 @@ interface Props {
  * actor.
  */
 export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
-  const agentPhases = config.pipeline.filter(
-    (p) => p.actor === 'claude' || p.actor === 'copilot',
-  );
+  const agentNames = new Set(config.agents.map((agent) => agent.name));
+  const agentPhases = config.pipeline.filter((p) => agentNames.has(p.actor));
 
   const [draft, setDraft] = useState<Record<string, AgentSelection>>(() =>
     Object.fromEntries(

@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
-import { claudeProjectsDir, worktreePath } from './paths.ts';
+import { claudeProjectsDir, codexSessionsDir, worktreePath } from './paths.ts';
 
 export interface TokenTotals {
   input: number;
@@ -12,6 +12,7 @@ export interface TokenTotals {
 }
 export interface SessionUsage {
   sessionId: string;
+  agent: 'claude' | 'codex';
   tokens: TokenTotals;
   models: string[];
   startedAt: string;
@@ -86,6 +87,7 @@ export function parseSessionFile(
   if (!matched) return null;
   return {
     sessionId,
+    agent: 'claude',
     tokens,
     models: [...models],
     startedAt: startedAt ?? '',
@@ -93,9 +95,86 @@ export function parseSessionFile(
   };
 }
 
-/** All Claude Code sessions attributable to a mission's worktree. */
-export function missionUsage(issue: number): MissionUsage {
-  const targetCwd = worktreePath(issue);
+function codexTokens(usage: Record<string, unknown>): TokenTotals {
+  const n = (v: unknown) => (typeof v === 'number' ? v : 0);
+  const inputTotal = n(usage.input_tokens);
+  const cacheRead = n(usage.cached_input_tokens);
+  const cacheCreate = n(usage.cache_write_input_tokens);
+  // Codex input_tokens includes cached input. Keep the four UI categories
+  // disjoint so their sum equals total_tokens rather than double-counting it.
+  const input = Math.max(0, inputTotal - cacheRead - cacheCreate);
+  const output = n(usage.output_tokens);
+  const total = n(usage.total_tokens) || input + output + cacheCreate + cacheRead;
+  return { input, output, cacheCreate, cacheRead, total };
+}
+
+/** Parse one Codex rollout, using its final cumulative token_count event. */
+export function parseCodexSessionFile(
+  content: string,
+  fallbackSessionId: string,
+  targetCwd: string,
+): SessionUsage | null {
+  let sessionId = fallbackSessionId;
+  let sessionMatches = false;
+  let startedAt = '';
+  let endedAt = '';
+  let tokens: TokenTotals | null = null;
+  const models = new Set<string>();
+
+  for (const raw of content.split(/\r?\n/)) {
+    if (!raw.trim()) continue;
+    let line: {
+      type?: string;
+      timestamp?: string;
+      payload?: {
+        type?: string;
+        id?: string;
+        cwd?: string;
+        model?: string;
+        info?: { total_token_usage?: Record<string, unknown> };
+      };
+    };
+    try {
+      line = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+
+    if (line.type === 'session_meta') {
+      if (typeof line.payload?.id === 'string') sessionId = line.payload.id;
+      if (typeof line.payload?.cwd === 'string') {
+        sessionMatches = samePath(line.payload.cwd, targetCwd);
+      }
+      if (typeof line.timestamp === 'string') startedAt = line.timestamp;
+      continue;
+    }
+
+    if (line.type === 'turn_context' && typeof line.payload?.model === 'string') {
+      models.add(line.payload.model);
+    }
+
+    if (
+      line.type === 'event_msg' &&
+      line.payload?.type === 'token_count' &&
+      line.payload.info?.total_token_usage
+    ) {
+      tokens = codexTokens(line.payload.info.total_token_usage);
+      if (typeof line.timestamp === 'string') endedAt = line.timestamp;
+    }
+  }
+
+  if (!sessionMatches || !tokens) return null;
+  return {
+    sessionId,
+    agent: 'codex',
+    tokens,
+    models: [...models],
+    startedAt,
+    endedAt,
+  };
+}
+
+function collectClaudeSessions(targetCwd: string, issue: number): SessionUsage[] {
   const root = claudeProjectsDir();
   const sessions: SessionUsage[] = [];
 
@@ -114,6 +193,40 @@ export function missionUsage(issue: number): MissionUsage {
       }
     }
   }
+
+  return sessions;
+}
+
+function jsonlFiles(root: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) files.push(...jsonlFiles(path));
+    else if (entry.isFile() && entry.name.endsWith('.jsonl')) files.push(path);
+  }
+  return files;
+}
+
+function collectCodexSessions(targetCwd: string): SessionUsage[] {
+  const root = codexSessionsDir();
+  if (!existsSync(root)) return [];
+
+  const sessions: SessionUsage[] = [];
+  for (const file of jsonlFiles(root)) {
+    const fallbackId = basename(file, '.jsonl');
+    const parsed = parseCodexSessionFile(readFileSync(file, 'utf8'), fallbackId, targetCwd);
+    if (parsed) sessions.push(parsed);
+  }
+  return sessions;
+}
+
+/** All supported agent sessions attributable to a mission's worktree. */
+export function missionUsage(issue: number): MissionUsage {
+  const targetCwd = worktreePath(issue);
+  const sessions = [
+    ...collectClaudeSessions(targetCwd, issue),
+    ...collectCodexSessions(targetCwd),
+  ];
 
   sessions.sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   const total = sessions.reduce<TokenTotals>((acc, s) => addUsage(acc, {

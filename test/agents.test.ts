@@ -20,6 +20,13 @@ const config = {
       instructionMode: 'inline',
       model: 'default',
     },
+    codex: {
+      launch: 'codex',
+      promptMode: 'positional',
+      promptPosition: 'last',
+      instructionMode: 'inline',
+      model: 'default',
+    },
   },
   pipeline: [
     { id: 'plan', label: 'Plan', actor: 'claude', command: 'mc-planner', gate: { type: 'manual' } },
@@ -144,6 +151,15 @@ describe('agentCapabilities', () => {
   test("copilot's built-in effort list includes its extra levels", () => {
     const caps = agentCapabilities('copilot', config.agents.copilot as AgentProfile);
     expect(caps.efforts).toContain('minimal');
+    expect(caps.hasEffort).toBe(true);
+  });
+
+  test('supplies Codex models and config-based effort support', () => {
+    const caps = agentCapabilities('codex', config.agents.codex as AgentProfile);
+    expect(caps.models).toContain('gpt-5.6-sol');
+    expect(caps.models).toContain('gpt-5.6-luna');
+    expect(caps.efforts).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+    expect(caps.effortFlag).toBe('-c');
     expect(caps.hasEffort).toBe(true);
   });
 

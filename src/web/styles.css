@@ -33,6 +33,8 @@
   --claude-ink: #1c0f09;
   --copilot: #7c74ff; /* Copilot indigo */
   --copilot-ink: #0f0d24;
+  --codex: #10a37f; /* OpenAI green */
+  --codex-ink: #061a15;
 
   --mono: "Cascadia Mono", "Cascadia Code", ui-monospace, "SF Mono", Consolas, monospace;
   --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -602,6 +604,11 @@ select.field {
 .chip.agent-copilot {
   background: var(--copilot);
   color: #fff;
+}
+
+.chip.agent-codex {
+  background: var(--codex);
+  color: var(--codex-ink);
 }
 
 .chip-model {

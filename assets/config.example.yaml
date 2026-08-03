@@ -56,6 +56,23 @@ agents:
     models: [auto, claude-sonnet-5, gpt-5.6-luna, gpt-5.6-sol, gpt-5.6-terra]
     efforts: [none, minimal, low, medium, high, xhigh, max]
 
+  # Codex CLI launches its interactive TUI from a positional prompt. Global
+  # options precede that prompt, and reasoning effort is a config override.
+  # The task directory is added to the workspace-write sandbox so the agent can
+  # write Mission Control's plan and marker artifacts outside the git worktree.
+  codex:
+    launch: 'codex'
+    promptMode: positional
+    promptPosition: last
+    modelFlag: '--model'
+    effortFlag: '-c'
+    effortValueTemplate: 'model_reasoning_effort="{{effort}}"'
+    instructionMode: inline
+    model: default
+    models: [default, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna]
+    efforts: [low, medium, high, xhigh, max, ultra]
+    extraArgs: ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request', '--add-dir', '{{taskDir}}']
+
 pipeline:
   - id: plan
     label: Plan

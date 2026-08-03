@@ -19,7 +19,8 @@ export interface OneTime {
 
 /**
  * Built-in capabilities for the agents we ship, used when config.yaml does not
- * spell them out. Verified against the CLIs on 2026-07-22:
+ * spell them out. Codex uses -c with an effort value template because its CLI
+ * exposes reasoning effort as a config override rather than a dedicated flag.
  *   claude 2.1.x  — model aliases; --effort low|medium|high|xhigh|max
  *   copilot 1.0.x — --model (auto|names); --effort none|minimal|low|…|max
  * config.yaml may override any of these per agent.
@@ -37,6 +38,11 @@ const BUILT_IN: Record<
     models: ['auto', 'claude-sonnet-5', 'gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra'],
     efforts: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
     effortFlag: '--effort',
+  },
+  codex: {
+    models: ['default', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'],
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+    effortFlag: '-c',
   },
 };
 

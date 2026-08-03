@@ -25,6 +25,24 @@ const copilot: AgentProfile = {
   instructionMode: 'inline',
 };
 
+const codex: AgentProfile = {
+  launch: 'codex',
+  promptMode: 'positional',
+  promptPosition: 'last',
+  modelFlag: '--model',
+  effortFlag: '-c',
+  effortValueTemplate: 'model_reasoning_effort="{{effort}}"',
+  instructionMode: 'inline',
+  extraArgs: [
+    '--sandbox',
+    'workspace-write',
+    '--ask-for-approval',
+    'on-request',
+    '--add-dir',
+    '{{taskDir}}',
+  ],
+};
+
 const RULES = 'You are in a prepared worktree.';
 
 describe('buildAgentArgs — claude', () => {
@@ -102,6 +120,44 @@ describe('buildAgentArgs — copilot', () => {
       { instructions: RULES },
     );
     expect(args).toContain('--allow-all-tools');
+  });
+});
+
+describe('buildAgentArgs — codex', () => {
+  test('places global options before the positional prompt', () => {
+    const args = buildAgentArgs('codex', codex, {
+      instructions: RULES,
+      model: 'gpt-5.6-sol',
+      variables: { taskDir: 'C:\\mc\\tasks\\3060' },
+    });
+    expect(args.at(-1)).toBe(PROMPT_TOKEN);
+    expect(args.indexOf('--model')).toBeLessThan(args.indexOf(PROMPT_TOKEN));
+  });
+
+  test('passes reasoning effort through a Codex config override', () => {
+    const args = buildAgentArgs('codex', codex, {
+      instructions: RULES,
+      effort: 'high',
+    });
+    expect(args[args.indexOf('-c') + 1]).toBe('model_reasoning_effort="high"');
+  });
+
+  test('uses a scoped writable task directory without broad sandbox access', () => {
+    const taskDir = 'C:\\Users\\o\\.mc\\tasks\\3060';
+    const args = buildAgentArgs('codex', codex, {
+      instructions: RULES,
+      variables: { taskDir },
+    });
+    expect(args[args.indexOf('--sandbox') + 1]).toBe('workspace-write');
+    expect(args[args.indexOf('--ask-for-approval') + 1]).toBe('on-request');
+    expect(args[args.indexOf('--add-dir') + 1]).toBe(taskDir);
+    expect(args).not.toContain('danger-full-access');
+  });
+
+  test('carries standing rules inline because Codex has no system-prompt flag', () => {
+    const args = buildAgentArgs('codex', codex, { instructions: RULES });
+    expect(args).not.toContain(RULES);
+    expect(args.join(' ')).not.toContain('append-system-prompt');
   });
 });
 

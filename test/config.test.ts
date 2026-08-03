@@ -41,6 +41,14 @@ agents:
     promptFlag: '-i'
     modelFlag: '--model'
     instructionMode: inline
+  codex:
+    launch: 'codex'
+    promptMode: positional
+    promptPosition: last
+    modelFlag: '--model'
+    effortFlag: '-c'
+    effortValueTemplate: 'model_reasoning_effort="{{effort}}"'
+    instructionMode: inline
 pipeline:
   - id: plan
     label: Plan
@@ -82,6 +90,13 @@ describe('parseConfig', () => {
     expect(cfg.agents.copilot?.promptMode).toBe('flag');
     expect(cfg.agents.copilot?.promptFlag).toBe('-i');
     expect(cfg.agents.copilot?.instructionMode).toBe('inline');
+  });
+
+  test('accepts Codex as a configured phase actor', () => {
+    const cfg = parseConfig(VALID.replace('actor: claude', 'actor: codex'));
+    expect(cfg.pipeline[0]?.actor).toBe('codex');
+    expect(cfg.agents.codex?.promptPosition).toBe('last');
+    expect(cfg.agents.codex?.effortValueTemplate).toContain('{{effort}}');
   });
 
   test('rejects duplicate phase ids', () => {

@@ -1,7 +1,7 @@
 # Mission Control
 
-A personal, local task cockpit for driving AI coding agents (Claude Code /
-GitHub Copilot CLI) through the Acme development pipeline. One screen shows
+A personal, local task cockpit for driving AI coding agents (Claude Code,
+GitHub Copilot CLI, and Codex CLI) through the Acme development pipeline. One screen shows
 where every task is and which need you; one click moves any task forward with
 no retyped prompts.
 
@@ -24,7 +24,7 @@ a general tool.
 ## Requirements
 
 `node`, `git`, `gh` (authenticated), `wt` (Windows Terminal), `pwsh` 7+, and at
-least one agent CLI — `claude` and/or `copilot`.
+least one agent CLI — `claude`, `copilot`, and/or `codex`.
 
 ## Setup
 
@@ -67,6 +67,16 @@ wins:
 Model and effort choices are dropdowns driven by each agent's capabilities. Edit
 the `models:` / `efforts:` lists under an agent in `config.yaml` if the CLI's
 options change.
+
+Codex runs in its interactive TUI with a workspace-write sandbox and on-request
+approvals. Mission Control also grants the task's own directory with `--add-dir`
+so Codex can write plan and marker artifacts without granting broad filesystem
+access. Reasoning effort is passed as `-c model_reasoning_effort=...`.
+
+Existing installations keep their `config.yaml`. To enable Codex without
+replacing your repository settings, copy the `agents.codex` block from
+`assets/config.example.yaml` into `%USERPROFILE%\.mc\config.yaml`; Codex
+then appears automatically in every agent picker.
 
 ## Where agents open
 
@@ -133,7 +143,7 @@ src/
   server/                  Fastify REST + SSE, static hosting
   web/                     React board (instrument panel)
 assets/
-  claude/commands/mc-*.md  prompt sources, installed to ~/.claude/commands
+  claude/commands/mc-*.md  shared prompt sources, installed to ~/.claude/commands
   scripts/                 common.ps1, run-phase.ps1
   config.example.yaml
 scripts/install.ps1

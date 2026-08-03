@@ -52,6 +52,15 @@ export interface AgentArgOptions {
   instructions: string;
   model?: string;
   effort?: string;
+  variables?: Record<string, string>;
+}
+
+function expandArg(value: string, variables: Record<string, string>): string {
+  let expanded = value;
+  for (const [name, replacement] of Object.entries(variables)) {
+    expanded = expanded.split(`{{${name}}}`).join(replacement);
+  }
+  return expanded;
 }
 
 /**
@@ -69,12 +78,10 @@ export function buildAgentArgs(
   options: AgentArgOptions,
 ): string[] {
   const args: string[] = [];
-
-  if (profile.promptMode === 'flag') {
-    args.push(profile.promptFlag!, PROMPT_TOKEN);
-  } else {
-    args.push(PROMPT_TOKEN);
-  }
+  const promptArgs =
+    profile.promptMode === 'flag'
+      ? [profile.promptFlag!, PROMPT_TOKEN]
+      : [PROMPT_TOKEN];
 
   if (profile.instructionMode === 'flag' && options.instructions) {
     args.push(profile.instructionFlag!, options.instructions);
@@ -93,12 +100,20 @@ export function buildAgentArgs(
 
   const effort = options.effort ?? profile.effort;
   if (effort && caps.effortFlag) {
-    args.push(caps.effortFlag, effort);
+    const value = profile.effortValueTemplate
+      ? expandArg(profile.effortValueTemplate, { effort })
+      : effort;
+    args.push(caps.effortFlag, value);
   }
 
-  if (profile.extraArgs?.length) args.push(...profile.extraArgs);
+  if (profile.extraArgs?.length) {
+    const variables = options.variables ?? {};
+    args.push(...profile.extraArgs.map((arg) => expandArg(arg, variables)));
+  }
 
-  return args;
+  return profile.promptPosition === 'last'
+    ? [...args, ...promptArgs]
+    : [...promptArgs, ...args];
 }
 
 export interface CodeWorkspaceOptions {
@@ -279,6 +294,10 @@ export async function spawnPhase(
       instructions: STANDING_RULES,
       model: model ?? undefined,
       effort: effort ?? undefined,
+      variables: {
+        taskDir: taskDir(task.issue),
+        worktree: worktreePath(task.issue),
+      },
     }),
     promptToken: PROMPT_TOKEN,
   };

@@ -17,10 +17,12 @@ const agentProfileSchema = z
     launch: z.string().min(1),
     promptMode: z.enum(['positional', 'flag']),
     promptFlag: z.string().min(1).optional(),
+    promptPosition: z.enum(['first', 'last']).optional(),
     modelFlag: z.string().min(1).optional(),
     model: z.string().min(1).optional(),
     models: z.array(z.string()).optional(),
     effortFlag: z.string().min(1).optional(),
+    effortValueTemplate: z.string().min(1).optional(),
     efforts: z.array(z.string()).optional(),
     effort: z.string().min(1).optional(),
     instructionMode: z.enum(['flag', 'inline']),
@@ -60,7 +62,7 @@ const gateSchema = z.union([
 const phaseSchema = z.object({
   id: z.enum(PHASES),
   label: z.string().min(1),
-  actor: z.enum(['claude', 'copilot', 'none', 'you']),
+  actor: z.string().min(1),
   command: z.string().min(1).optional(),
   spawnable: z.boolean().optional(),
   repeatable: z.boolean().optional(),
@@ -100,10 +102,7 @@ const configSchema = z
       seen.add(phase.id);
 
       // A phase can only name an agent that actually has a profile.
-      if (
-        (phase.actor === 'claude' || phase.actor === 'copilot') &&
-        !cfg.agents[phase.actor]
-      ) {
+      if (phase.actor !== 'none' && phase.actor !== 'you' && !cfg.agents[phase.actor]) {
         ctx.addIssue({
           code: 'custom',
           path: ['pipeline', phase.id, 'actor'],

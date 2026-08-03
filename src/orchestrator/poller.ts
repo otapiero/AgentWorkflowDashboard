@@ -47,7 +47,7 @@ function pinnedFor(
   phaseDefaults: PhaseDefaults,
 ): { agent: string | null; model: string | null; effort: string | null } {
   const phase = config.pipeline.find((p) => p.id === derived.displayPhase);
-  const isAgentPhase = phase?.actor === 'claude' || phase?.actor === 'copilot';
+  const isAgentPhase = Boolean(phase && config.agents[phase.actor]);
   if (!isAgentPhase) return { agent: null, model: null, effort: null };
   return resolveAgent(config, task, derived.displayPhase, phaseDefaults);
 }
