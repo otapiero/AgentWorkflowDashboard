@@ -1,10 +1,11 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 
 import { DeliveryLedger } from '../../src/notifications/delivery-ledger.ts';
 import type { NotificationEvent } from '../../src/notifications/notification-events.ts';
+import { acquireAtomicLease } from '../../src/storage/atomic-file.ts';
 
 const directories: string[] = [];
 const delay = async () => {};
@@ -16,6 +17,35 @@ test('atomically allows one window to claim an event', async () => {
   const storage = await directory();
   const [first, second] = await Promise.all([new DeliveryLedger(storage, delay).claim(event('same')), new DeliveryLedger(storage, delay).claim(event('same'))]);
   expect([first, second].filter(Boolean)).toHaveLength(1);
+});
+
+test('uses every configured backoff then makes a final lease attempt', async () => {
+  const storage = await directory();
+  const held = await acquireAtomicLease(join(storage, 'notifications.lock'), 10_000);
+  const delays: number[] = [];
+  const ledger = new DeliveryLedger(storage, async (ms) => {
+    delays.push(ms);
+    if (ms === 80) await held!.release();
+  });
+
+  await expect(ledger.claim(event('after-final-retry'))).resolves.toBe(true);
+  expect(delays).toEqual([5, 10, 20, 40, 80]);
+});
+
+test('fails closed without replacing malformed ledger contents', async () => {
+  const storage = await directory();
+  const ledgerPath = join(storage, 'notifications.json');
+  await writeFile(ledgerPath, '{not-json', 'utf8');
+
+  await expect(new DeliveryLedger(storage, delay).claim(event('malformed'))).resolves.toBe(false);
+  await expect(readFile(ledgerPath, 'utf8')).resolves.toBe('{not-json');
+});
+
+test('fails closed when the ledger cannot be read', async () => {
+  const storage = await directory();
+  await mkdir(join(storage, 'notifications.json'));
+
+  await expect(new DeliveryLedger(storage, delay).claim(event('unreadable'))).resolves.toBe(false);
 });
 
 test('keeps only the newest 500 fingerprints', async () => {
