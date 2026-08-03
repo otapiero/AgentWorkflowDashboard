@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, rmdir, unlink } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, rmdir, rm, stat, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -10,13 +10,27 @@ export interface AtomicLease {
 interface LeaseRecord { token: string; createdAt: number }
 
 /** Serializes check-and-remove mutations without ever deleting a replacement. */
-async function withMutationLock<T>(file: string, action: () => Promise<T>): Promise<T | null> {
+async function withMutationLock<T>(
+  file: string,
+  staleMs: number,
+  now: () => number,
+  action: () => Promise<T>,
+): Promise<T | null> {
   const guard = `${file}.mutation`;
   try {
     await mkdir(guard);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return null;
-    throw error;
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    let modifiedAt: number;
+    try { modifiedAt = (await stat(guard)).mtimeMs; } catch { return null; }
+    if (now() - modifiedAt <= staleMs) return null;
+
+    // Moving, rather than deleting, the observed guard means an old contender
+    // can only clean up its own quarantined directory, never a new guard.
+    const orphanedGuard = `${guard}.orphan.${randomUUID()}`;
+    try { await rename(guard, orphanedGuard); } catch { return null; }
+    await rm(orphanedGuard, { recursive: true, force: true });
+    try { await mkdir(guard); } catch { return null; }
   }
   try {
     return await action();
@@ -56,7 +70,7 @@ export async function acquireAtomicLease(
       return {
         token,
         async release(): Promise<void> {
-          await withMutationLock(file, async () => {
+          await withMutationLock(file, staleMs, now, async () => {
             const current = await readRecord(file);
             if (current?.token === token) {
               try { await unlink(file); } catch (error) {
@@ -68,7 +82,7 @@ export async function acquireAtomicLease(
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      const removed = await withMutationLock(file, async () => {
+      const removed = await withMutationLock(file, staleMs, now, async () => {
         const existing = await readRecord(file);
         if (!existing || now() - existing.createdAt <= staleMs) return false;
         try { await unlink(file); return true; } catch (unlinkError) {

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rmdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rmdir, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -51,6 +51,20 @@ test('serializes concurrent stale takeovers so exactly one contender owns the lo
   expect(owners).toHaveLength(1);
   expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ token: owners[0]!.token });
   await Promise.all(owners.map((lease) => lease.release()));
+});
+
+test('recovers an orphaned mutation guard before safely taking over a stale lease', async () => {
+  const directory = await temporaryDirectory();
+  const file = join(directory, 'start.lock');
+  const now = Date.now();
+  await writeFile(file, JSON.stringify({ token: 'stale-owner', createdAt: now - 10_000 }));
+  await mkdir(`${file}.mutation`);
+  await utimes(`${file}.mutation`, new Date(now - 10_000), new Date(now - 10_000));
+
+  const lease = await acquireAtomicLease(file, 1_000, () => now);
+
+  expect(lease).not.toBeNull();
+  expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ token: lease!.token });
 });
 
 test('release leaves a newer lock intact', async () => {
