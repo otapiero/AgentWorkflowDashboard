@@ -206,6 +206,35 @@ export function parseBranchPrsResponse(
   return map;
 }
 
+/**
+ * The branches a partial GraphQL response could not answer for.
+ *
+ * GitHub answers a batched query per alias: when one branch's alias times out
+ * it nulls that alias, reports it in `errors`, and still fills in every healthy
+ * one. So an error is only a reason to distrust the branch it names.
+ *
+ * Returns null when an error names no alias we asked for — RATE_LIMITED and
+ * MAX_NODE_LIMIT_EXCEEDED arrive with no path, and nothing in a payload like
+ * that can be trusted, so the caller must hold every card at last-good.
+ */
+export function unavailableBranches(
+  raw: unknown,
+  branches: string[],
+): Set<string> | null {
+  const errors = (raw as { errors?: Array<{ path?: unknown }> })?.errors;
+  if (!errors || errors.length === 0) return new Set();
+
+  const out = new Set<string>();
+  for (const err of errors) {
+    const path = Array.isArray(err.path) ? err.path.map(String) : [];
+    const alias = path.find((segment) => /^b\d+$/.test(segment));
+    const branch = alias ? branches[Number(alias.slice(1))] : undefined;
+    if (branch === undefined) return null;
+    out.add(branch);
+  }
+  return out;
+}
+
 /** Pull the rate-limit budget out of a `{ rateLimit }` GraphQL response. */
 export function parseRateLimit(raw: unknown): RateLimit | null {
   const rl = (raw as { data?: { rateLimit?: Partial<RateLimit> } })?.data
@@ -285,9 +314,15 @@ export async function listOpenIssues(
 }
 
 export interface BatchedBranchPrs {
-  /** False when the whole request failed, so callers can hold at last-good. */
+  /** False when nothing usable came back, so callers hold every card at last-good. */
   ok: boolean;
   byBranch: Map<string, BranchPrFacts>;
+  /**
+   * Branches this response could not answer for. Absent from the map means
+   * "no PR"; listed here means "unknown" — callers must hold these at
+   * last-good rather than reading them as PR-less.
+   */
+  unavailable: Set<string>;
   rateLimit: RateLimit | null;
 }
 
@@ -334,34 +369,68 @@ export async function fetchBranchPrs(
   config: Config,
   branches: string[],
 ): Promise<BatchedBranchPrs> {
+  // The whole request is unusable. The poller holds active cards at last-good
+  // rather than blanking every PR at once.
+  const failed = (): BatchedBranchPrs => ({
+    ok: false,
+    byBranch: new Map(),
+    unavailable: new Set(branches),
+    rateLimit: null,
+  });
+
   // No active branch: no network at all this poll. The heartbeat still fires;
   // the budget simply reports null for this cycle.
   if (branches.length === 0) {
-    return { ok: true, byBranch: new Map(), rateLimit: null };
+    return { ok: true, byBranch: new Map(), unavailable: new Set(), rateLimit: null };
   }
+
+  const args = [
+    'api', 'graphql',
+    '-f', `query=${buildBatchQuery(branches.length)}`,
+    '-f', `owner=${config.repo.owner}`,
+    '-f', `name=${config.repo.name}`,
+  ];
+  branches.forEach((b, i) => {
+    args.push('-f', `b${i}=${b}`);
+  });
+
+  let body: string;
   try {
-    const args = [
-      'api', 'graphql',
-      '-f', `query=${buildBatchQuery(branches.length)}`,
-      '-f', `owner=${config.repo.owner}`,
-      '-f', `name=${config.repo.name}`,
-    ];
-    branches.forEach((b, i) => {
-      args.push('-f', `b${i}=${b}`);
-    });
-    const raw = JSON.parse(await gh(args, config.repo.path));
-    return {
-      ok: true,
-      byBranch: parseBranchPrsResponse(
-        raw,
-        branches,
-        config.github.copilotReviewerLogin,
-      ),
-      rateLimit: parseRateLimit(raw),
-    };
-  } catch {
-    // The whole request failed. Report it so the poller holds active cards at
-    // last-good rather than blanking every PR at once.
-    return { ok: false, byBranch: new Map(), rateLimit: null };
+    body = await gh(args, config.repo.path);
+  } catch (err) {
+    // gh exits non-zero whenever the response carries an `errors` block — most
+    // often because a single alias timed out while every other branch came back
+    // intact. The payload is still on stdout, so salvage it instead of blinding
+    // the whole board on one sick branch.
+    const { stdout, stderr } = err as { stdout?: string; stderr?: string };
+    console.error(`[mc] branch PR query errored: ${stderr?.trim() || String(err)}`);
+    if (!stdout) return failed();
+    body = stdout;
   }
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(body);
+  } catch {
+    return failed();
+  }
+
+  // No repository block at all means the failure was above the aliases (auth,
+  // a bad repo, a network stub) and every branch would fold to a false "no PR".
+  const hasRepo = Boolean(
+    (raw as { data?: { repository?: unknown } })?.data?.repository,
+  );
+  const unavailable = unavailableBranches(raw, branches);
+  if (!hasRepo || !unavailable) return failed();
+
+  return {
+    ok: true,
+    byBranch: parseBranchPrsResponse(
+      raw,
+      branches,
+      config.github.copilotReviewerLogin,
+    ),
+    unavailable,
+    rateLimit: parseRateLimit(raw),
+  };
 }

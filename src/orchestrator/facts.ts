@@ -63,10 +63,13 @@ export async function gatherFacts(
   // on it, and don't let network latency scale with board size.
   if (!hasBranch && !hasWorktree) return facts;
 
-  // Active task, but the batched PR request failed this cycle: throw so the
-  // poller's per-task catch holds this card at its last good place instead of
-  // showing it as PR-less.
-  if (!batch.ok) throw new Error(`branch PR batch unavailable for #${task.issue}`);
+  // Active task whose PR facts did not come back this cycle — either the whole
+  // request failed or this branch's own alias errored. Throw so the poller's
+  // per-task catch holds this card at its last good place instead of showing it
+  // as PR-less. Branches whose aliases answered are unaffected.
+  if (!batch.ok || batch.unavailable.has(task.branch)) {
+    throw new Error(`branch PR facts unavailable for #${task.issue}`);
+  }
 
   const git = await gatherGitFacts(config, task.issue, task.branch);
   facts.dirtyFileCount = git.dirtyFileCount;
