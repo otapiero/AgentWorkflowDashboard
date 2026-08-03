@@ -140,6 +140,7 @@ export class MissionControlClient {
     try {
       value = await response.json();
     } catch (error) {
+      if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
       if (parse) throw new ApiContractError('Invalid health response');
       throw error;
     }

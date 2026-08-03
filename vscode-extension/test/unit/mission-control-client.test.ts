@@ -67,6 +67,29 @@ test('health rejects malformed JSON with a payload-free contract error', async (
   await expect(client.health(new AbortController().signal)).rejects.toEqual(new ApiContractError('Invalid health response'));
 });
 
+test('health preserves AbortError while a resolved response body is pending', async () => {
+  const controller = new AbortController();
+  let bodyController!: ReadableStreamDefaultController<Uint8Array>;
+  const pendingBody = new ReadableStream<Uint8Array>({
+    start(value) { bodyController = value; },
+  });
+  controller.signal.addEventListener('abort', () => {
+    bodyController.error(new DOMException('The operation was aborted.', 'AbortError'));
+  }, { once: true });
+  const response = new Response(pendingBody, { status: 200, headers: { 'content-type': 'application/json' } });
+  const json = vi.spyOn(response, 'json');
+  const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response);
+  const client = new MissionControlClient('http://127.0.0.1:4317', fetchMock);
+
+  const health = client.health(controller.signal);
+  await vi.waitFor(() => expect(json).toHaveBeenCalledOnce());
+  controller.abort();
+  const error: unknown = await health.catch((reason: unknown) => reason);
+
+  expect(error).toMatchObject({ name: 'AbortError' });
+  expect(error).not.toBeInstanceOf(ApiContractError);
+});
+
 test.each([
   ['null', null],
   ['array', []],
