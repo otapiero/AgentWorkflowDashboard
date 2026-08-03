@@ -93,3 +93,11 @@ test('caps failed reconnect backoff and applies injected jitter', async () => {
   runtime.start(); await new Promise(resolve => setTimeout(resolve, 0)); await new Promise(resolve => setTimeout(resolve, 0));
   expect(delays).toEqual([2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000]); runtime.dispose();
 });
+
+test('disposal aborts the active stream and pending reconnect delay', async () => {
+  let streamAborted = false; let delayAborted = false;
+  const client = { config: async () => config, tasks: async () => [task()], reconcile: async () => [task()], connect: async (handlers: { onOpen(): Promise<void> }, signal: AbortSignal) => { await handlers.onOpen(); await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => { streamAborted = true; reject(new Error('aborted')); }, { once: true })); } };
+  const runtime = new MissionControlRuntime({ readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }), createClient: () => client as never, createServerManager: () => ({ ensureReady: async () => ({ kind: 'ready', health: {} }) }) as never, store: new TaskStore(), notifications: { prime: () => {}, apply: async () => {} } as never, delay: async (_ms, signal) => await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => { delayAborted = true; reject(new Error('aborted')); }, { once: true })), jitter: value => value, presentConnectionFailure: async () => undefined });
+  runtime.start(); await new Promise(resolve => setTimeout(resolve, 0)); runtime.dispose(); await new Promise(resolve => setTimeout(resolve, 0));
+  expect(streamAborted).toBe(true); expect(delayAborted).toBe(false);
+});

@@ -47,6 +47,7 @@ export class MissionControlRuntime implements vscode.Disposable {
   }
 
   lastOpenFolderArgsForTests(): readonly unknown[] | null { return this.deps.lastOpenFolderArgsForTests?.() ?? null; }
+  requestSignal(): AbortSignal | undefined { return this.controller?.signal; }
 
   dispose(): void { this.started = false; this.abort(); }
 
