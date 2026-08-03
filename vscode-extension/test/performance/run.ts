@@ -81,10 +81,11 @@ async function measureRuntimeFlow(): Promise<{ healthyTreeMs: number; sseDispatc
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({ start(value) { controller = value; } });
+  const baselineTasks = makeTasks(500);
   const client = new MissionControlClient('http://127.0.0.1:4317', async (url) => {
     const path = new URL(url instanceof Request ? url.url : url.toString()).pathname;
     if (path === '/api/events') return new Response(stream, { status: 200 });
-    const body = path === '/api/config' ? config : makeTasks(1);
+    const body = path === '/api/config' ? config : baselineTasks;
     return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
   });
   const ready = deferred<void>(); const connected = deferred<void>(); let healthSuccessAt: number | undefined;
@@ -94,9 +95,14 @@ async function measureRuntimeFlow(): Promise<{ healthyTreeMs: number; sseDispatc
   if (healthSuccessAt === undefined) throw new Error('healthy-response boundary was not set');
   const healthyTreeMs = performance.now() - healthSuccessAt;
   await connected.promise;
+  if (store.tasks().length !== 500) throw new Error(`connected baseline: expected 500 tasks, got ${store.tasks().length}`);
   tree.getChildren();
   treeDispatches = 0; statusDispatches = 0;
-  const marker = 'sse-causal-marker'; const sseTasks = makeTasks(500, 1); for (let index = 0; index < 100; index += 1) sseTasks[index]!.title = `${marker}-${index}`;
+  const marker = 'sse-causal-marker'; const sseTasks = [...baselineTasks];
+  for (let index = 0; index < 100; index += 1) {
+    const previous = baselineTasks[index]!;
+    sseTasks[index] = { ...previous, title: `${marker}-${index}`, derived: { ...previous.derived, derivedPhase: 'plan', displayPhase: 'plan' } };
+  }
   const dispatched = deferred<void>(); let parsedAndApplied = false;
   const observe = store.onDidChange(() => { parsedAndApplied = store.task(1)?.title === `${marker}-0` && store.task(100)?.title === `${marker}-99`; if (parsedAndApplied && treeDispatches > 0 && statusDispatches > 0) dispatched.resolve(); });
   const sseStart = performance.now();
@@ -104,6 +110,8 @@ async function measureRuntimeFlow(): Promise<{ healthyTreeMs: number; sseDispatc
   await withTimeout(dispatched.promise, 1_000, 'SSE causal marker was not parsed, applied, and dispatched');
   const sseDispatchMs = performance.now() - sseStart;
   if (!parsedAndApplied) throw new Error('SSE causal marker was not delivered');
+  if (store.tasks().length !== 500) throw new Error(`SSE snapshot inserted tasks: expected 500 tasks, got ${store.tasks().length}`);
+  if (store.task(101)?.title !== baselineTasks[100]?.title || store.task(500)?.title !== baselineTasks[499]?.title) throw new Error('SSE snapshot changed tasks outside the first 100');
   observe(); stop(); runtime.dispose(); tree.dispose(); status.dispose();
   return { healthyTreeMs, sseDispatchMs };
 }
