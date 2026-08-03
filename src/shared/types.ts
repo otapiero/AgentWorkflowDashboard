@@ -125,6 +125,9 @@ export interface AgentInfo {
   models: string[];
   efforts: string[];
   hasEffort: boolean;
+  /** Configured defaults used when no task or phase override applies. */
+  defaultModel?: string;
+  defaultEffort?: string;
 }
 
 /** Configuration DTO returned by the local Mission Control API. */

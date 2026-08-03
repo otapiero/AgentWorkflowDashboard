@@ -55,6 +55,8 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
         models: caps.models,
         efforts: caps.efforts,
         hasEffort: caps.hasEffort,
+        defaultModel: profile.model,
+        defaultEffort: profile.effort,
       };
     }),
     phaseDefaults: getPhaseDefaults(),

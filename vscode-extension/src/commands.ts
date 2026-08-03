@@ -81,7 +81,15 @@ export class CommandController {
 
   async viewSession(candidate?: TaskWithDerived | number): Promise<void> {
     const task = candidate ? this.latest(candidate) : matchWorkspace(this.deps.api.workspaceUri() as { scheme: string; fsPath: string } | undefined, this.deps.store.tasks());
-    if (!task) return;
+    const current = matchWorkspace(this.deps.api.workspaceUri() as { scheme: string; fsPath: string } | undefined, this.deps.store.tasks());
+    if (!task || !current || current.issue !== task.issue) {
+      await this.deps.api.showInformationMessage('View Session is only available for the current workspace task.');
+      return;
+    }
+    if (!task.integration.liveSpawn) {
+      await this.deps.api.showInformationMessage('This task has no live Mission Control session.');
+      return;
+    }
     const expected = normalizeWorkspacePath(task.integration.workspacePath);
     const terminal = this.deps.api.terminals.find((candidateTerminal) => {
       const cwd = candidateTerminal.shellIntegration?.cwd?.fsPath;

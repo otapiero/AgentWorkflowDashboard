@@ -3,6 +3,7 @@ import { performance } from 'node:perf_hooks';
 
 import { MissionControlClient } from './client/mission-control-client.ts';
 import { CommandController } from './commands.ts';
+import { launchPickerFrom } from './launch-flow.ts';
 import { DeferredActivation } from './deferred-activation.ts';
 import { DeliveryLedger } from './notifications/delivery-ledger.ts';
 import { NotificationCoordinator } from './notifications/notification-coordinator.ts';
@@ -58,7 +59,7 @@ function createRuntime(context: vscode.ExtensionContext): MissionControlRuntime 
     showInformationMessage: vscode.window.showInformationMessage, showWarningMessage: vscode.window.showWarningMessage,
     showQuickPick: vscode.window.showQuickPick as never, terminals: vscode.window.terminals, workspaceUri: folder,
   }, store, client, currentClient: () => client, config: () => store.snapshot().config, serverUrl: () => settings().serverUrl, output, server, currentServer: () => server,
-    launchPicker: { pick: vscode.window.showQuickPick as never },
+    launchPicker: launchPickerFrom(vscode.window.showQuickPick as never),
   });
   const notificationOptions = notificationSettings();
   const notifications = new NotificationCoordinator(new DeliveryLedger(context.globalStorageUri.fsPath, async (ms) => await new Promise(resolve => setTimeout(resolve, ms))), async event => {

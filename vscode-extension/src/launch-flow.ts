@@ -1,5 +1,5 @@
-import type { AgentInfo, BoardConfig, Phase, TaskWithDerived } from '../../src/shared/types.ts';
-import { selectionForAgent, type AgentSelection } from '../../src/shared/agent-selection.ts';
+import type { BoardConfig, Phase, TaskWithDerived } from '../../src/shared/types.ts';
+import { selectionForAgent, selectionForPhase, type AgentSelection } from '../../src/shared/agent-selection.ts';
 import type { SpawnRequest } from './client/mission-control-client.ts';
 
 export interface LaunchPick {
@@ -12,6 +12,22 @@ export interface LaunchPicker {
   pick(prompt: string, items: readonly LaunchPick[]): Promise<LaunchPick | undefined>;
 }
 
+export type ShowLaunchQuickPick = (
+  items: readonly LaunchPick[],
+  options: { placeHolder: string },
+) => PromiseLike<LaunchPick | undefined>;
+
+/** Adapt VS Code's single-select picker so the resolved choice is initially active. */
+export function launchPickerFrom(showQuickPick: ShowLaunchQuickPick): LaunchPicker {
+  return {
+    async pick(prompt, items) {
+      const picked = items.find((item) => item.picked);
+      const ordered = picked ? [picked, ...items.filter((item) => item !== picked)] : items;
+      return await showQuickPick(ordered, { placeHolder: prompt });
+    },
+  };
+}
+
 export async function runLaunchFlow(
   task: TaskWithDerived,
   config: BoardConfig,
@@ -21,7 +37,7 @@ export async function runLaunchFlow(
   const phase = await choose(picker, 'Phase', phases.map((candidate) => ({ label: candidate.label, value: candidate.id, picked: candidate.id === task.derived.displayPhase })));
   if (!phase) return null;
 
-  let selection = initialSelection(task, config.agents);
+  let selection = selectionForPhase(config, task, phase.value);
   const agent = await choose(picker, 'Agent', config.agents.map((candidate) => ({ label: candidate.name, value: candidate.name, picked: candidate.name === selection.agent })));
   if (!agent) return null;
   selection = selectionForAgent(selection, config.agents, agent.value);
@@ -44,17 +60,6 @@ export async function runLaunchFlow(
   const confirmed = await choose(picker, confirmation, [{ label: 'Run', value: 'confirm' }, { label: 'Cancel', value: 'cancel' }]);
   if (!confirmed || confirmed.value !== 'confirm') return null;
   return { phase: phase.value as Phase, ...selection };
-}
-
-function initialSelection(task: TaskWithDerived, agents: readonly AgentInfo[]): AgentSelection {
-  const pinned = task.pinned;
-  const selectedAgent = agents.find((agent) => agent.name === pinned.agent) ?? agents[0];
-  if (!selectedAgent) return { agent: '', model: '', effort: '' };
-  return {
-    agent: selectedAgent.name,
-    model: selectedAgent.models.includes(pinned.model ?? '') ? pinned.model ?? '' : '',
-    effort: selectedAgent.hasEffort && selectedAgent.efforts.includes(pinned.effort ?? '') ? pinned.effort ?? '' : '',
-  };
 }
 
 function choose(picker: LaunchPicker, prompt: string, items: readonly LaunchPick[]): Promise<LaunchPick | undefined> {

@@ -7,6 +7,7 @@ import type { BoardConfig } from '../../api.ts';
 import { IconPlay } from '../bits.tsx';
 import { PromptPreview } from './PromptPreview.tsx';
 import type { PhaseConfig, TaskWithDerived } from '../../../shared/types.ts';
+import { selectionForPhase } from '../../../shared/agent-selection.ts';
 import type { TabProps } from './types.ts';
 
 const EMPTY: AgentSelection = { agent: '', model: '', effort: '' };
@@ -38,6 +39,7 @@ export function LaunchCompose({
   run,
   onBack,
 }: LaunchComposeProps) {
+  const inheritedSelection = selectionForPhase(config, task, phase.id);
   const [text, setText] = useState(task.overrides?.instructions ?? '');
   const [kept, setKept] = useState(Boolean(task.overrides?.instructions));
   const [onceOpen, setOnceOpen] = useState(false);
@@ -132,7 +134,7 @@ export function LaunchCompose({
             agents={config.agents}
             value={once}
             onChange={setOnce}
-            inheritedAgent={task.pinned.agent}
+            inheritedAgent={inheritedSelection.agent}
             inheritAgentLabel="Use pinned agent"
           />
           <p className="hint">Applies to this launch only. Nothing is saved.</p>

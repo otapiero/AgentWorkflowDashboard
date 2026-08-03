@@ -3,6 +3,7 @@ import type * as vscode from 'vscode';
 import type { StoreChange } from './task-store.ts';
 import { TaskStore } from './task-store.ts';
 import { buildChildren, buildRootNodes, buildTaskNode, type TreeNode } from './tree-model.ts';
+import { matchWorkspace } from './workspace-matcher.ts';
 
 type VscodeAdapter = {
   TreeItem: new (label: string, state: number) => { id?: string; contextValue?: string; description?: string; iconPath?: unknown; command?: unknown };
@@ -39,10 +40,13 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
     item.id = node.id;
     item.contextValue = node.kind;
     if (node.kind === 'task') {
+      const task = this.store.task(node.issue);
+      const current = matchWorkspace(this.currentWorkspaceUri(), this.store.tasks());
+      const session = current?.issue === node.issue && task?.integration.liveSpawn ? 'current-live' : 'other';
       item.description = node.description;
       item.iconPath = new this.api.ThemeIcon(node.severity === 'bad' ? 'error' : node.severity === 'warn' ? 'warning' : 'circle-outline');
-      item.contextValue = `task:${node.severity}:${this.store.task(node.issue)?.integration.worktreeExists ? 'worktree' : 'missing-worktree'}`;
-      if (this.store.task(node.issue)?.integration.worktreeExists) item.command = { command: 'missionControl.openTask', title: 'Open Worktree', arguments: [node.issue] };
+      item.contextValue = `task:${node.severity}:${session}:${task?.integration.worktreeExists ? 'worktree' : 'missing-worktree'}`;
+      if (task?.integration.worktreeExists) item.command = { command: 'missionControl.openTask', title: 'Open Worktree', arguments: [node.issue] };
     }
     if (node.kind === 'action') item.command = { command: node.command, title: node.label, arguments: [...node.args] };
     return item as vscode.TreeItem;

@@ -71,8 +71,25 @@ describe('CommandController', () => {
     expect(api.showWarningMessage).toHaveBeenCalledWith('This workspace is not a Mission Control worktree.');
   });
 
-  test('reveals only a terminal integrated with the current worktree', async () => {
-    const { commands, api } = controller();
+  test('refuses a session from a different task than the current workspace', async () => {
+    const { commands, current, api, store } = controller();
+    const other = task({ issue: 9, workspacePath: 'C:\\mc\\worktrees\\issue-9' });
+    other.integration.liveSpawn = { phase: 'implement', pid: 9, startedAt: '2026-08-03T10:00:00.000Z' };
+    store.task.mockImplementation((issue: number) => issue === current.issue ? current : issue === other.issue ? other : undefined);
+    store.tasks.mockReturnValue([current, other]);
+    await commands.viewSession(other.issue);
+    expect(api.showInformationMessage).toHaveBeenCalledWith('View Session is only available for the current workspace task.');
+  });
+
+  test('refuses the current task when it has no live session', async () => {
+    const { commands, current, api } = controller();
+    await commands.viewSession(current.issue);
+    expect(api.showInformationMessage).toHaveBeenCalledWith('This task has no live Mission Control session.');
+  });
+
+  test('reveals only a terminal integrated with the exact current live worktree', async () => {
+    const { commands, current, api } = controller();
+    current.integration.liveSpawn = { phase: 'implement', pid: 42, startedAt: '2026-08-03T10:00:00.000Z' };
     const wrong = { shellIntegration: { cwd: { fsPath: 'C:\\other' } }, show: vi.fn() };
     const exact = { shellIntegration: { cwd: { fsPath: 'C:\\mc\\worktrees\\issue-3060' } }, show: vi.fn() };
     api.terminals.push(wrong, exact);

@@ -47,8 +47,17 @@ describe('MissionControlTreeProvider', () => {
   test('marks task items with their server-provided worktree availability', () => {
     const store = new TaskStore(); store.applyBaseline(config, [task({ worktreeExists: true }), task({ issue: 2, worktreeExists: false })]);
     const provider = new MissionControlTreeProvider(store, () => undefined, fakeVscode());
-    expect(provider.getTreeItem({ kind: 'task', id: 'task:3060', issue: 3060, label: 'one', description: '', severity: 'normal' })).toMatchObject({ contextValue: 'task:normal:worktree', command: { command: 'missionControl.openTask', arguments: [3060] } });
-    expect(provider.getTreeItem({ kind: 'task', id: 'task:2', issue: 2, label: 'two', description: '', severity: 'normal' })).toMatchObject({ contextValue: 'task:normal:missing-worktree', command: undefined });
+    expect(provider.getTreeItem({ kind: 'task', id: 'task:3060', issue: 3060, label: 'one', description: '', severity: 'normal' })).toMatchObject({ contextValue: 'task:normal:other:worktree', command: { command: 'missionControl.openTask', arguments: [3060] } });
+    expect(provider.getTreeItem({ kind: 'task', id: 'task:2', issue: 2, label: 'two', description: '', severity: 'normal' })).toMatchObject({ contextValue: 'task:normal:other:missing-worktree', command: undefined });
+  });
+
+  test('marks only the exact current live task as session eligible', () => {
+    const current = task(); current.integration.liveSpawn = { phase: 'implement', pid: 42, startedAt: '2026-08-03T10:00:00.000Z' };
+    const other = task({ issue: 2 }); other.integration.liveSpawn = { phase: 'implement', pid: 43, startedAt: '2026-08-03T10:00:00.000Z' };
+    const store = new TaskStore(); store.applyBaseline(config, [current, other]);
+    const provider = new MissionControlTreeProvider(store, () => ({ scheme: 'file', fsPath: current.integration.workspacePath }), fakeVscode());
+    expect(provider.getTreeItem({ kind: 'task', id: 'task:3060', issue: 3060, label: 'current', description: '', severity: 'normal' }).contextValue).toContain(':current-live:');
+    expect(provider.getTreeItem({ kind: 'task', id: 'task:2', issue: 2, label: 'other', description: '', severity: 'normal' }).contextValue).not.toContain(':current-live:');
   });
 
   test('rebuilds a changed cached task from current store state', () => {
@@ -64,7 +73,7 @@ describe('MissionControlTreeProvider', () => {
     const fired = vscode.fires.find((node: any) => node?.id === 'task:3060') as any;
     expect(fired).toMatchObject({ label: '#3060 New title', severity: 'bad' });
     expect(fired).not.toBe(cached[0]);
-    expect(provider.getTreeItem(fired)).toMatchObject({ contextValue: 'task:bad:missing-worktree', command: undefined });
+    expect(provider.getTreeItem(fired)).toMatchObject({ contextValue: 'task:bad:other:missing-worktree', command: undefined });
   });
 
   test('does not fire a removed cached task object', () => {

@@ -4,6 +4,7 @@ import type {
   PhaseDefaults,
   TaskRecord,
 } from '../shared/types.ts';
+import { resolveAgentValues } from '../shared/agent-selection.ts';
 
 export interface ResolvedAgent {
   agent: string | null;
@@ -70,14 +71,6 @@ export function agentCapabilities(name: string, profile: AgentProfile): Capabili
   };
 }
 
-/** First candidate that names a real configured agent, else null. */
-function pickAgent(
-  config: Config,
-  candidates: Array<string | undefined>,
-): string | null {
-  return candidates.find((a) => a && config.agents[a]) ?? null;
-}
-
 /**
  * Decide the agent, model and effort a spawn should use.
  *
@@ -93,25 +86,12 @@ export function resolveAgent(
   phaseDefaults: PhaseDefaults,
   oneTime: OneTime = {},
 ): ResolvedAgent {
-  const phase = config.pipeline.find((p) => p.id === phaseId);
-  const pd = phaseDefaults[phaseId];
-
-  const agent = pickAgent(config, [
-    oneTime.agent,
-    task.overrides?.agent,
-    pd?.agent,
-    phase?.actor,
-  ]);
-  if (!agent) return { agent: null, model: null, effort: null };
-
-  const profile = config.agents[agent]!;
-  const rawModel =
-    oneTime.model ?? task.overrides?.model ?? pd?.model ?? profile.model;
-  const model = !rawModel || rawModel === 'default' ? null : rawModel;
-
-  const rawEffort =
-    oneTime.effort ?? task.overrides?.effort ?? pd?.effort ?? profile.effort;
-  const effort = rawEffort || null;
-
-  return { agent, model, effort };
+  return resolveAgentValues({
+    pipeline: config.pipeline,
+    agents: Object.entries(config.agents).map(([name, profile]) => {
+      const capabilities = agentCapabilities(name, profile);
+      return { name, models: capabilities.models, efforts: capabilities.efforts, hasEffort: capabilities.hasEffort, defaultModel: profile.model, defaultEffort: profile.effort };
+    }),
+    phaseDefaults,
+  }, task, phaseId, oneTime);
 }

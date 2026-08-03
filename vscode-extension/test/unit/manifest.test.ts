@@ -11,4 +11,10 @@ describe('extension manifest', () => {
     expect(manifest.main).toBe('./dist/extension.cjs');
     expect(manifest).not.toHaveProperty('icon');
   });
+
+  test('shows View Session only on a current live task row', () => {
+    const item = manifest.contributes.menus['view/item/context'].find((entry: { command: string }) => entry.command === 'missionControl.viewSession');
+    expect(item.when).toContain('current-live');
+    expect(item.when).not.toContain('missionControl.currentTask');
+  });
 });
