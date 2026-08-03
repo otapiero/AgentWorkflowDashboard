@@ -84,9 +84,11 @@ The **Agents** panel also picks the launcher:
 
 - **Windows Terminal** (default) — one titled tab per task.
 - **VS Code** — opens the task's worktree in VS Code and runs the agent in the
-  integrated terminal. The first time, VS Code asks to allow automatic tasks;
-  say yes. The task lives in a generated `.code-workspace` under `~/.mc`,
-  never in the repo checkout.
+  integrated terminal. The task lives in a generated `.code-workspace` under
+  `~/.mc`, never in the repo checkout. The window is launched with
+  `--disable-workspace-trust`, so a fresh worktree does not open in Restricted
+  Mode and stall the run behind a trust prompt; that flag applies to the launched
+  window only and does not change your trust settings for any other folder.
 
 ## Headless orchestrator
 

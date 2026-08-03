@@ -92,7 +92,8 @@ export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
           {config.launcher === 'vscode' && (
             <p className="hint">
               Opens the task's worktree in VS Code and runs the agent in the integrated
-              terminal. The first time, VS Code asks to allow automatic tasks — say yes.
+              terminal. The window opens with workspace trust off so the agent starts
+              without a prompt; your trust settings for other folders are untouched.
             </p>
           )}
         </section>

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   buildAgentArgs,
+  buildCodeArgs,
   buildWtArgs,
   buildCodeWorkspace,
   PROMPT_TOKEN,
@@ -263,5 +264,24 @@ describe('buildCodeWorkspace', () => {
 
   test('serialises to valid JSON', () => {
     expect(() => JSON.stringify(buildCodeWorkspace(opts))).not.toThrow();
+  });
+});
+
+describe('buildCodeArgs', () => {
+  const wsFile = 'C:\\Users\\ouriel\\.mc\\tasks\\3060\\mc-3060.code-workspace';
+
+  test('disables workspace trust so the folder-open task is not blocked', () => {
+    // A fresh worktree has never been trusted, so without this VS Code opens in
+    // Restricted Mode and the phase never starts until someone clicks through.
+    expect(buildCodeArgs(wsFile)).toContain('--disable-workspace-trust');
+  });
+
+  test('puts the flags before the path so they are parsed as options', () => {
+    const args = buildCodeArgs(wsFile, { newWindow: true });
+    expect(args).toEqual(['--disable-workspace-trust', '--new-window', wsFile]);
+  });
+
+  test('opens in the current window unless a new one is asked for', () => {
+    expect(buildCodeArgs(wsFile)).not.toContain('--new-window');
   });
 });

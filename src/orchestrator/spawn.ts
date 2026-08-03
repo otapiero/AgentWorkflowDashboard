@@ -149,8 +149,9 @@ interface CodeWorkspace {
  *
  * The task is defined in the workspace file itself, never in the worktree's
  * .vscode folder, so opening in VS Code leaves no footprint in the checkout.
- * VS Code asks to allow automatic tasks the first time; after that it runs on
- * open.
+ * task.allowAutomaticTasks silences the "allow automatic tasks?" prompt, but as
+ * a workspace-level setting it is ignored in Restricted Mode — which is why the
+ * launch also has to turn trust off (see buildCodeArgs).
  *
  * folderOpen fires on *every* open, including VS Code restoring the window on
  * startup, so the task alone would re-run the agent each time. The guard file
@@ -185,6 +186,30 @@ export function buildCodeWorkspace(options: CodeWorkspaceOptions): CodeWorkspace
       ],
     },
   };
+}
+
+/**
+ * Args for opening a path in VS Code with workspace trust off for that window.
+ *
+ * A fresh worktree is a folder VS Code has never seen, so it opens in Restricted
+ * Mode and the trust prompt blocks the folderOpen task — the phase would sit
+ * there doing nothing until the operator clicked through. MC created that
+ * worktree itself from the repo the operator configured, so there is no unknown
+ * author for the prompt to protect against.
+ *
+ * --disable-workspace-trust is a hidden flag (absent from `code --help`, present
+ * in code 1.131.0) that turns trust off for the launched window only. It writes
+ * nothing to VS Code's global state, so the operator's trust decisions for every
+ * other folder stay exactly as they were.
+ */
+export function buildCodeArgs(
+  target: string,
+  options: { newWindow?: boolean } = {},
+): string[] {
+  const args = ['--disable-workspace-trust'];
+  if (options.newWindow) args.push('--new-window');
+  args.push(target);
+  return args;
 }
 
 export interface WtOptions {
@@ -363,8 +388,9 @@ async function launchVscode(
   const wsFile = codeWorkspacePath(task.issue);
   writeFileSync(wsFile, JSON.stringify(workspace, null, 2), 'utf8');
 
-  detach('code', ['--new-window', wsFile]);
-  return `code --new-window ${wsFile}`;
+  const codeArgs = buildCodeArgs(wsFile, { newWindow: true });
+  detach('code', codeArgs);
+  return `code ${codeArgs.join(' ')}`;
 }
 
 /**
@@ -382,7 +408,7 @@ export function openWorktreeInVscode(issue: number): void {
       `No worktree yet for issue ${issue}. Run a phase first — that is what creates the checkout.`,
     );
   }
-  detach('code', [path]);
+  detach('code', buildCodeArgs(path));
 }
 
 /**
