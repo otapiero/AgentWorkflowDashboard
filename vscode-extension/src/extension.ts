@@ -14,18 +14,28 @@ import { matchWorkspace } from './workspace-matcher.ts';
 import type { TaskWithDerived } from '../../src/shared/types.ts';
 
 let syncActivationMs = 0;
-export interface MissionControlTestApi { activationMetricsForTests(): { syncActivationMs: number }; lastOpenFolderArgs(): readonly unknown[] | null; seedTasksForTests(tasks: readonly TaskWithDerived[]): void; }
+let activeRuntime: MissionControlRuntime | undefined;
+export interface MissionControlTestApi { activationMetricsForTests(): { syncActivationMs: number }; readyForTests(): Promise<void>; lastOpenFolderArgs(): readonly unknown[] | null; seedTasksForTests(tasks: readonly TaskWithDerived[]): void; }
 
 export function activate(context: vscode.ExtensionContext): MissionControlTestApi | void {
   const started = performance.now();
-  const runtime = createRuntime(context);
-  context.subscriptions.push(runtime);
-  runtime.start();
+  let resolveReady!: () => void;
+  let rejectReady!: (error: unknown) => void;
+  const ready = new Promise<void>((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
+  setImmediate(() => {
+    try {
+      const runtime = createRuntime(context);
+      activeRuntime = runtime;
+      context.subscriptions.push(runtime);
+      runtime.start();
+      resolveReady();
+    } catch (error) { rejectReady(error); }
+  });
   syncActivationMs = performance.now() - started;
-  if (context.extensionMode === vscode.ExtensionMode.Test) return { activationMetricsForTests, lastOpenFolderArgs: () => runtime.lastOpenFolderArgsForTests(), seedTasksForTests: tasks => runtime.seedTasksForTests(tasks) };
+  if (context.extensionMode === vscode.ExtensionMode.Test) return { activationMetricsForTests, readyForTests: async () => await ready, lastOpenFolderArgs: () => activeRuntime?.lastOpenFolderArgsForTests() ?? null, seedTasksForTests: tasks => activeRuntime?.seedTasksForTests(tasks) };
 }
 export function activationMetricsForTests(): { syncActivationMs: number } { return { syncActivationMs }; }
-export function deactivate(): void {}
+export function deactivate(): void { activeRuntime?.dispose(); activeRuntime = undefined; }
 
 function createRuntime(context: vscode.ExtensionContext): MissionControlRuntime {
   const output = vscode.window.createOutputChannel('Mission Control');

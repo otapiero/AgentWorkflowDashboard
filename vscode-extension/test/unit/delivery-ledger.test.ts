@@ -51,6 +51,8 @@ test('fails closed when the ledger cannot be read', async () => {
 test('keeps only the newest 500 fingerprints', async () => {
   const storage = await directory();
   const ledger = new DeliveryLedger(storage, delay);
-  for (let index = 0; index < 510; index += 1) await ledger.claim(event(`event-${index}`));
-  expect(JSON.parse(await readFile(join(storage, 'notifications.json'), 'utf8')).fingerprints).toEqual(Array.from({ length: 500 }, (_, index) => `event-${509 - index}`));
-}, 20_000);
+  await writeFile(join(storage, 'notifications.json'), JSON.stringify({ fingerprints: Array.from({ length: 499 }, (_, index) => `event-${498 - index}`) }), 'utf8');
+  await expect(ledger.claim(event('event-499'))).resolves.toBe(true);
+  await expect(ledger.claim(event('event-500'))).resolves.toBe(true);
+  expect(JSON.parse(await readFile(join(storage, 'notifications.json'), 'utf8')).fingerprints).toEqual(['event-500', 'event-499', ...Array.from({ length: 498 }, (_, index) => `event-${498 - index}`)]);
+});

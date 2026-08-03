@@ -9,6 +9,7 @@ suite('Mission Control extension', () => {
     assert.ok(extension);
     const api = await extension.activate() as MissionControlTestApi;
     assert.ok(api.activationMetricsForTests().syncActivationMs <= 50, `synchronous activation ${api.activationMetricsForTests().syncActivationMs.toFixed(2)}ms exceeded 50ms`);
+    await api.readyForTests();
     const commands = await vscode.commands.getCommands(true);
     assert.ok(commands.includes('missionControl.openTask'));
     assert.ok(commands.includes('missionControl.runCurrentPhase'));
@@ -25,6 +26,7 @@ suite('Mission Control extension', () => {
   test('opens a seeded task worktree in a new window', async () => {
     const extension = vscode.extensions.getExtension('otapiero.mission-control'); assert.ok(extension);
     const api = await extension.activate() as MissionControlTestApi;
+    await api.readyForTests();
     const seeded = task({ workspacePath: 'C:\\mc\\worktrees\\host-task' }); api.seedTasksForTests([seeded]);
     await vscode.commands.executeCommand('missionControl.openTask', seeded);
     const args = api.lastOpenFolderArgs(); assert.ok(args);
@@ -35,6 +37,7 @@ suite('Mission Control extension', () => {
   test('retains at most 25 MiB after seeding 500 Extension Host tasks', async () => {
     const extension = vscode.extensions.getExtension('otapiero.mission-control'); assert.ok(extension);
     const api = await extension.activate() as MissionControlTestApi;
+    await api.readyForTests();
     const collect = global.gc;
     assert.equal(typeof collect, 'function', 'Extension Host must launch with --expose-gc');
     if (!collect) throw new Error('Extension Host must launch with --expose-gc');
