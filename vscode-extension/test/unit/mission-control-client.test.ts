@@ -87,3 +87,21 @@ test('connect stops after aborting the stream and reports closed once', async ()
 
   expect(onClosed).toHaveBeenCalledExactlyOnceWith(null);
 });
+
+test('connect treats an abort before the event response as a normal close', async () => {
+  const controller = new AbortController();
+  const fetchMock = vi.fn<typeof fetch>().mockImplementation((_input, init) => new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')), { once: true });
+  }));
+  const onOpen = vi.fn();
+  const onClosed = vi.fn();
+  const client = new MissionControlClient('http://127.0.0.1:4317', fetchMock);
+
+  const connected = client.connect({ onOpen, onTasks: vi.fn(), onPoll: vi.fn(), onClosed }, controller.signal);
+  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+  controller.abort();
+  await connected;
+
+  expect(onOpen).not.toHaveBeenCalled();
+  expect(onClosed).toHaveBeenCalledExactlyOnceWith(null);
+});

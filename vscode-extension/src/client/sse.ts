@@ -20,15 +20,14 @@ export async function* parseSse(
       const { value, done } = await reader.read();
       if (done) break;
 
-      buffer += decoder.decode(value, { stream: true }).replaceAll('\r\n', '\n');
-      if (buffer.length > MAX_BUFFER_CHARS) {
-        throw new Error('SSE frame exceeds maximum size');
-      }
-      let boundary = buffer.indexOf('\n\n');
+      buffer += decoder.decode(value, { stream: true });
+      buffer = buffer.replaceAll('\r\n', '\n');
+      let start = 0;
+      let boundary = buffer.indexOf('\n\n', start);
 
       while (boundary >= 0) {
-        const frame = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
+        const frame = buffer.slice(start, boundary);
+        start = boundary + 2;
         const lines = frame.split('\n').filter((line) => !line.startsWith(':'));
         const event = lines.find((line) => line.startsWith('event:'))?.slice(6).trim() ?? 'message';
         const data = lines
@@ -37,7 +36,12 @@ export async function* parseSse(
           .join('\n');
 
         if (data) yield { event, data };
-        boundary = buffer.indexOf('\n\n');
+        boundary = buffer.indexOf('\n\n', start);
+      }
+
+      buffer = buffer.slice(start);
+      if (buffer.length > MAX_BUFFER_CHARS) {
+        throw new Error('SSE frame exceeds maximum size');
       }
     }
   } finally {

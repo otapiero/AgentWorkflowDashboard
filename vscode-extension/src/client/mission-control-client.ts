@@ -78,7 +78,9 @@ export class MissionControlClient {
         }
       }
     } catch (error) {
-      closedError = error instanceof Error ? error : new Error(String(error));
+      closedError = signal.aborted
+        ? null
+        : error instanceof Error ? error : new Error(String(error));
     } finally {
       handlers.onClosed(closedError);
     }
