@@ -122,7 +122,9 @@ export class TaskStore {
         continue;
       }
 
-      if (this.signatures.get(issue) === nextSignature) {
+      const attentionRankChanged = (previous.derived.needsYou || next.derived.needsYou)
+        && previous.lastReconciledAt !== next.lastReconciledAt;
+      if (this.signatures.get(issue) === nextSignature && !attentionRankChanged) {
         this.tasksByIssue.set(issue, next);
         continue;
       }
@@ -134,7 +136,7 @@ export class TaskStore {
         sections.add(previous.derived.displayPhase);
         sections.add(next.derived.displayPhase);
       }
-      if (previous.derived.needsYou !== next.derived.needsYou) sections.add('attention');
+      if (previous.derived.needsYou || next.derived.needsYou) sections.add('attention');
     }
 
     this.orderedTasks = Object.freeze([...this.tasksByIssue.values()].sort((left, right) => left.issue - right.issue));

@@ -47,7 +47,7 @@ describe('MissionControlTreeProvider', () => {
   test('marks task items with their server-provided worktree availability', () => {
     const store = new TaskStore(); store.applyBaseline(config, [task({ worktreeExists: true }), task({ issue: 2, worktreeExists: false })]);
     const provider = new MissionControlTreeProvider(store, () => undefined, fakeVscode());
-    expect(provider.getTreeItem({ kind: 'task', id: 'task:3060', issue: 3060, label: 'one', description: '', severity: 'normal' })).toMatchObject({ contextValue: 'task:normal:other:worktree', command: { command: 'missionControl.openTask', arguments: [3060] } });
+    expect(provider.getTreeItem({ kind: 'task', id: 'task:3060', issue: 3060, label: 'one', description: '', severity: 'normal' })).toMatchObject({ collapsibleState: 0, contextValue: 'task:normal:other:worktree', command: { command: 'missionControl.openTask', arguments: [3060] } });
     expect(provider.getTreeItem({ kind: 'task', id: 'task:2', issue: 2, label: 'two', description: '', severity: 'normal' })).toMatchObject({ contextValue: 'task:normal:other:missing-worktree', command: undefined });
   });
 

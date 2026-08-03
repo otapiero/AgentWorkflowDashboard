@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 
 import { TaskStore, type StoreChange } from '../../src/task-store.ts';
+import { buildChildren } from '../../src/tree-model.ts';
 import { config, task } from './fixtures.ts';
 
 test('keeps task selectors in stable issue order with one task per issue', () => {
@@ -50,6 +51,25 @@ test('does not emit when only reconciliation freshness changes', () => {
 
   expect(changes).toEqual([]);
   expect(store.task(1)?.lastReconciledAt).toBe('2026-08-03T10:01:00.000Z');
+});
+
+test('refreshes attention when a task remains actionable but its rank changes', () => {
+  const store = new TaskStore();
+  store.applyBaseline(config, [
+    task({ issue: 1, needsYou: true, lastReconciledAt: '2026-08-03T10:00:00.000Z' }),
+    task({ issue: 2, needsYou: true, lastReconciledAt: '2026-08-03T11:00:00.000Z' }),
+  ]);
+  const changes: StoreChange[] = [];
+  store.onDidChange((change) => changes.push(change));
+  expect(buildChildren(store.snapshot(), undefined, 'section:attention').map((node) => node.id)).toEqual(['task:2', 'task:1']);
+
+  store.applyTasks([
+    task({ issue: 1, needsYou: true, checks: 'failure', lastReconciledAt: '2026-08-03T12:00:00.000Z' }),
+    task({ issue: 2, needsYou: true, lastReconciledAt: '2026-08-03T11:00:00.000Z' }),
+  ]);
+
+  expect(changes).toEqual([{ kind: 'targeted', issues: new Set([1]), sections: new Set(['attention']) }]);
+  expect(buildChildren(store.snapshot(), undefined, 'section:attention').map((node) => node.id)).toEqual(['task:1', 'task:2']);
 });
 
 test('reports connection updates and retains poll metadata separately', () => {

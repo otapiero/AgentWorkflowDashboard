@@ -25,14 +25,15 @@ describe('tree model', () => {
       { kind: 'message', id: 'message:session:3060', label: 'Session: Implement running' },
       { kind: 'action', id: 'action:view-session:3060', label: 'View Session', command: 'missionControl.viewSession', args: [3060] },
       { kind: 'action', id: 'action:open:3060', label: 'Open Worktree', command: 'missionControl.openTask', args: [3060] },
+      { kind: 'action', id: 'action:dashboard:3060', label: 'Open Dashboard', command: 'missionControl.openDashboard', args: [] },
     ]);
   });
 
   test('shows Run Current Phase only for a connected spawnable phase without a live session', () => {
     const current = buildChildren(snapshot([taskWithPath('C:\\mc\\worktrees\\issue-3060')]), { scheme: 'file', fsPath: 'C:\\mc\\worktrees\\issue-3060' }, 'section:current');
-    expect(current.map((node) => node.id)).toEqual(['task:3060', 'message:agent:3060', 'action:run:3060', 'action:open:3060']);
+    expect(current.map((node) => node.id)).toEqual(['task:3060', 'message:agent:3060', 'action:run:3060', 'action:open:3060', 'action:dashboard:3060']);
     const disconnected = { ...snapshot(), connection: 'disconnected' as const };
-    expect(buildChildren(disconnected, { scheme: 'file', fsPath: 'C:\\mc\\worktrees\\issue-3060' }, 'section:current').map((node) => node.id)).toEqual(['task:3060', 'message:agent:3060', 'action:open:3060']);
+    expect(buildChildren(disconnected, { scheme: 'file', fsPath: 'C:\\mc\\worktrees\\issue-3060' }, 'section:current').map((node) => node.id)).toEqual(['task:3060', 'message:agent:3060', 'action:open:3060', 'action:dashboard:3060']);
   });
 
   test('shows a clear unrelated-workspace message', () => {

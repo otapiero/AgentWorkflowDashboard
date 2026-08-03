@@ -72,6 +72,7 @@ function currentWorktreeNodes(snapshot: TaskStoreSnapshot, task: TaskWithDerived
     }
   }
   if (task.integration.worktreeExists) nodes.push({ kind: 'action', id: `action:open:${task.issue}`, label: 'Open Worktree', command: 'missionControl.openTask', args: [task.issue] });
+  nodes.push({ kind: 'action', id: `action:dashboard:${task.issue}`, label: 'Open Dashboard', command: 'missionControl.openDashboard', args: [] });
   return nodes;
 }
 

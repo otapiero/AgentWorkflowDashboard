@@ -35,7 +35,7 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
     this.cached.set(node.id, node);
     const state = node.kind === 'section'
       ? (node.expanded ? this.api.CollapsibleState.Expanded : this.api.CollapsibleState.Collapsed)
-      : node.kind === 'phase' || node.kind === 'task' ? this.api.CollapsibleState.Collapsed : this.api.CollapsibleState.None;
+      : node.kind === 'phase' ? this.api.CollapsibleState.Collapsed : this.api.CollapsibleState.None;
     const item = new this.api.TreeItem(node.label, state);
     item.id = node.id;
     item.contextValue = node.kind;
