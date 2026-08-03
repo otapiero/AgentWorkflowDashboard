@@ -30,8 +30,13 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
+    "build:performance": "node esbuild.mjs --performance",
+    "test:performance": "npm run build:performance && node --expose-gc dist/performance.cjs",
     "test:extension": "npm run build:test && vscode-test",
     "build:test": "node esbuild.mjs --tests",
+    "verify": "npm run typecheck && npm run test:unit && npm run test:performance && npm run build",
+    "package": "npm run verify && vsce package --out dist/mission-control-0.1.0.vsix && npm run check:vsix-size",
+    "check:vsix-size": "node scripts/check-vsix-size.mjs dist/mission-control-0.1.0.vsix",
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {

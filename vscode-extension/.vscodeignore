@@ -1,10 +1,6 @@
-src/**
-test/**
-scripts/**
-node_modules/**
-*.map
-tsconfig.json
-vitest.config.ts
-esbuild.mjs
-.vscode-test.mjs
-package-lock.json
+**
+!dist/extension.cjs
+!resources/mission-control.svg
+!package.json
+!README.md
+!CHANGELOG.md
