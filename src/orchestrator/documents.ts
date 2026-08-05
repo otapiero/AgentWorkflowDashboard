@@ -1,3 +1,7 @@
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+
+import { readArtifacts, resolveArtifactStoredPath } from './artifacts.ts';
 import type { ArtifactRef } from '../shared/types.ts';
 
 /**
@@ -49,4 +53,84 @@ export function resolveWriteTarget(
   fileExists: (path: string) => boolean,
 ): WriteTarget {
   return fileExists(ref.originalPath) ? 'original' : 'snapshot';
+}
+
+// --- filesystem routines -------------------------------------------------
+
+export type DocumentError = 'not-found' | 'gone' | 'too-large' | 'binary';
+
+export type DocumentResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: DocumentError };
+
+export interface DocumentRead {
+  content: string;
+  class: 'markdown' | 'text';
+  writeTarget: WriteTarget;
+  originalPath: string;
+}
+
+/** The manifest entry plus both candidate paths, or null when unknown. */
+function locate(issue: number, name: string) {
+  const refs = readArtifacts(issue);
+  const ref = refs.find((r) => r.name === name);
+  if (!ref) return null;
+  const stored = resolveArtifactStoredPath(issue, name, refs);
+  if (!stored) return null;
+  const target = resolveWriteTarget(ref, existsSync);
+  return { ref, stored, target, active: target === 'original' ? ref.originalPath : stored };
+}
+
+/**
+ * Read the copy that is the truth. Reading the snapshot unconditionally would
+ * show stale text whenever the file had been edited outside the board, and the
+ * next save would then overwrite that edit.
+ */
+export function readArtifactDocument(
+  issue: number,
+  name: string,
+): DocumentResult<DocumentRead> {
+  const found = locate(issue, name);
+  if (!found) return { ok: false, error: 'not-found' };
+  if (!existsSync(found.active)) return { ok: false, error: 'gone' };
+  if (statSync(found.active).size > MAX_DOCUMENT_BYTES) {
+    return { ok: false, error: 'too-large' };
+  }
+
+  const bytes = readFileSync(found.active);
+  const contentClass = classify(name, bytes);
+  if (contentClass === 'binary') return { ok: false, error: 'binary' };
+
+  return {
+    ok: true,
+    value: {
+      content: bytes.toString('utf8'),
+      class: contentClass,
+      writeTarget: found.target,
+      originalPath: found.ref.originalPath,
+    },
+  };
+}
+
+/**
+ * Write the truth, then resync the snapshot so the two never disagree. The
+ * caller is told which happened so the UI can say "snapshot only" rather than
+ * implying an edit reached a checkout it did not reach.
+ */
+export function writeArtifactDocument(
+  issue: number,
+  name: string,
+  content: string,
+): DocumentResult<WriteTarget> {
+  const found = locate(issue, name);
+  if (!found) return { ok: false, error: 'not-found' };
+
+  if (found.target === 'original') {
+    mkdirSync(dirname(found.ref.originalPath), { recursive: true });
+    writeFileSync(found.ref.originalPath, content, 'utf8');
+  }
+  mkdirSync(dirname(found.stored), { recursive: true });
+  writeFileSync(found.stored, content, 'utf8');
+
+  return { ok: true, value: found.target };
 }
