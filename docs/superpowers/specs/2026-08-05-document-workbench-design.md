@@ -96,9 +96,14 @@ so read and write always address one file. Reading the snapshot unconditionally
 would show stale text whenever the user had edited the real file in VS Code, and
 the next save would silently overwrite that edit.
 
-When `originalPath` is gone — worktree cleaned up, or `origin: 'taskdir'` where
-the stored copy *is* the file — the write lands on the snapshot alone. The
-response reports which happened:
+When `originalPath` is gone — the worktree was cleaned up, or the agent's
+task-dir file was deleted — the write lands on the snapshot alone. The rule is
+uniform across both origins: `origin` never enters the decision, only whether
+the original path still resolves. (An earlier draft special-cased
+`origin: 'taskdir'` to snapshot-only on the belief that the stored copy *was*
+the file. It is not — `collectArtifacts` copies `taskDir/<name>` to
+`taskDir/artifacts/<name>`, so they are two distinct files and the uniform rule
+is both simpler and more truthful.) The response reports which happened:
 
 ```ts
 type WriteTarget = 'original' | 'snapshot';
@@ -224,7 +229,7 @@ Unit (`test/documents.test.ts`), all against the pure core:
 
 - classification: `.md`, `.markdown`, no extension, `.json`, NUL-bearing bytes
 - write-target resolution: original present → `'original'`; original missing →
-  `'snapshot'`; `origin: 'taskdir'` → `'snapshot'`
+  `'snapshot'`; identical for both origins
 - font-scale clamping at both bounds and reset
 - dirty tracking across document switches
 
