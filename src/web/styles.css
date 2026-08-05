@@ -931,6 +931,11 @@ select.field {
   font-size: 12px;
 }
 
+/*
+  Named for the retired plan editor, but still the shared chrome for every
+  full-window overlay: prompt preview, launch compose, and the workbench's
+  mode tabs.
+*/
 .plan-editor-scrim {
   position: fixed;
   inset: 0;
@@ -984,31 +989,6 @@ select.field {
   line-height: 1.5;
   background: transparent;
   color: var(--ink);
-}
-
-.plan-editor-preview {
-  flex: 1;
-  padding: 16px 24px;
-  overflow: auto;
-  line-height: 1.6;
-}
-
-.plan-editor-preview h1,
-.plan-editor-preview h2,
-.plan-editor-preview h3 {
-  margin: 0.6em 0 0.3em;
-  color: var(--ink-strong);
-}
-
-.plan-editor-preview pre {
-  background: var(--bg-soft);
-  padding: 10px;
-  border-radius: var(--radius-sm);
-  overflow: auto;
-}
-
-.plan-editor-preview code {
-  font-family: var(--mono);
 }
 
 /* ---------- launch compose ---------- */

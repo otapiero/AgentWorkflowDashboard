@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 
 import { api } from '../../api.ts';
-import { PlanEditor } from '../PlanEditor.tsx';
+import { DocumentWorkbench } from '../DocumentWorkbench.tsx';
+import type { DocId } from '../../doc-model.ts';
 import type { TabProps } from './types.ts';
 
 export function PlanTab({ task, busy, run, onChanged }: TabProps) {
   const [plan, setPlan] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
+  const [open, setOpen] = useState<DocId | null>(null);
 
   useEffect(() => {
     setPlan(null);
-    setEditing(false);
+    setOpen(null);
     api
       .plan(task.issue)
       .then((r) => setPlan(r.content))
@@ -21,9 +22,13 @@ export function PlanTab({ task, busy, run, onChanged }: TabProps) {
     <>
       <section className="section">
         <div className="section-label">
-          Plan
-          <button className="disclose" style={{ marginLeft: 8 }} onClick={() => setEditing(true)}>
-            {plan ? 'Expand / edit' : 'Write a plan'}
+          Documents
+          <button
+            className="disclose"
+            style={{ marginLeft: 8 }}
+            onClick={() => setOpen({ kind: 'plan' })}
+          >
+            {plan ? 'Open documents' : 'Write a plan'}
           </button>
         </div>
         {plan ? (
@@ -53,13 +58,23 @@ export function PlanTab({ task, busy, run, onChanged }: TabProps) {
                     </span>
                   )}
                 </span>
-                <button
-                  className="btn is-sm"
-                  disabled={busy !== null}
-                  onClick={() => run(`artifact-${a.name}`, () => api.openArtifact(task.issue, a.name))}
-                >
-                  {busy === `artifact-${a.name}` ? 'Opening…' : 'Open'}
-                </button>
+                <span className="actions" style={{ gap: 6 }}>
+                  <button
+                    className="btn is-sm is-primary"
+                    onClick={() => setOpen({ kind: 'artifact', name: a.name })}
+                  >
+                    View
+                  </button>
+                  <button
+                    className="btn is-sm"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      run(`artifact-${a.name}`, () => api.openArtifact(task.issue, a.name))
+                    }
+                  >
+                    {busy === `artifact-${a.name}` ? 'Opening…' : 'VS Code'}
+                  </button>
+                </span>
               </div>
             ))}
           </div>
@@ -70,12 +85,13 @@ export function PlanTab({ task, busy, run, onChanged }: TabProps) {
         </section>
       )}
 
-      {editing && (
-        <PlanEditor
+      {open && (
+        <DocumentWorkbench
           issue={task.issue}
-          initial={plan ?? ''}
-          onClose={() => setEditing(false)}
-          onSaved={(content) => {
+          artifacts={task.derived.artifacts}
+          initial={open}
+          onClose={() => setOpen(null)}
+          onPlanSaved={(content) => {
             setPlan(content);
             onChanged();
           }}
