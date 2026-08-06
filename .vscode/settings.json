@@ -1,0 +1,33 @@
+{
+  // VS Code's file watcher does NOT honour .gitignore, so the 998 MB / ~1.9k files
+  // of `vscode-extension/.vscode-test` (a full VS Code Electron download plus a
+  // live user-data dir with Cache/GPUCache/leveldb/logs that are written during
+  // test runs) were being watched and indexed. Excluding it explicitly.
+  "files.watcherExclude": {
+    "**/vscode-extension/.vscode-test/**": true,
+    "**/vscode-extension/node_modules/**": true,
+    "**/node_modules/**": true,
+    "**/.worktrees/**": true,
+    "**/.superpowers/**": true,
+    "**/.playwright-mcp/**": true,
+    "**/dist/**": true,
+    "**/.vite/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true
+  },
+  "search.exclude": {
+    "**/vscode-extension/.vscode-test": true,
+    "**/node_modules": true,
+    "**/.worktrees": true,
+    "**/dist": true,
+    "**/package-lock.json": true
+  },
+  "files.exclude": {
+    "**/vscode-extension/.vscode-test": true
+  },
+  // Neither tsconfig includes .vscode-test, but keep the TS server off the
+  // downloaded Electron tree regardless.
+  "js/ts.tsserver.watchOptions": {
+    "excludeDirectories": ["**/vscode-extension/.vscode-test", "**/node_modules"]
+  }
+}
