@@ -1,6 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 
 import { fetchIssueTitle, listOpenIssues } from '../orchestrator/github.ts';
+import {
+  readArtifactDocument,
+  writeArtifactDocument,
+  type DocumentError,
+} from '../orchestrator/documents.ts';
 import { readPlan, writePlan } from '../orchestrator/plan.ts';
 import { writeMarker, clearMarker } from '../orchestrator/markers.ts';
 import { openArtifactInEditor, openWorktreeInVscode, spawnPhase } from '../orchestrator/spawn.ts';
@@ -33,6 +38,14 @@ interface Deps {
 function isPhase(value: unknown): value is Phase {
   return typeof value === 'string' && (PHASES as readonly string[]).includes(value);
 }
+
+/** How a document failure surfaces over HTTP. */
+const DOCUMENT_FAILURE: Record<DocumentError, { status: number; error: string }> = {
+  'not-found': { status: 404, error: 'no such artifact for this task' },
+  gone: { status: 410, error: 'the artifact is no longer on disk' },
+  'too-large': { status: 413, error: 'artifact is larger than the 2 MB editing limit' },
+  binary: { status: 415, error: 'artifact is not text' },
+};
 
 export function registerRoutes(app: FastifyInstance, deps: Deps): void {
   const { config, broadcaster, refresh, health } = deps;
@@ -309,6 +322,43 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
           .code(400)
           .send({ error: err instanceof Error ? err.message : String(err) });
       }
+    },
+  );
+
+  app.get<{ Params: { issue: string; name: string } }>(
+    '/api/tasks/:issue/artifacts/:name',
+    async (req, reply) => {
+      const issue = Number(req.params.issue);
+      if (!getTask(issue)) return reply.code(404).send({ error: 'task not on the board' });
+
+      const result = readArtifactDocument(issue, decodeURIComponent(req.params.name));
+      if (!result.ok) {
+        const failure = DOCUMENT_FAILURE[result.error];
+        return reply.code(failure.status).send({ error: failure.error, reason: result.error });
+      }
+      return result.value;
+    },
+  );
+
+  app.put<{ Params: { issue: string; name: string }; Body: { content?: unknown } }>(
+    '/api/tasks/:issue/artifacts/:name',
+    async (req, reply) => {
+      const issue = Number(req.params.issue);
+      if (!getTask(issue)) return reply.code(404).send({ error: 'task not on the board' });
+      if (typeof req.body?.content !== 'string') {
+        return reply.code(400).send({ error: 'content must be a string' });
+      }
+
+      const result = writeArtifactDocument(
+        issue,
+        decodeURIComponent(req.params.name),
+        req.body.content,
+      );
+      if (!result.ok) {
+        const failure = DOCUMENT_FAILURE[result.error];
+        return reply.code(failure.status).send({ error: failure.error, reason: result.error });
+      }
+      return { ok: true, writeTarget: result.value };
     },
   );
 

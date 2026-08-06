@@ -40,6 +40,14 @@ export interface PromptPreview {
   words: number;
 }
 
+export interface DocumentPayload {
+  content: string;
+  class: 'markdown' | 'text';
+  writeTarget: 'original' | 'snapshot';
+  /** Where the file really lives; '' for the plan, which has no counterpart. */
+  originalPath: string;
+}
+
 export const api = {
   config: () => request<BoardConfig>('/api/config'),
   tasks: () => request<TaskWithDerived[]>('/api/tasks'),
@@ -93,6 +101,13 @@ export const api = {
   openCode: (issue: number) => post<{ ok: true }>(`/api/tasks/${issue}/open-code`),
   openArtifact: (issue: number, name: string) =>
     post<{ ok: true }>(`/api/tasks/${issue}/artifacts/${encodeURIComponent(name)}/open`),
+  readArtifact: (issue: number, name: string) =>
+    request<DocumentPayload>(`/api/tasks/${issue}/artifacts/${encodeURIComponent(name)}`),
+  saveArtifact: (issue: number, name: string, content: string) =>
+    request<{ ok: true; writeTarget: 'original' | 'snapshot' }>(
+      `/api/tasks/${issue}/artifacts/${encodeURIComponent(name)}`,
+      { method: 'PUT', body: JSON.stringify({ content }) },
+    ),
   cleanup: (issue: number) => post<TaskWithDerived[]>(`/api/tasks/${issue}/cleanup`),
   forget: (issue: number) =>
     request<TaskWithDerived[]>(`/api/tasks/${issue}`, { method: 'DELETE' }),
