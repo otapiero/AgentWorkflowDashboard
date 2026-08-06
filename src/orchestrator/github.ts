@@ -1,5 +1,6 @@
 import { execa } from 'execa';
 
+import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
 import type {
   ChecksState,
   Config,
@@ -253,7 +254,11 @@ export function parseRateLimit(raw: unknown): RateLimit | null {
 // --- gh calls ------------------------------------------------------------
 
 async function gh(args: string[], cwd: string): Promise<string> {
-  const { stdout } = await execa('gh', args, { cwd, reject: true });
+  const { stdout } = await execa('gh', args, {
+    cwd,
+    reject: true,
+    timeout: SUBPROCESS_TIMEOUT_MS,
+  });
   return stdout;
 }
 

@@ -10,6 +10,7 @@ import {
 import { join } from 'node:path';
 import { execa, execaSync } from 'execa';
 
+import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
 import {
   artifactsDir,
   artifactsManifestPath,
@@ -127,7 +128,10 @@ const STATUS_ARGS = ['status', '--porcelain', '--untracked-files=all'];
 /** `git status` paths in a worktree; [] if git fails or is absent. */
 function gitStatusPathsSync(cwd: string): string[] {
   try {
-    const { stdout } = execaSync('git', STATUS_ARGS, { cwd });
+    const { stdout } = execaSync('git', STATUS_ARGS, {
+      cwd,
+      timeout: SUBPROCESS_TIMEOUT_MS,
+    });
     return parsePorcelainPaths(stdout);
   } catch {
     return [];
@@ -136,7 +140,10 @@ function gitStatusPathsSync(cwd: string): string[] {
 
 async function gitStatusPaths(cwd: string): Promise<string[]> {
   try {
-    const { stdout } = await execa('git', STATUS_ARGS, { cwd });
+    const { stdout } = await execa('git', STATUS_ARGS, {
+      cwd,
+      timeout: SUBPROCESS_TIMEOUT_MS,
+    });
     return parsePorcelainPaths(stdout);
   } catch {
     return [];
