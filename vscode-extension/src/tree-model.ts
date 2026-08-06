@@ -1,4 +1,4 @@
-import type { Phase, TaskWithDerived } from '../../src/shared/types.ts';
+import type { BoardConfig, Phase, TaskWithDerived } from '../../src/shared/types.ts';
 import type { TaskStoreSnapshot } from './task-store.ts';
 import { matchWorkspace } from './workspace-matcher.ts';
 
@@ -32,9 +32,9 @@ export function buildChildren(snapshot: TaskStoreSnapshot, currentUri: Workspace
   }
   if (parentId === 'section:all') {
     if (!snapshot.config) return [{ kind: 'message', id: 'message:all:loading', label: 'Waiting for Mission Control data…' }];
-    return snapshot.config.pipeline
-      .filter((phase) => filtered(snapshot.tasks.filter((task) => task.derived.displayPhase === phase.id), filter).length > 0)
-      .map((phase) => ({ kind: 'phase' as const, id: `phase:${phase.id}`, phase: phase.id, label: phase.label }));
+    return laneOrder(snapshot.config)
+      .filter((lane) => filtered(snapshot.tasks.filter((task) => task.derived.displayPhase === lane.id), filter).length > 0)
+      .map((lane) => ({ kind: 'phase' as const, id: `phase:${lane.id}`, phase: lane.id, label: lane.label }));
   }
   if (parentId.startsWith('phase:')) {
     const phase = parentId.slice('phase:'.length) as Phase;
@@ -73,6 +73,19 @@ function currentWorktreeNodes(snapshot: TaskStoreSnapshot, task: TaskWithDerived
   if (task.integration.worktreeExists) nodes.push({ kind: 'action', id: `action:open:${task.issue}`, label: 'Open Worktree', command: 'missionControl.openTask', args: [task.issue] });
   nodes.push({ kind: 'action', id: `action:dashboard:${task.issue}`, label: 'Open Dashboard', command: 'missionControl.openDashboard', args: [] });
   return nodes;
+}
+
+/**
+ * config.yaml configures only the pipeline, but a task can rest before it in inbox
+ * or after it in done. The board brackets its lanes the same way; grouping on the
+ * pipeline alone would make every resting task unreachable in the tree.
+ */
+function laneOrder(config: BoardConfig): readonly { id: Phase; label: string }[] {
+  return [
+    { id: 'inbox', label: 'Inbox' },
+    ...config.pipeline.map((phase) => ({ id: phase.id, label: phase.label })),
+    { id: 'done', label: 'Done' },
+  ];
 }
 
 function filtered(tasks: readonly TaskWithDerived[], filter: string): readonly TaskWithDerived[] {
