@@ -34,6 +34,7 @@ function parseHealthResponse(value: unknown): HealthResponse {
     || !Number.isSafeInteger(health.pid)
     || health.pid <= 0
     || typeof health.startedAt !== 'string'
+    || !(health.instanceId === null || health.instanceId === undefined || typeof health.instanceId === 'string')
   ) {
     throw new ApiContractError('Invalid health response');
   }
@@ -43,6 +44,9 @@ function parseHealthResponse(value: unknown): HealthResponse {
     serverVersion: health.serverVersion,
     pid: health.pid,
     startedAt: health.startedAt,
+    // Absent on a server predating the field; that reads as unclaimed, which is
+    // the safe answer — we decline to own what we cannot identify.
+    instanceId: typeof health.instanceId === 'string' && health.instanceId !== '' ? health.instanceId : null,
   };
 }
 

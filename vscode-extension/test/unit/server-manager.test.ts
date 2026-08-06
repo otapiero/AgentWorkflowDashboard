@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ChildProcess } from 'node:child_process';
@@ -10,7 +10,7 @@ import { MissionControlClient } from '../../src/client/mission-control-client.ts
 import { ServerManager } from '../../src/server-manager.ts';
 
 const directories: string[] = [];
-const health = (overrides: Partial<HealthResponse> = {}): HealthResponse => ({ status: 'ok', apiVersion: 1, serverVersion: '1.0.0', pid: 42, startedAt: '2026-08-03T10:00:00.000Z', ...overrides });
+const health = (overrides: Partial<HealthResponse> = {}): HealthResponse => ({ status: 'ok', apiVersion: 1, serverVersion: '1.0.0', pid: 42, startedAt: '2026-08-03T10:00:00.000Z', instanceId: null, ...overrides });
 
 async function directory(): Promise<string> {
   const value = await mkdtemp(join(tmpdir(), 'mission-control-manager-'));
@@ -90,7 +90,7 @@ test('reports an API mismatch from a runtime-validated client response', async (
 
   await expect(new ServerManager(options({ client })).ensureReady()).resolves.toEqual({
     kind: 'incompatible',
-    health: { status: 'ok', apiVersion: 2, serverVersion: '2.0.0', pid: 42, startedAt: '2026-08-03T10:00:00.000Z' },
+    health: { status: 'ok', apiVersion: 2, serverVersion: '2.0.0', pid: 42, startedAt: '2026-08-03T10:00:00.000Z', instanceId: null },
   });
 });
 
@@ -193,4 +193,113 @@ test.each([
 
   await new ServerManager(dependencies).restartOwned();
   expect(dependencies.kill).not.toHaveBeenCalled();
+});
+
+/**
+ * `npm.cmd start` forks cmd -> tsx -> node, so the PID we hold is the npm
+ * wrapper's and never the PID the server reports. Ownership therefore has to
+ * key off the instance id we injected, and must record the server's own PID so
+ * a later restart kills the process actually holding the port.
+ */
+async function installation(): Promise<string> {
+  const path = await directory();
+  await writeFile(join(path, 'package.json'), JSON.stringify({ name: 'mission-control', scripts: { start: 'node' } }));
+  return path;
+}
+
+function injectedInstanceId(spawn: ReturnType<typeof vi.fn>): string {
+  const [, , spawnOptions] = spawn.mock.calls[0] as [string, string[], { env: NodeJS.ProcessEnv }];
+  const id = spawnOptions.env.MC_INSTANCE_ID;
+  expect(typeof id).toBe('string');
+  return id as string;
+}
+
+test('claims ownership of the server it spawned even though the child PID differs, recording the server PID', async () => {
+  const installationPath = await installation();
+  const storagePath = await directory();
+  const spawn = vi.fn(() => ({ pid: 42, unref: vi.fn() }) as unknown as ChildProcess);
+  let injected: string | undefined;
+  const dependencies = options({
+    installationPath, storagePath, autoStart: true,
+    process: { spawn },
+    // Offline until spawned; then a server whose PID is the tsx grandchild's,
+    // carrying back the id we injected.
+    client: { health: vi.fn(async () => {
+      if (!spawn.mock.calls.length) throw new Error('offline');
+      injected ??= injectedInstanceId(spawn);
+      return health({ pid: 25808, instanceId: injected });
+    }) },
+  });
+
+  const result = await new ServerManager(dependencies).ensureReady();
+
+  expect(result).toMatchObject({ kind: 'ready' });
+  expect(JSON.parse(await readFile(join(storagePath, 'server-owner.json'), 'utf8'))).toEqual({
+    pid: 25808,
+    startedAt: health().startedAt,
+  });
+});
+
+test('a server it spawned can then actually be restarted', async () => {
+  const installationPath = await installation();
+  const storagePath = await directory();
+  const spawn = vi.fn(() => ({ pid: 42, unref: vi.fn() }) as unknown as ChildProcess);
+  let injected: string | undefined;
+  const client = { health: vi.fn(async () => {
+    if (!spawn.mock.calls.length) throw new Error('offline');
+    injected ??= injectedInstanceId(spawn);
+    return health({ pid: 25808, instanceId: injected });
+  }) };
+  const dependencies = options({ installationPath, storagePath, autoStart: true, process: { spawn }, client });
+  const manager = new ServerManager(dependencies);
+  await manager.ensureReady();
+
+  await expect(manager.restartOwned()).resolves.toBe(true);
+  expect(dependencies.kill).toHaveBeenCalledWith(25808);
+});
+
+test('does not claim a server started outside the extension, even on the same port', async () => {
+  const installationPath = await installation();
+  const storagePath = await directory();
+  const spawn = vi.fn(() => ({ pid: 42, unref: vi.fn() }) as unknown as ChildProcess);
+  const dependencies = options({
+    installationPath, storagePath, autoStart: true,
+    process: { spawn },
+    // A manually launched server wins the race: healthy, but unclaimed.
+    client: { health: vi.fn(async () => {
+      if (!spawn.mock.calls.length) throw new Error('offline');
+      return health({ pid: 7777, instanceId: null });
+    }) },
+  });
+
+  await expect(new ServerManager(dependencies).ensureReady()).resolves.toMatchObject({ kind: 'ready' });
+  await expect(stat(join(storagePath, 'server-owner.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+test('does not claim a server carrying a different instance id', async () => {
+  const installationPath = await installation();
+  const storagePath = await directory();
+  const spawn = vi.fn(() => ({ pid: 42, unref: vi.fn() }) as unknown as ChildProcess);
+  const dependencies = options({
+    installationPath, storagePath, autoStart: true,
+    process: { spawn },
+    client: { health: vi.fn(async () => {
+      if (!spawn.mock.calls.length) throw new Error('offline');
+      return health({ pid: 7777, instanceId: 'some-other-window' });
+    }) },
+  });
+
+  await expect(new ServerManager(dependencies).ensureReady()).resolves.toMatchObject({ kind: 'ready' });
+  await expect(stat(join(storagePath, 'server-owner.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+test('injects a distinct instance id per spawn', async () => {
+  const installationPath = await installation();
+  const first = vi.fn(() => ({ pid: 42, unref: vi.fn() }) as unknown as ChildProcess);
+  const second = vi.fn(() => ({ pid: 43, unref: vi.fn() }) as unknown as ChildProcess);
+  const offline = { health: vi.fn().mockRejectedValue(new Error('offline')) };
+  await new ServerManager(options({ installationPath, storagePath: await directory(), autoStart: true, process: { spawn: first }, client: offline })).ensureReady();
+  await new ServerManager(options({ installationPath, storagePath: await directory(), autoStart: true, process: { spawn: second }, client: offline })).ensureReady();
+
+  expect(injectedInstanceId(first)).not.toBe(injectedInstanceId(second));
 });

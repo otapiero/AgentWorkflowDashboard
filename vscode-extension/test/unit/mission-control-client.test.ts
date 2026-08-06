@@ -57,7 +57,25 @@ test('health returns a complete validated response and tolerates additive fields
   const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response({ ...validHealth, futureField: 'allowed' }));
   const client = new MissionControlClient('http://127.0.0.1:4317', fetchMock);
 
-  await expect(client.health(new AbortController().signal)).resolves.toEqual(validHealth);
+  // validHealth carries no instanceId, as a server predating the field would
+  // not: that normalises to null, meaning "unclaimed".
+  await expect(client.health(new AbortController().signal)).resolves.toEqual({ ...validHealth, instanceId: null });
+});
+
+test('health passes an instance id through so a spawner can identify its own server', async () => {
+  const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response({ ...validHealth, instanceId: 'abc-123' }));
+  const client = new MissionControlClient('http://127.0.0.1:4317', fetchMock);
+
+  await expect(client.health(new AbortController().signal)).resolves.toMatchObject({ instanceId: 'abc-123' });
+});
+
+test.each([42, {}, ''])('health treats a non-string instance id (%p) as unclaimed or invalid', async (instanceId) => {
+  const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response({ ...validHealth, instanceId }));
+  const client = new MissionControlClient('http://127.0.0.1:4317', fetchMock);
+
+  const settled = client.health(new AbortController().signal);
+  if (typeof instanceId === 'string') await expect(settled).resolves.toMatchObject({ instanceId: null });
+  else await expect(settled).rejects.toBeInstanceOf(ApiContractError);
 });
 
 test('health rejects malformed JSON with a payload-free contract error', async () => {

@@ -64,9 +64,15 @@ export class ServerManager {
       this.throwIfAborted();
       if (installationError) return { kind: 'configuration-error', message: installationError };
       this.throwIfAborted();
+      // We cannot recognise our own server by PID. `npm start` forks
+      // cmd -> tsx -> node, so `child.pid` is the npm wrapper's while /health
+      // reports the leaf node's — they never match, and the old equality check
+      // meant ownership was never recorded and the server could never be
+      // restarted. An injected id is the identity that survives the fork chain.
+      const instanceId = randomUUID();
       const child = this.options.process.spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['start'], {
         cwd: this.options.installationPath!, detached: true, windowsHide: true, stdio: 'ignore',
-        env: { ...process.env, MC_PORT: url.port || '4317' },
+        env: { ...process.env, MC_PORT: url.port || '4317', MC_INSTANCE_ID: instanceId },
       });
       child.unref();
 
@@ -82,7 +88,11 @@ export class ServerManager {
         const ready = await this.health();
         this.throwIfAborted();
         if (ready) {
-          if (ready.pid === child.pid) {
+          // Record the server's own PID, not the wrapper's, so a later restart
+          // signals the process actually holding the port. A server that came
+          // up without our id is a stranger — most likely a manual `npm start`
+          // that won the race — and we must not claim the right to kill it.
+          if (ready.instanceId !== null && ready.instanceId === instanceId) {
             this.throwIfAborted();
             await this.writeOwner({ pid: ready.pid, startedAt: ready.startedAt });
           }

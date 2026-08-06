@@ -117,6 +117,15 @@ export interface HealthResponse {
   serverVersion: string;
   pid: number;
   startedAt: string;
+  /**
+   * Echo of `MC_INSTANCE_ID`, the token a spawner injected when it launched this
+   * server; null when nobody claimed it (a manual `npm start`).
+   *
+   * A spawner cannot recognise its own server by PID: it launches `npm start`,
+   * which forks cmd -> tsx -> node, so the PID it holds is the wrapper's while
+   * `pid` above is the server's. This is the identity that survives the chain.
+   */
+  instanceId: string | null;
 }
 
 /** A configured agent with the launch choices exposed to the dashboard. */
