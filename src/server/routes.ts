@@ -25,7 +25,13 @@ import {
 import { agentCapabilities } from '../orchestrator/agents.ts';
 import { removeWorktree, resolveBranch } from '../orchestrator/worktree.ts';
 import { PHASES } from '../shared/types.ts';
-import type { Config, HealthResponse, Phase, TaskWithDerived } from '../shared/types.ts';
+import type {
+  Config,
+  HealthResponse,
+  LauncherKind,
+  Phase,
+  TaskWithDerived,
+} from '../shared/types.ts';
 import type { Broadcaster } from './sse.ts';
 
 interface Deps {
@@ -37,6 +43,12 @@ interface Deps {
 
 function isPhase(value: unknown): value is Phase {
   return typeof value === 'string' && (PHASES as readonly string[]).includes(value);
+}
+
+const LAUNCHERS: LauncherKind[] = ['wt', 'vscode', 't3'];
+
+export function isValidLauncher(value: unknown): value is LauncherKind {
+  return typeof value === 'string' && (LAUNCHERS as string[]).includes(value);
 }
 
 /** How a document failure surfaces over HTTP. */
@@ -98,8 +110,8 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
 
   app.post<{ Body: { launcher?: string } }>('/api/settings', async (req, reply) => {
     const launcher = req.body?.launcher;
-    if (launcher !== 'wt' && launcher !== 'vscode') {
-      return reply.code(400).send({ error: "launcher must be 'wt' or 'vscode'" });
+    if (!isValidLauncher(launcher)) {
+      return reply.code(400).send({ error: `launcher must be one of ${LAUNCHERS.join(', ')}` });
     }
     setSettings({ launcher });
     return refreshAndBroadcast();

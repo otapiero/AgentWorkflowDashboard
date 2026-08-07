@@ -14,7 +14,12 @@ function facts(overrides: Partial<Facts> = {}): Facts {
     hasPushedCommits: true,
     dirtyFileCount: 0,
     unpushedCommits: 0,
-    liveSpawn: { phase: 'implement', pid: 42, startedAt: '2026-08-03T09:00:00.000Z' },
+    liveSpawn: {
+      phase: 'implement',
+      pid: 42,
+      startedAt: '2026-08-03T09:00:00.000Z',
+      source: 'marker',
+    },
     pr: { exists: true, number: 99, url: 'https://github.test/pr/99', state: 'OPEN' },
     checks: 'success',
     review: { decision: 'REVIEW_REQUIRED', unresolvedThreads: 2, copilotUnresolved: 1 },

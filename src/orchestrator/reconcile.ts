@@ -41,6 +41,21 @@ function planReady(facts: Facts): boolean {
   return facts.planMdExists || facts.markers.includes('plan.done');
 }
 
+/**
+ * Is something actively working this task?
+ *
+ * T3 answers directly when it can. The PID fallback is not vestigial: it
+ * covers wt- and vscode-launched phases, and it covers the board running while
+ * T3 is down.
+ */
+function isLive(facts: Facts): boolean {
+  if (facts.t3) {
+    const { sessionStatus, activeTurnId } = facts.t3;
+    return sessionStatus === 'starting' || sessionStatus === 'running' || activeTurnId !== null;
+  }
+  return facts.liveSpawn !== null;
+}
+
 /** Evaluated top-down; the first matching rule wins. */
 function derivePhase(facts: Facts): Phase {
   const { pr, review, checks } = facts;
@@ -99,15 +114,18 @@ function computeGates(facts: Facts): Record<Phase, boolean> {
 function computeBadges(facts: Facts): Badge[] {
   const badges: Badge[] = [];
 
-  if (facts.liveSpawn) {
-    badges.push({
-      kind: 'live',
-      label: `${facts.liveSpawn.phase} running`,
-      tone: 'busy',
-    });
+  if (isLive(facts)) {
+    // A T3-only run has no marker to name the phase; the badge still has to
+    // say something, and "session running" is honest about what we know.
+    const what = facts.liveSpawn?.phase ?? 'session';
+    badges.push({ kind: 'live', label: `${what} running`, tone: 'busy' });
   } else if (facts.markers.some((m) => m.endsWith('.running'))) {
     // A running marker with no live process means a terminal died mid-run.
     badges.push({ kind: 'stale-spawn', label: 'spawn ended', tone: 'warn' });
+  }
+
+  if (facts.t3?.lastError) {
+    badges.push({ kind: 't3-error', label: 'T3 session error', tone: 'bad' });
   }
 
   if (facts.pr.exists && facts.pr.number !== null) {
@@ -188,8 +206,15 @@ function computeNeedsYou(
 ): { needsYou: boolean; needsYouReason: string | null } {
   const no = { needsYou: false, needsYouReason: null };
 
+  // A thread blocked on an approval request is precisely what the attention
+  // rail exists to surface, so it is checked before the "something is working
+  // on it, wait" short-circuit.
+  if (facts.t3?.awaitingApproval) {
+    return { needsYou: true, needsYouReason: 'T3 session is waiting for your approval' };
+  }
+
   // Something is actively working the task; wait for it.
-  if (facts.liveSpawn) return no;
+  if (isLive(facts)) return no;
   if (derivedPhase === 'done') return no;
 
   // Precedence mirrors derivePhase, so the reason always describes the lane the

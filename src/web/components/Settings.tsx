@@ -78,14 +78,14 @@ export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
         <section className="section">
           <div className="section-label">Where agents open</div>
           <div className="actions">
-            {(['wt', 'vscode'] as LauncherKind[]).map((kind) => (
+            {(['wt', 'vscode', 't3'] as LauncherKind[]).map((kind) => (
               <button
                 key={kind}
                 className={`btn is-sm${config.launcher === kind ? ' is-on' : ''}`}
                 disabled={busy !== null}
                 onClick={() => act('launcher', () => api.setLauncher(kind))}
               >
-                {kind === 'wt' ? 'Windows Terminal' : 'VS Code'}
+                {kind === 'wt' ? 'Windows Terminal' : kind === 'vscode' ? 'VS Code' : 'T3 Code'}
               </button>
             ))}
           </div>
@@ -94,6 +94,16 @@ export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
               Opens the task's worktree in VS Code and runs the agent in the integrated
               terminal. The window opens with workspace trust off so the agent starts
               without a prompt; your trust settings for other folders are untouched.
+            </p>
+          )}
+          {config.launcher === 't3' && (
+            <p className="hint">
+              Runs each phase as a T3 Code thread bound to the same worktree, so T3
+              reports whether a session is really running and when it is blocked on an
+              approval. Needs T3 Code running, an agent with a <code>t3Instance</code> in
+              config.yaml, and a pairing credential at{' '}
+              <code>~/.mc/t3-credential</code> — create one in T3 under Settings →
+              Create pairing link.
             </p>
           )}
         </section>

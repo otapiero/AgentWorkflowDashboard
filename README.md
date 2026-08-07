@@ -24,7 +24,8 @@ a general tool.
 ## Requirements
 
 `node`, `git`, `gh` (authenticated), `wt` (Windows Terminal), `pwsh` 7+, and at
-least one agent CLI — `claude`, `copilot`, and/or `codex`.
+least one agent CLI — `claude`, `copilot`, and/or `codex`. T3 Code is optional
+and needed only for the `t3` launcher.
 
 ## Setup
 
@@ -89,6 +90,40 @@ The **Agents** panel also picks the launcher:
   `--disable-workspace-trust`, so a fresh worktree does not open in Restricted
   Mode and stall the run behind a trust prompt; that flag applies to the launched
   window only and does not change your trust settings for any other folder.
+- **T3 Code** — runs the phase as a thread in [T3 Code](https://github.com/pingdotgg/t3code),
+  bound to the same worktree Mission Control already creates. T3 then reports whether a
+  session is genuinely running and when it is blocked on an approval, which retires the
+  PID guess for those phases. Mission Control never starts T3's server and never modifies
+  T3 itself; it attaches to the one the desktop application already runs.
+
+  One-time setup:
+
+  1. Install T3 Code: `winget install T3Tools.T3Code`
+  2. Start it, then **Settings → This environment → Authorized clients → Create link**,
+     and copy the **"This machine"** pairing URL. It looks like
+     `http://127.0.0.1:3773/pair#token=XXXXXXXX`.
+  3. Save it to `%USERPROFILE%\.mc\t3-credential` **immediately** — the link is
+     single-use and expires about three minutes after you create it. Paste the whole
+     URL; Mission Control reads the token out of the fragment.
+  4. Give each agent a `t3Instance` in `config.yaml` (`claude` → `claudeAgent`,
+     `codex` → `codex`, `copilot` → `opencode`).
+  5. `npm run mc -- doctor` reports whether each instance can actually run.
+
+  The pairing token is spent on first use, but the access token it buys is good for
+  30 days and is cached at `~/.mc/t3-token.json`, so restarting the board does
+  not need a new link. When that token expires, `doctor` says so — the renewal runbook
+  is [docs/t3-credential-renewal.md](docs/t3-credential-renewal.md).
+
+  If **Create link** is missing, turn on network access for the environment — the
+  `one-time-token` bootstrap method only exists once T3 is reachable beyond loopback.
+
+  `copilot` through T3 is a substitution, not a passthrough: it runs OpenCode's agent
+  loop using Copilot's models, and needs the `opencode` CLI installed and authenticated
+  against a Copilot Pro, Pro+, Business or Enterprise subscription.
+
+  T3 0.0.31 has no preview panel, so the board is not surfaced inside T3; open it in a
+  browser as usual. See
+  [the finding](docs/superpowers/notes/2026-08-07-t3-preview-panel-finding.md).
 
 ## Headless orchestrator
 
@@ -157,7 +192,7 @@ Runtime state lives entirely under `%USERPROFILE%\.mc\`
 ## Testing
 
 ```powershell
-npm test          # 179 unit tests
+npm test          # 525 unit tests
 npm run typecheck
 ```
 

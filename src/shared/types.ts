@@ -41,11 +41,14 @@ export type ReviewDecision =
 
 export type PrState = 'OPEN' | 'MERGED' | 'CLOSED';
 
-/** A spawn that is currently believed to be running, identified by its pwsh PID. */
+/** A spawn believed to be running, from a pwsh PID or from a T3 session. */
 export interface LiveSpawn {
   phase: Phase;
-  pid: number;
+  /** The pwsh PID for wt/vscode launches; null when T3 supplies liveness. */
+  pid: number | null;
   startedAt: string;
+  /** Which signal established this. 't3' means a live orchestration session. */
+  source: 'marker' | 't3';
 }
 
 /** One artifact a planning run produced, copied into the task's own folder. */
@@ -87,6 +90,25 @@ export interface Facts {
   unpushedCommits: number;
   /** Non-null only when a `<phase>.running` marker names a live process. */
   liveSpawn: LiveSpawn | null;
+  /**
+   * Live session state from T3 Code, when the task has a recorded thread and
+   * T3 is reachable. Absent means "no information", never "not running" —
+   * which is why every consumer must fall back rather than conclude.
+   */
+  t3?: {
+    threadId: string;
+    sessionStatus:
+      | 'idle'
+      | 'starting'
+      | 'running'
+      | 'ready'
+      | 'interrupted'
+      | 'stopped'
+      | 'error';
+    activeTurnId: string | null;
+    awaitingApproval: boolean;
+    lastError: string | null;
+  };
   pr: {
     exists: boolean;
     number: number | null;
@@ -151,6 +173,7 @@ export interface BoardConfig {
 export type BadgeKind =
   | 'live'
   | 'stale-spawn'
+  | 't3-error'
   | 'plan-ready'
   | 'dirty'
   | 'unpushed'
@@ -187,6 +210,8 @@ export interface SpawnRecord {
   startedAt: string;
   /** The full command line used, kept purely for debugging a bad spawn. */
   command: string;
+  /** The T3 thread this spawn created, when the launcher was 't3'. */
+  threadId?: string;
 }
 
 export interface TaskOverrides {
@@ -250,7 +275,48 @@ export type PhaseDefaults = Record<
   { agent?: string; model?: string; effort?: string }
 >;
 
-export type LauncherKind = 'wt' | 'vscode';
+export type LauncherKind = 'wt' | 'vscode' | 't3';
+
+/** T3's per-thread permission level. */
+export type T3RuntimeMode =
+  | 'approval-required'
+  | 'auto-accept-edits'
+  | 'auto'
+  | 'full-access';
+
+/** T3's per-thread interaction style. 'plan' is its native planning mode. */
+export type T3InteractionMode = 'default' | 'plan';
+
+export interface T3PhaseModes {
+  runtimeMode: T3RuntimeMode;
+  interactionMode: T3InteractionMode;
+}
+
+/**
+ * Per-phase modes used when config.yaml does not set them.
+ *
+ * Chosen to match each phase's intent, not validated by use — which is exactly
+ * why they are configuration. Note that none of them is 'full-access': T3's own
+ * decoding default is, so falling through to T3 would silently grant more than
+ * any phase here asks for.
+ */
+export const DEFAULT_T3_MODES: Record<string, T3PhaseModes> = {
+  plan: { runtimeMode: 'approval-required', interactionMode: 'plan' },
+  implement: { runtimeMode: 'auto-accept-edits', interactionMode: 'default' },
+  publish: { runtimeMode: 'approval-required', interactionMode: 'default' },
+  copilot_review: { runtimeMode: 'auto-accept-edits', interactionMode: 'default' },
+  dev_review: { runtimeMode: 'auto-accept-edits', interactionMode: 'default' },
+};
+
+/** The safe floor for a phase nobody configured. Never 'full-access'. */
+const T3_MODE_FLOOR: T3PhaseModes = {
+  runtimeMode: 'approval-required',
+  interactionMode: 'default',
+};
+
+export function t3ModesForPhase(phase: PhaseConfig): T3PhaseModes {
+  return phase.t3 ?? DEFAULT_T3_MODES[phase.id] ?? T3_MODE_FLOOR;
+}
 
 /** UI-adjustable preferences that layer over config.yaml. */
 export interface Settings {
@@ -263,6 +329,8 @@ export interface StateFile {
   tasks: TaskRecord[];
   phaseDefaults?: PhaseDefaults;
   settings?: Settings;
+  /** The T3 project id, created once lazily and reused by later spawns. */
+  t3ProjectId?: string;
 }
 
 // --- config.yaml ---------------------------------------------------------
@@ -294,6 +362,11 @@ export interface AgentProfile {
   instructionFlag?: string;
   /** Extra args; {{taskDir}} and {{worktree}} are expanded at spawn time. */
   extraArgs?: string[];
+  /**
+   * The T3 provider instance that runs this agent on the 't3' launcher, e.g.
+   * 'claudeAgent'. An agent without one is not launchable through T3.
+   */
+  t3Instance?: string;
 }
 
 export interface PhaseConfig {
@@ -306,6 +379,8 @@ export interface PhaseConfig {
   repeatable?: boolean;
   gate: { type: 'manual' } | { type: 'auto'; signal: GateSignal };
   onFail?: { offerSpawnPhase: string };
+  /** Per-phase T3 modes. Both fields required together; see t3ModesForPhase. */
+  t3?: T3PhaseModes;
 }
 
 export interface Config {
@@ -329,4 +404,11 @@ export interface Config {
   server: { port: number };
   /** How a spawn opens its terminal. Default 'wt'. */
   launcher?: LauncherKind;
+  /** T3 Code integration settings. Absent means the 't3' launcher is unconfigured. */
+  t3?: {
+    /** Title of the T3 project Mission Control creates. Default 'Acme'. */
+    projectTitle?: string;
+    /** T3 version the recorded fixtures were captured against. */
+    pinnedVersion?: string;
+  };
 }

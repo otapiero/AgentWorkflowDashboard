@@ -22,6 +22,9 @@ import { spawnPhase } from './spawn.ts';
 import { collectArtifacts } from './artifacts.ts';
 import { listBranches, resolveBranch } from './worktree.ts';
 import { mcHome } from './paths.ts';
+import { T3Client } from './t3/client.ts';
+import { readInstanceReadiness } from './t3/instances.ts';
+import { formatT3Doctor } from './t3/doctor.ts';
 import type { Config, TaskRecord } from '../shared/types.ts';
 
 function die(message: string): never {
@@ -58,6 +61,30 @@ async function doctor(config: Config): Promise<void> {
     console.log('  ok      gh authenticated');
   } catch {
     console.log('  MISSING gh not authenticated');
+  }
+
+  console.log('');
+
+  const client = new T3Client();
+  const t3Instances = Object.entries(config.agents)
+    .filter(([, profile]) => profile.t3Instance)
+    .map(([agent, profile]) => {
+      const readiness = readInstanceReadiness(profile.t3Instance!);
+      return {
+        agent,
+        instanceId: readiness.instanceId,
+        ready: readiness.ready,
+        reason: readiness.reason,
+        models: readiness.models,
+      };
+    });
+
+  for (const line of formatT3Doctor({
+    status: await client.status(),
+    pinnedVersion: config.t3?.pinnedVersion,
+    instances: t3Instances,
+  })) {
+    console.log(line);
   }
 }
 

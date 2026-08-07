@@ -5,6 +5,8 @@ import { readArtifacts } from './artifacts.ts';
 import { listMarkers, readLiveSpawn } from './markers.ts';
 import type { BatchedBranchPrs } from './github.ts';
 import { gatherGitFacts, worktreeExists } from './worktree.ts';
+import { latestThreadId, toT3Fact } from './t3/facts.ts';
+import type { T3Snapshot } from './t3/schemas.ts';
 import type { Config, Facts, TaskRecord } from '../shared/types.ts';
 
 /**
@@ -22,6 +24,11 @@ export async function gatherFacts(
   task: TaskRecord,
   branches: Set<string>,
   batch: BatchedBranchPrs,
+  /**
+   * The orchestration snapshot for this cycle, fetched once by the poller.
+   * Absent means T3 is unavailable, which is a normal state.
+   */
+  t3Snapshot?: T3Snapshot,
 ): Promise<Facts> {
   const markers = listMarkers(task.issue);
   const liveSpawn = readLiveSpawn(task.issue);
@@ -38,6 +45,7 @@ export async function gatherFacts(
     dirtyFileCount: 0,
     unpushedCommits: 0,
     liveSpawn,
+    t3: toT3Fact(t3Snapshot, latestThreadId(task)),
     pr: { exists: false, number: null, url: null, state: null },
     checks: 'none',
     review: { decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 },

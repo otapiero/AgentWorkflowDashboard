@@ -90,6 +90,7 @@ export function readLiveSpawn(issue: number): LiveSpawn | null {
         phase: (parsed.phase ?? name.replace(/\.running$/, '')) as Phase,
         pid: parsed.pid,
         startedAt: parsed.startedAt ?? new Date(0).toISOString(),
+        source: 'marker',
       };
     }
 

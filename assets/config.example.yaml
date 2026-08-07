@@ -20,10 +20,28 @@ github:
   # Verified against real review threads on this repo.
   copilotReviewerLogin: 'copilot-pull-request-reviewer'
 
-# How a spawn opens its terminal: 'wt' (Windows Terminal, default) or 'vscode'
-# (opens the worktree in VS Code and runs the agent in the integrated terminal).
+# How a spawn opens its terminal:
+#   'wt'     Windows Terminal (default) — one titled tab per task.
+#   'vscode' opens the worktree in VS Code, agent in the integrated terminal.
+#   't3'     runs the phase as a T3 Code thread bound to the same worktree.
 # Also switchable live from the Agents settings panel.
 launcher: wt
+
+# T3 Code integration, used only by the 't3' launcher.
+#
+# Requires a pairing credential at %USERPROFILE%\.mc\t3-credential.
+# Mint one in T3: Settings -> This environment -> Authorized clients ->
+# Create link, then save the "This machine" URL there. Do it promptly: the
+# link is single-use and expires within about three minutes. Mission Control
+# cannot mint it for you — T3 only bootstraps its own renderer.
+#
+# The access token that link buys lasts 30 days and is cached in
+# %USERPROFILE%\.mc\t3-token.json, so this is a one-time step.
+t3:
+  projectTitle: 'Acme'
+  # The T3 version this integration was verified against. `mc doctor` warns
+  # when the running server differs; it never blocks.
+  pinnedVersion: '0.0.31'
 
 agents:
   # Verified against claude 2.1.x: prompt is positional, standing rules go
@@ -39,6 +57,8 @@ agents:
     model: default
     models: [default, opus, sonnet, haiku]
     efforts: [low, medium, high, xhigh, max]
+    # T3 provider instance that runs this agent on the 't3' launcher.
+    t3Instance: 'claudeAgent'
 
   # Verified against copilot 1.0.73: -i starts an interactive session with the
   # prompt preloaded, there is no system-prompt flag (standing rules are
@@ -55,6 +75,13 @@ agents:
     # (run /model in an interactive `copilot` session to see them).
     models: [auto, claude-sonnet-5, gpt-5.6-luna, gpt-5.6-sol, gpt-5.6-terra]
     efforts: [none, minimal, low, medium, high, xhigh, max]
+    # T3 has no GitHub Copilot CLI driver. The 't3' launcher therefore routes
+    # copilot through OpenCode, which GitHub supports against a Copilot
+    # subscription (Pro, Pro+, Business or Enterprise — Free will not work).
+    # This is a substitution, not a passthrough: it is OpenCode's agent loop
+    # using Copilot's models, not the Copilot CLI harness the 'wt' launcher
+    # drives. Requires the `opencode` CLI installed and authenticated.
+    t3Instance: 'opencode'
 
   # Codex CLI launches its interactive TUI from a positional prompt. Global
   # options precede that prompt, and reasoning effort is a config override.
@@ -72,6 +99,7 @@ agents:
     models: [default, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna]
     efforts: [low, medium, high, xhigh, max, ultra]
     extraArgs: ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request', '--add-dir', '{{taskDir}}']
+    t3Instance: 'codex'
 
 pipeline:
   - id: plan
@@ -80,6 +108,11 @@ pipeline:
     command: mc-planner
     spawnable: true
     gate: { type: manual }
+    # T3-only: how much the agent may do without asking, and whether it
+    # starts in T3's native plan mode. Ignored by the wt and vscode launchers.
+    t3:
+      runtimeMode: approval-required
+      interactionMode: plan
 
   - id: implement
     label: Implement
@@ -88,6 +121,9 @@ pipeline:
     spawnable: true
     repeatable: true
     gate: { type: manual }
+    t3:
+      runtimeMode: auto-accept-edits
+      interactionMode: default
 
   - id: publish
     label: Publish
@@ -95,6 +131,9 @@ pipeline:
     command: mc-publish
     spawnable: true
     gate: { type: auto, signal: pr_exists }
+    t3:
+      runtimeMode: approval-required
+      interactionMode: default
 
   - id: ci
     label: CI
