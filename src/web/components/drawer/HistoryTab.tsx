@@ -52,6 +52,23 @@ export function HistoryTab({ task }: TabProps) {
           {[...task.spawnHistory].reverse().map((s, i) => (
             <div key={`${s.startedAt}-${i}`}>
               spawn: {new Date(s.startedAt).toLocaleString()} · {s.phase} · {s.agent}
+              {/*
+                A copy button rather than a link: T3 Code is a desktop
+                application with no documented URL scheme for opening a thread,
+                so a deep link would be a guess.
+              */}
+              {s.threadId && (
+                <>
+                  {' · '}
+                  <button
+                    className="btn is-sm"
+                    title="Copy this run's T3 thread id"
+                    onClick={() => navigator.clipboard.writeText(s.threadId!)}
+                  >
+                    T3 thread
+                  </button>
+                </>
+              )}
             </div>
           ))}
         </div>
