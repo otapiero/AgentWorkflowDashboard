@@ -10,6 +10,8 @@ import { toEditorIntegration } from './editor-integration.ts';
 import { loadState, saveState } from './state.ts';
 import { listBranches, worktreeExists } from './worktree.ts';
 import { resolveAgent } from './agents.ts';
+import { T3Client } from './t3/client.ts';
+import { latestThreadId } from './t3/facts.ts';
 import type {
   Config,
   DerivedState,
@@ -20,6 +22,21 @@ import type {
   TaskRecord,
   TaskWithDerived,
 } from '../shared/types.ts';
+
+/**
+ * One client for the process, so the bearer token is exchanged once rather
+ * than per cycle. Discovery still runs on every request, which is what lets a
+ * T3 restart on a new port be picked up without restarting the board.
+ */
+const t3 = new T3Client();
+
+/**
+ * Only spend a request when some task could actually use the answer. A board
+ * that has never launched through T3 must not pay for it on every poll.
+ */
+export function shouldFetchT3Snapshot(tasks: TaskRecord[]): boolean {
+  return tasks.some((task) => latestThreadId(task) !== null);
+}
 
 /**
  * The prState/mergedAt to persist given a freshly observed PR state. mergedAt is
@@ -84,11 +101,14 @@ export async function reconcileAll(
   ];
   const batch = await fetchBranchPrs(config, activeBranches);
 
+  // One snapshot covers every task, so the cost does not scale with board size.
+  const t3Snapshot = shouldFetchT3Snapshot(state.tasks) ? await t3.fetchSnapshot() : undefined;
+
   let dirty = false;
   const results = await Promise.all(
     state.tasks.map(async (task): Promise<TaskWithDerived> => {
       try {
-        let facts = await gatherFacts(config, task, branches, batch);
+        let facts = await gatherFacts(config, task, branches, batch, t3Snapshot);
         // Once a plan run has ended (or the agent signalled done) and nothing
         // has been collected yet, gather its artifacts. This is the crash-safe
         // floor: capture happens even if the agent never signed off.
