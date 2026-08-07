@@ -109,10 +109,10 @@ The **Agents** panel also picks the launcher:
      `codex` → `codex`, `copilot` → `opencode`).
   5. `npm run mc -- doctor` reports whether each instance can actually run.
 
-  You only do that once. The pairing token is spent on first use, but the access token
-  it buys is good for 30 days and is cached at `~/.mc/t3-token.json`, so
-  restarting the board does not need a new link. When that token does expire, `doctor`
-  says so and names the fix.
+  The pairing token is spent on first use, but the access token it buys is good for
+  30 days and is cached at `~/.mc/t3-token.json`, so restarting the board does
+  not need a new link. When that token expires, `doctor` says so — the renewal runbook
+  is [docs/t3-credential-renewal.md](docs/t3-credential-renewal.md).
 
   If **Create link** is missing, turn on network access for the environment — the
   `one-time-token` bootstrap method only exists once T3 is reachable beyond loopback.
