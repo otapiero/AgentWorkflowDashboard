@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execa } from 'execa';
@@ -17,14 +18,24 @@ import {
 } from './artifacts.ts';
 import { agentCapabilities } from './agents.ts';
 import { resolveSpawnPlan } from './spawn-plan.ts';
-import { getPhaseDefaults, getSettings } from './state.ts';
+import { getPhaseDefaults, getSettings, getT3ProjectId, setT3ProjectId } from './state.ts';
 import { ensureWorktree } from './worktree.ts';
+import { T3Client } from './t3/client.ts';
+import {
+  buildModelSelection,
+  buildProjectCreateCommand,
+  buildTurnStartCommand,
+  type ModelSelection,
+} from './t3/commands.ts';
+import { readInstanceReadiness, type InstanceReadiness } from './t3/instances.ts';
+import { t3ModesForPhase } from '../shared/types.ts';
 import type {
   AgentProfile,
   Config,
   Phase,
   PhaseConfig,
   SpawnRecord,
+  T3PhaseModes,
   TaskRecord,
 } from '../shared/types.ts';
 
@@ -278,6 +289,56 @@ function describeAgent(agent: string, model: string | null, effort: string | nul
   return extras.length ? `${agent} (${extras.join(', ')})` : agent;
 }
 
+export type T3LaunchPlan =
+  | { ok: true; modelSelection: ModelSelection; modes: T3PhaseModes }
+  | { ok: false; error: string };
+
+/**
+ * Can this phase run through T3, and with what?
+ *
+ * Pure, and separate from the launch itself, because every one of these
+ * refusals should reach the card as a sentence rather than as a rejected
+ * dispatch with a server-side message about an id the operator never typed.
+ */
+export function resolveT3Launch(input: {
+  agent: string;
+  profile: AgentProfile;
+  phase: PhaseConfig;
+  model: string | null;
+  effort: string | null;
+  readiness?: (instanceId: string) => InstanceReadiness;
+}): T3LaunchPlan {
+  const readiness = input.readiness ?? readInstanceReadiness;
+
+  if (!input.profile.t3Instance) {
+    return {
+      ok: false,
+      error: `Agent '${input.agent}' has no t3Instance in config.yaml, so it cannot run through T3 Code. Add one (for example t3Instance: 'codex') or pick a different launcher.`,
+    };
+  }
+
+  const instance = readiness(input.profile.t3Instance);
+  if (!instance.ready) {
+    return {
+      ok: false,
+      error: `T3 cannot run '${input.agent}': ${instance.reason}`,
+    };
+  }
+
+  const modelSelection = buildModelSelection(input.profile, {
+    model: input.model,
+    effort: input.effort,
+  });
+  if (!modelSelection) {
+    return {
+      ok: false,
+      error: `T3 needs a specific model for '${input.agent}', but the resolved choice was '${input.model ?? 'none'}'. Pick a model in the drawer, or set one on the agent in config.yaml.`,
+    };
+  }
+
+  return { ok: true, modelSelection, modes: t3ModesForPhase(input.phase) };
+}
+
 /**
  * Prepare and launch a phase. Returns as soon as the terminal is handed off;
  * the agent session is deliberately not awaited.
@@ -329,16 +390,98 @@ export async function spawnPhase(
   const specFile = writeSpec(spec);
 
   const launcher = getSettings().launcher ?? config.launcher ?? 'wt';
-  const command =
-    launcher === 'vscode'
-      ? await launchVscode(config, task, phase, specFile)
-      : launchWt(task, phase, config, specFile);
+
+  let command: string;
+  let threadId: string | undefined;
+
+  if (launcher === 't3') {
+    const plan = resolveT3Launch({ agent, profile, phase, model, effort });
+    if (!plan.ok) throw new Error(plan.error);
+    const launched = await launchT3(config, task, phase, { ...plan, prompt: promptText });
+    command = launched.command;
+    threadId = launched.threadId;
+  } else if (launcher === 'vscode') {
+    command = await launchVscode(config, task, phase, specFile);
+  } else {
+    command = launchWt(task, phase, config, specFile);
+  }
 
   return {
     phase: phase.id,
     agent: describeAgent(agent, model, effort),
     startedAt: new Date().toISOString(),
     command,
+    ...(threadId ? { threadId } : {}),
+  };
+}
+
+/**
+ * T3 path: the worktree must exist before the thread binds to it, so it is
+ * created here exactly as the vscode path does. T3 is never asked to create
+ * one — it needs the worktree's path, not its authorship.
+ *
+ * Unlike wt and vscode this does not detach a terminal, so the dispatch is
+ * awaited: an agent that could not start should fail the spawn loudly rather
+ * than leaving a card that claims a run began.
+ */
+async function launchT3(
+  config: Config,
+  task: TaskRecord,
+  phase: PhaseConfig,
+  plan: { modelSelection: ModelSelection; modes: T3PhaseModes; prompt: string },
+  client: T3Client = new T3Client(),
+): Promise<{ command: string; threadId: string }> {
+  await ensureWorktree(config, task.issue, task.branch);
+
+  const createdAt = new Date().toISOString();
+
+  // The project is created once, lazily, and reused so every task's threads
+  // group under one entry in T3's sidebar.
+  let projectId = getT3ProjectId();
+  if (!projectId) {
+    projectId = randomUUID();
+    const created = await client.dispatch(
+      buildProjectCreateCommand({
+        commandId: randomUUID(),
+        projectId,
+        title: config.t3?.projectTitle ?? 'Acme',
+        workspaceRoot: config.repo.path,
+        createdAt,
+      }),
+    );
+    if (!created.ok) throw new Error(`Could not create the T3 project: ${created.error}`);
+    setT3ProjectId(projectId);
+
+    // T3 0.0.31 has no preview panel, so the Mission Control project script is
+    // deliberately not pushed here. See
+    // docs/superpowers/notes/2026-08-07-t3-preview-panel-finding.md; the block
+    // to add if a later release gains one is in Task 12 Step 5 of the plan.
+  }
+
+  const threadId = randomUUID();
+  const result = await client.dispatch(
+    buildTurnStartCommand({
+      commandId: randomUUID(),
+      threadId,
+      messageId: randomUUID(),
+      projectId,
+      title: `#${task.issue} ${phase.id}`,
+      // The same rendered text writePromptFile just persisted. Passing it
+      // through rather than re-reading keeps the prompt file exactly what it
+      // is for the other launchers: a record, not a channel.
+      prompt: plan.prompt,
+      worktreePath: worktreePath(task.issue),
+      branch: task.branch,
+      modelSelection: plan.modelSelection,
+      modes: plan.modes,
+      createdAt,
+    }),
+  );
+  if (!result.ok) throw new Error(`T3 did not start the phase: ${result.error}`);
+
+  return {
+    command: `t3 dispatch thread.turn.start (thread ${threadId})`,
+    threadId,
   };
 }
 

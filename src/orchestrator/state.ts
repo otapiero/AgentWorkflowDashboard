@@ -92,6 +92,22 @@ export function setPhaseDefault(
   saveState({ ...state, phaseDefaults: defaults });
 }
 
+/**
+ * The T3 project Mission Control created, if any.
+ *
+ * Created once lazily on the first 't3' spawn and reused thereafter, so every
+ * task's threads live under one project in T3's sidebar. Losing this id costs
+ * one extra project, never any work.
+ */
+export function getT3ProjectId(): string | null {
+  return loadState().t3ProjectId ?? null;
+}
+
+export function setT3ProjectId(id: string): void {
+  const state = loadState();
+  saveState({ ...state, t3ProjectId: id });
+}
+
 export function getSettings(): Settings {
   return loadState().settings ?? {};
 }
