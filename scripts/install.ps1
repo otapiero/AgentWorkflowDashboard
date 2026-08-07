@@ -81,7 +81,11 @@ if (Test-Path $t3Runtime) {
     if (-not (Test-Path $t3Credential) -and -not (Test-Path $t3Token)) {
         Write-Host "  note: no T3 credential yet. The 't3' launcher needs one."
         Write-Host "        In T3: Settings -> This environment -> Authorized clients -> Create link."
-        Write-Host "        Save the 'This machine' URL to $t3Credential straight away —"
+        # Keep this block ASCII-only. Windows PowerShell 5.1 reads a .ps1 with
+        # no BOM as ANSI, so a UTF-8 em-dash arrives as bytes ending in 0x94 --
+        # a curly close-quote, which PowerShell accepts as a string terminator.
+        # The result is a parser error tens of lines further down.
+        Write-Host "        Save the 'This machine' URL to $t3Credential straight away:"
         Write-Host "        the link is single-use and expires within about three minutes."
     }
 }
