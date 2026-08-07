@@ -3,12 +3,16 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { existsSync, readFileSync } from 'node:fs';
+
 import { mcHome } from '../src/orchestrator/paths.ts';
 import {
   T3TokenStore,
   T3_SCOPES,
+  hasCachedT3Token,
   readPairingCredential,
   t3CredentialPath,
+  t3TokenCachePath,
 } from '../src/orchestrator/t3/auth.ts';
 
 let home: string;
@@ -64,6 +68,33 @@ describe('pairing credential on disk', () => {
 
   test('an empty credential file reads as null rather than an empty token', () => {
     writeCredential('   \n');
+    expect(readPairingCredential()).toBeNull();
+  });
+
+  test('a pairing URL from T3s Create link button yields just the token', () => {
+    // Recorded verbatim from T3 0.0.31's "Create link" button on 2026-08-07.
+    // The token is in the FRAGMENT, not the query string — a fragment never
+    // reaches a server, so it stays out of logs. searchParams finds nothing
+    // here, and sending the whole URL as a bearer token 401s in a way that
+    // reads exactly like a revoked credential.
+    writeCredential('http://127.0.0.1:3773/pair#token=QX7T5F72X89Q\n');
+    expect(readPairingCredential()).toBe('QX7T5F72X89Q');
+  });
+
+  test('a query-string pairing URL works too', () => {
+    writeCredential('http://192.168.110.1:3773/pair?token=pair-abc123');
+    expect(readPairingCredential()).toBe('pair-abc123');
+  });
+
+  test('extra query parameters on the pairing URL do not confuse it', () => {
+    writeCredential('http://127.0.0.1:3773/pair?token=pair-abc123&label=mc');
+    expect(readPairingCredential()).toBe('pair-abc123');
+  });
+
+  test('a URL with no recognisable token is null, not the whole URL', () => {
+    // Sending a URL as a bearer credential would 401 in a way that reads as
+    // "your credential was revoked", sending you to re-mint a working one.
+    writeCredential('http://127.0.0.1:3773/pair');
     expect(readPairingCredential()).toBeNull();
   });
 });
@@ -152,6 +183,81 @@ describe('T3TokenStore', () => {
     const { impl } = recordingFetch([{ status: 200, body: { token_type: 'Bearer' } }]);
     const store = new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', impl);
     expect(await store.getToken()).toBeNull();
+  });
+
+  /**
+   * The lifetime asymmetry this whole module exists for, verified against T3
+   * 0.0.31 on 2026-08-07: the pairing token is single-use and expires about
+   * three minutes after it is minted, while the access token it buys is good
+   * for 30 days (expires_in 2591999). Caching the access token in memory only
+   * would mean every board restart tried to re-exchange a spent token.
+   */
+  describe('the access token outlives the process that earned it', () => {
+    test('a successful exchange persists the access token', async () => {
+      const { impl } = recordingFetch([{ status: 200, body: goodToken }]);
+      await new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', impl).getToken();
+
+      expect(existsSync(t3TokenCachePath())).toBe(true);
+      expect(JSON.parse(readFileSync(t3TokenCachePath(), 'utf8')).accessToken).toBe('tok-1');
+    });
+
+    test('a fresh store reuses the persisted token instead of exchanging', async () => {
+      const first = recordingFetch([{ status: 200, body: goodToken }]);
+      await new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', first.impl).getToken();
+
+      // A new process, and the pairing token has been spent — so an exchange
+      // here would fail. The persisted token must carry it.
+      const second = recordingFetch([{ status: 401, body: { error: 'invalid_grant' } }]);
+      const store = new T3TokenStore('http://127.0.0.1:3773', 'spent', second.impl);
+      expect(await store.getToken()).toBe('tok-1');
+      expect(second.calls).toHaveLength(0);
+    });
+
+    test('a spent pairing token is fine when a valid access token is on disk', async () => {
+      const first = recordingFetch([{ status: 200, body: goodToken }]);
+      await new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', first.impl).getToken();
+
+      // null credential: the operator never replaced the spent pairing token.
+      const { impl, calls } = recordingFetch([{ status: 401, body: {} }]);
+      expect(await new T3TokenStore('http://127.0.0.1:3773', null, impl).getToken()).toBe('tok-1');
+      expect(calls).toHaveLength(0);
+    });
+
+    test('no credential and no cached token says so rather than exchanging nothing', async () => {
+      const { impl, calls } = recordingFetch([{ status: 200, body: goodToken }]);
+      const store = new T3TokenStore('http://127.0.0.1:3773', null, impl);
+      expect(await store.getToken()).toBeNull();
+      expect(calls).toHaveLength(0);
+      expect(store.lastError).toContain('Create link');
+    });
+
+    test('an expired persisted token is not reused', async () => {
+      const first = recordingFetch([{ status: 200, body: { ...goodToken, expires_in: 120 } }]);
+      const t0 = Date.parse('2026-08-07T09:00:00.000Z');
+      await new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', first.impl).getToken(t0);
+
+      const { impl, calls } = recordingFetch([
+        { status: 200, body: { ...goodToken, access_token: 'tok-2' } },
+      ]);
+      const store = new T3TokenStore('http://127.0.0.1:3773', 'pair-2', impl);
+      expect(await store.getToken(t0 + 200_000)).toBe('tok-2');
+      expect(calls).toHaveLength(1);
+    });
+
+    test('invalidate removes the persisted copy, so a dead token is not reloaded', async () => {
+      const { impl } = recordingFetch([{ status: 200, body: goodToken }]);
+      const store = new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', impl);
+      await store.getToken();
+      store.invalidate();
+      expect(existsSync(t3TokenCachePath())).toBe(false);
+    });
+
+    test('hasCachedT3Token reports whether a re-pair is needed', async () => {
+      expect(hasCachedT3Token()).toBe(false);
+      const { impl } = recordingFetch([{ status: 200, body: goodToken }]);
+      await new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', impl).getToken();
+      expect(hasCachedT3Token()).toBe(true);
+    });
   });
 
   test('a successful exchange clears a previous error', async () => {

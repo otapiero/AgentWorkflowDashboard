@@ -77,10 +77,12 @@ $t3Runtime = Join-Path $env:USERPROFILE '.t3\userdata\server-runtime.json'
 if (Test-Path $t3Runtime) {
     Write-Host "  ok: T3 Code state found at $t3Runtime"
     $t3Credential = Join-Path $env:USERPROFILE '.mc\t3-credential'
-    if (-not (Test-Path $t3Credential)) {
-        Write-Host "  note: no T3 pairing credential yet. The 't3' launcher needs one."
-        Write-Host "        In T3: Settings -> Create pairing link (scopes orchestration:read"
-        Write-Host "        and orchestration:operate), then save it to $t3Credential"
+    $t3Token = Join-Path $env:USERPROFILE '.mc\t3-token.json'
+    if (-not (Test-Path $t3Credential) -and -not (Test-Path $t3Token)) {
+        Write-Host "  note: no T3 credential yet. The 't3' launcher needs one."
+        Write-Host "        In T3: Settings -> This environment -> Authorized clients -> Create link."
+        Write-Host "        Save the 'This machine' URL to $t3Credential straight away —"
+        Write-Host "        the link is single-use and expires within about three minutes."
     }
 }
 else {

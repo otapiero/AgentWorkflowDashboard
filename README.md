@@ -99,12 +99,23 @@ The **Agents** panel also picks the launcher:
   One-time setup:
 
   1. Install T3 Code: `winget install T3Tools.T3Code`
-  2. Start it, and create a pairing link under Settings with the scopes
-     `orchestration:read` and `orchestration:operate`.
-  3. Save the credential to `%USERPROFILE%\.mc\t3-credential`.
+  2. Start it, then **Settings → This environment → Authorized clients → Create link**,
+     and copy the **"This machine"** pairing URL. It looks like
+     `http://127.0.0.1:3773/pair#token=XXXXXXXX`.
+  3. Save it to `%USERPROFILE%\.mc\t3-credential` **immediately** — the link is
+     single-use and expires about three minutes after you create it. Paste the whole
+     URL; Mission Control reads the token out of the fragment.
   4. Give each agent a `t3Instance` in `config.yaml` (`claude` → `claudeAgent`,
      `codex` → `codex`, `copilot` → `opencode`).
   5. `npm run mc -- doctor` reports whether each instance can actually run.
+
+  You only do that once. The pairing token is spent on first use, but the access token
+  it buys is good for 30 days and is cached at `~/.mc/t3-token.json`, so
+  restarting the board does not need a new link. When that token does expire, `doctor`
+  says so and names the fix.
+
+  If **Create link** is missing, turn on network access for the environment — the
+  `one-time-token` bootstrap method only exists once T3 is reachable beyond loopback.
 
   `copilot` through T3 is a substitution, not a passthrough: it runs OpenCode's agent
   loop using Copilot's models, and needs the `opencode` CLI installed and authenticated

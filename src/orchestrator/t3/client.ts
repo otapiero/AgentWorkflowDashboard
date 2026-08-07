@@ -1,6 +1,6 @@
 import { T3_TIMEOUT_MS } from './paths.ts';
 import { discoverT3, t3Url } from './discovery.ts';
-import { T3TokenStore, readPairingCredential } from './auth.ts';
+import { T3TokenStore, hasCachedT3Token, readPairingCredential } from './auth.ts';
 import {
   dispatchResultSchema,
   safeParseT3,
@@ -50,8 +50,14 @@ export class T3Client {
       options.credential !== undefined ? options.credential : readPairingCredential();
   }
 
+  /**
+   * A store is worth building when there is *either* a pairing token to
+   * exchange or an access token already on disk. Requiring the pairing token
+   * would lock the board out the moment that single-use token was spent, even
+   * though the 30-day access token it bought is sitting right there.
+   */
   private tokenStore(origin: string): T3TokenStore | null {
-    if (!this.credential) return null;
+    if (!this.credential && !hasCachedT3Token()) return null;
     // Rebuild if T3 restarted on a different port; a token is origin-scoped.
     if (!this.tokens || this.tokensOrigin !== origin) {
       this.tokens = new T3TokenStore(origin, this.credential, this.fetchImpl);
@@ -65,15 +71,15 @@ export class T3Client {
     if (!discovery.ok) {
       return { ok: false, reason: discovery.reason, detail: discovery.detail };
     }
-    if (!this.credential) {
+    const tokens = this.tokenStore(discovery.origin);
+    if (!tokens) {
       return {
         ok: false,
         reason: 'no-credential',
         detail:
-          "T3 is running but Mission Control has no pairing credential. Create a pairing link in T3's settings and save it to ~/.mc/t3-credential.",
+          'T3 is running but Mission Control has no credential. In T3, go to Settings -> This environment -> Authorized clients -> Create link, copy the "This machine" pairing URL, and save it to ~/.mc/t3-credential. The link is single-use and expires within minutes, so save it straight away.',
       };
     }
-    const tokens = this.tokenStore(discovery.origin)!;
     if (!(await tokens.getToken())) {
       return {
         ok: false,
