@@ -72,6 +72,21 @@ if (-not (Test-Path $repoPath)) {
     $problems += "repo.path in config.yaml does not exist: $repoPath"
 }
 
+# T3 Code is optional: the t3 launcher needs it, wt and vscode do not.
+$t3Runtime = Join-Path $env:USERPROFILE '.t3\userdata\server-runtime.json'
+if (Test-Path $t3Runtime) {
+    Write-Host "  ok: T3 Code state found at $t3Runtime"
+    $t3Credential = Join-Path $env:USERPROFILE '.mc\t3-credential'
+    if (-not (Test-Path $t3Credential)) {
+        Write-Host "  note: no T3 pairing credential yet. The 't3' launcher needs one."
+        Write-Host "        In T3: Settings -> Create pairing link (scopes orchestration:read"
+        Write-Host "        and orchestration:operate), then save it to $t3Credential"
+    }
+}
+else {
+    Write-Host "  note: T3 Code not detected. The 'wt' and 'vscode' launchers work without it."
+}
+
 if ($problems.Count -eq 0) {
     Write-Host "All checks passed." -ForegroundColor Green
 }

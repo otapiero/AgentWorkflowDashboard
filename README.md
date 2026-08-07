@@ -24,7 +24,8 @@ a general tool.
 ## Requirements
 
 `node`, `git`, `gh` (authenticated), `wt` (Windows Terminal), `pwsh` 7+, and at
-least one agent CLI — `claude`, `copilot`, and/or `codex`.
+least one agent CLI — `claude`, `copilot`, and/or `codex`. T3 Code is optional
+and needed only for the `t3` launcher.
 
 ## Setup
 
@@ -89,6 +90,29 @@ The **Agents** panel also picks the launcher:
   `--disable-workspace-trust`, so a fresh worktree does not open in Restricted
   Mode and stall the run behind a trust prompt; that flag applies to the launched
   window only and does not change your trust settings for any other folder.
+- **T3 Code** — runs the phase as a thread in [T3 Code](https://github.com/pingdotgg/t3code),
+  bound to the same worktree Mission Control already creates. T3 then reports whether a
+  session is genuinely running and when it is blocked on an approval, which retires the
+  PID guess for those phases. Mission Control never starts T3's server and never modifies
+  T3 itself; it attaches to the one the desktop application already runs.
+
+  One-time setup:
+
+  1. Install T3 Code: `winget install T3Tools.T3Code`
+  2. Start it, and create a pairing link under Settings with the scopes
+     `orchestration:read` and `orchestration:operate`.
+  3. Save the credential to `%USERPROFILE%\.mc\t3-credential`.
+  4. Give each agent a `t3Instance` in `config.yaml` (`claude` → `claudeAgent`,
+     `codex` → `codex`, `copilot` → `opencode`).
+  5. `npm run mc -- doctor` reports whether each instance can actually run.
+
+  `copilot` through T3 is a substitution, not a passthrough: it runs OpenCode's agent
+  loop using Copilot's models, and needs the `opencode` CLI installed and authenticated
+  against a Copilot Pro, Pro+, Business or Enterprise subscription.
+
+  T3 0.0.31 has no preview panel, so the board is not surfaced inside T3; open it in a
+  browser as usual. See
+  [the finding](docs/superpowers/notes/2026-08-07-t3-preview-panel-finding.md).
 
 ## Headless orchestrator
 
@@ -157,7 +181,7 @@ Runtime state lives entirely under `%USERPROFILE%\.mc\`
 ## Testing
 
 ```powershell
-npm test          # 179 unit tests
+npm test          # 525 unit tests
 npm run typecheck
 ```
 
