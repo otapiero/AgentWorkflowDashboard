@@ -54,15 +54,19 @@ application. This design uses all three and touches nothing else.
 
 Defined in T3's `packages/contracts/src/environmentHttp.ts`.
 
-| Endpoint | Use |
-| --- | --- |
-| `GET /.well-known/t3/environment` | discovery and reachability probe |
-| `GET /api/orchestration/snapshot` | projects and threads with session state |
-| `GET /api/orchestration/threads/:threadId` | thread detail |
-| `POST /api/orchestration/dispatch` | run an orchestration command |
+| Endpoint | Auth | Use |
+| --- | --- | --- |
+| `GET /.well-known/t3/environment` | none | discovery, version pin, capability report |
+| `GET /api/auth/session` | none | auth posture; tells us how to pair |
+| `POST /oauth/token` | credential in body | exchange a pairing credential for a bearer token |
+| `GET /api/orchestration/snapshot` | bearer | projects and threads with session state |
+| `GET /api/orchestration/threads/:threadId` | bearer | thread detail |
+| `POST /api/orchestration/dispatch` | bearer | run an orchestration command |
 
-All four sit behind T3's `EnvironmentAuthenticatedAuth` middleware and accept an
-optional bearer header.
+The three orchestration endpoints sit behind T3's `EnvironmentAuthenticatedAuth`
+middleware. The two well-known-style endpoints do not, which is what makes
+discovery and diagnosis possible before any credential exists. All verified by
+request against the running 0.0.31 server; see §2.2.
 
 ### 1.2 WebSocket RPC
 
@@ -112,12 +116,18 @@ src/orchestrator/
 
 T3's server writes its own runtime state to
 `<state-dir>/server-runtime.json`, where `<state-dir>` defaults to
-`~/.t3/userdata`:
+`~/.t3/userdata`. Verified live against the installed desktop build — the file
+appeared at `C:\Users\ouriel\.t3\userdata\server-runtime.json` with exactly this
+shape:
 
 ```jsonc
-{ "version": 1, "pid": 1234, "host": "127.0.0.1", "port": 3773,
-  "origin": "http://127.0.0.1:3773", "startedAt": "2026-08-07T…" }
+{ "version": 1, "pid": 5132, "host": "127.0.0.1", "port": 3773,
+  "origin": "http://127.0.0.1:3773", "startedAt": "2026-08-07T09:09:13.504Z" }
 ```
+
+Note that the desktop app keeps two separate directories: Electron's own
+Chromium profile lives under `%APPDATA%\t3code`, while everything this design
+reads lives under `~/.t3`. Only the latter matters.
 
 `t3.ts` resolves the endpoint by:
 
@@ -137,18 +147,65 @@ detached terminal does today.
 
 ### 2.2 Authentication
 
-T3's endpoints require a bearer token unless the server runs in its explicit
-`unsafe-no-auth` mode, which this design does not use. Setup is one-time:
+Verified live against the installed desktop build (T3 Code 0.0.31). The server
+advertises its posture at `GET /api/auth/session`, which is itself
+unauthenticated:
 
-```powershell
-t3 pair --label "mission-control"
+```jsonc
+{ "authenticated": false,
+  "auth": { "policy": "desktop-managed-local",
+            "bootstrapMethods": ["desktop-bootstrap"],
+            "sessionMethods": ["browser-session-cookie",
+                               "bearer-access-token",
+                               "dpop-access-token"],
+            "sessionCookieName": "t3_session_3773" } }
 ```
 
-The resulting token is stored at `~/.mc/t3-token` with the same handling
-as any other credential Mission Control holds, and sent as
-`Authorization: Bearer <token>`. `scripts/install.ps1` gains a sanity check for
-its presence, and `npm run mc -- doctor` reports token validity by calling the
-environment descriptor endpoint.
+Two consequences matter, and both contradict the simpler story assumed before
+the server was running:
+
+- **Loopback is not trusted.** `GET /api/orchestration/snapshot` returns `401`
+  from `127.0.0.1` with no credential. Being on the same machine buys nothing.
+- **Mission Control cannot bootstrap itself.** The only advertised bootstrap
+  method is `desktop-bootstrap`, a handoff reserved for T3's own renderer, and
+  the endpoint that mints credentials for other clients
+  (`POST /api/auth/pairing-token`) is itself behind the authenticated
+  middleware. There is no self-service path from unauthenticated to
+  authenticated.
+
+So the credential must be minted **once, by hand**, from T3's own UI — the
+"Create pairing link" affordance in settings, which calls that endpoint from the
+already-authenticated renderer and accepts a `label` and a `scopes` array.
+Mint it with `orchestration:read` and `orchestration:operate`.
+
+Mission Control stores that credential at `~/.mc/t3-credential` and
+exchanges it for a bearer access token at `POST /oauth/token`, form-urlencoded:
+
+```
+grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+subject_token=<the pairing credential>
+subject_token_type=urn:t3:params:oauth:token-type:environment-bootstrap
+requested_token_type=urn:ietf:params:oauth:token-type:access_token
+scope=orchestration:read orchestration:operate
+client_label=Mission Control
+client_device_type=bot
+client_os=windows
+```
+
+The reply is `{ access_token, issued_token_type, token_type: "Bearer",
+expires_in, scope }`. Mission Control caches the token with its expiry in
+memory only — never on disk — and re-exchanges when it is within a minute of
+expiring or when any call returns `401`. Requests carry
+`Authorization: Bearer <access_token>`.
+
+A pairing credential that has been revoked from T3's client list, or that has
+expired, fails the exchange. That is the same first-class "T3 is not available"
+state as a missing runtime file, not an error: the board keeps working on PID
+liveness. `npm run mc -- doctor` distinguishes the three cases — server absent,
+credential absent, credential rejected — because they need different fixes.
+
+The `unsafe-no-auth` policy would remove all of this. This design does not use
+it, and `t3.ts` should refuse to treat it as a supported configuration.
 
 ### 2.3 Transport and validation
 
@@ -396,10 +453,16 @@ Board-side changes:
 
 ### 5.1 Verification status
 
-This section is verified by reading T3's schema, contracts and desktop preview
-code, not by running it. Implementation must begin by confirming the panel
-renders the board — this is the cheapest possible check and it gates §5 only;
-§§2–4 stand independently of the outcome.
+Still the least-verified section. Reading T3's schema, contracts and desktop
+preview code supports it, and the installed app does create a dedicated
+`Partitions\t3code-preview-<hash>` session on first launch — so the webview
+preview is real and separately partitioned. What remains unconfirmed is the only
+thing that matters: whether the Mission Control board actually renders inside
+that panel, and whether its SSE stream survives there.
+
+Implementation must begin by confirming it — point a project script's
+`previewUrl` at `http://127.0.0.1:4317` and look. This is the cheapest possible
+check and it gates §5 only; §§2–4 stand independently of the outcome.
 
 ---
 
@@ -408,7 +471,8 @@ renders the board — this is the cheapest possible check and it gates §5 only;
 | Condition | Behavior |
 | --- | --- |
 | `server-runtime.json` missing, or its `pid` is dead | `t3` launcher reports T3 not running and offers a `wt` fallback for that spawn. Board reconciles normally without liveness. |
-| Bearer token rejected | `doctor` fails loudly with the `t3 pair` remedy. Never silent, never retried in a loop. |
+| Pairing credential missing, expired, or revoked | `doctor` fails loudly, naming which of the three it is, with "mint a new pairing link in T3's settings" as the remedy. Never silent, never retried in a loop. |
+| A call returns `401` mid-session | One token re-exchange, then retry once. A second `401` degrades to T3-unavailable rather than looping. |
 | Snapshot fails zod validation after an upstream upgrade | `facts.t3` is `undefined`; the board degrades to today's PID-based behavior. Logged once per interval, not per task. |
 | Dispatch rejected (bad instance id, unconfigured provider) | Spawn fails with T3's error surfaced verbatim on the card. No marker is written; the phase is not consumed. |
 | Thread deleted inside T3 | Markers still hold the history. The card shows the phase's true state; the thread link is disabled. |
@@ -439,13 +503,29 @@ The governing rule: **an upstream change costs liveness, never correctness.**
 ## 8. Version pinning
 
 `config.yaml` records the T3 Code version the fixtures were captured against.
-`doctor` compares it to the running server's descriptor and warns — never
-blocks — on a mismatch. Upgrading T3 is therefore an explicit act: re-record
-fixtures, run the suite, bump the pin.
+`doctor` compares it to `serverVersion` from
+`GET /.well-known/t3/environment` — unauthenticated, so this check works even
+when pairing is broken — and warns, never blocks, on a mismatch. Upgrading T3 is
+therefore an explicit act: re-record fixtures, run the suite, bump the pin.
+
+The descriptor also carries a `capabilities` object, which the installed build
+reports as:
+
+```jsonc
+{ "repositoryIdentity": true, "connectionProbe": true,
+  "threadSettlement": true, "threadSnooze": true,
+  "serverSelfUpdate": "desktop-managed" }
+```
+
+`doctor` should print it verbatim. It is upstream's own statement of what this
+server can do, and it will grow.
 
 Given upstream's release cadence (four nightly builds published on the day this
-design was written, at version 0.0.32), this is the single most important
-operational discipline in the integration.
+design was written; winget shipped 0.0.31), this is the single most important
+operational discipline in the integration. Note that `serverSelfUpdate:
+"desktop-managed"` means the app updates itself without asking — the pin will
+drift on its own, which is exactly why `doctor` must check it rather than trust
+it.
 
 ---
 
@@ -453,7 +533,8 @@ operational discipline in the integration.
 
 | Area | Estimate |
 | --- | --- |
-| `src/orchestrator/t3.ts` | ~300 lines |
+| `src/orchestrator/t3-auth.ts` — token exchange, caching, 401 retry | ~120 lines |
+| `src/orchestrator/t3.ts` — discovery, snapshot, dispatch, validation | ~300 lines |
 | `spawn.ts` — the `t3` branch, `buildModelSelection` | ~150 lines |
 | `facts.ts` / `reconcile.ts` / `types.ts` | ~100 lines |
 | `src/web` — Open thread, RunTab, launcher selector | ~150 lines |
