@@ -320,9 +320,33 @@ Copilot Free does not authorize the endpoints OpenCode needs. An agent with no
 `t3Instance` is not launchable through T3, and the board says so rather than
 failing at dispatch.
 
-Instance ids are validated at spawn time against the live provider list, so a
-renamed or unconfigured instance produces a clear error instead of a rejected
-dispatch.
+Instance ids are validated at spawn time so that a renamed or unconfigured
+instance produces a clear error instead of a rejected dispatch. There is **no
+REST endpoint that lists providers** — the snapshot carries only projects and
+threads, and provider state lives on the WebSocket, which v1 does not use. The
+validation source is instead a file T3 maintains itself:
+`~/.t3/caches/<instanceId>.json`, refreshed with a `checkedAt` stamp, shaped:
+
+```jsonc
+{ "displayName": "Codex", "enabled": true, "installed": true,
+  "status": "ready", "version": "0.146.0",
+  "auth": { "status": "authenticated", … },
+  "models": [{ "slug": "gpt-5.6-sol", … }] }
+```
+
+An instance is launchable when the file exists and reports `enabled`,
+`installed`, and `status: "ready"`. Reading it is the same discipline already
+used for `server-runtime.json`, and it fails the same way — unreadable means
+"cannot verify", which blocks the spawn with a legible reason rather than
+guessing.
+
+Observed on this machine at design time: `claudeAgent` ready (claude 2.1.224)
+and `codex` ready (0.146.0), both authenticated. `opencode` is enabled but
+**`installed: false`** — so the `copilot` route does not work until the OpenCode
+CLI is installed and authenticated against a Copilot subscription. `cursor` and
+`grok` are disabled. The `models` array in each file is also the honest source
+for the model picker on the `t3` path, which is worth taking over from the
+hand-maintained `models:` lists in `config.yaml` later; v1 does not.
 
 ### 3.5 Runtime and interaction modes
 
@@ -344,6 +368,12 @@ Both become per-phase settings in `config.yaml`, defaulting to:
 These defaults are a starting point chosen to match each phase's intent, not a
 validated preference. They are configuration precisely so they can be tuned
 after first use without a code change.
+
+**Both fields must always be sent explicitly.** T3's own decoding default for
+`runtimeMode` is `full-access` — an omitted field does not mean "be careful", it
+means "no restrictions". Mission Control must never rely on that default, and
+the dispatch builder should treat a missing per-phase mode as a programming
+error rather than falling through to T3's.
 
 ### 3.6 Thread model
 
