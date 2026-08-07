@@ -485,3 +485,95 @@ describe('purity', () => {
     expect(reconcile(input)).toEqual(reconcile(input));
   });
 });
+
+describe('T3 session liveness', () => {
+  test('a running T3 session makes the card live even with no PID marker', () => {
+    const derived = reconcile(
+      facts({
+        liveSpawn: null,
+        t3: {
+          threadId: 'thread-1',
+          sessionStatus: 'running',
+          activeTurnId: 'turn-1',
+          awaitingApproval: false,
+          lastError: null,
+        },
+      }),
+    );
+    expect(derived.badges.some((b) => b.kind === 'live')).toBe(true);
+  });
+
+  test('a starting T3 session counts as live', () => {
+    const derived = reconcile(
+      facts({
+        liveSpawn: null,
+        t3: { threadId: 't', sessionStatus: 'starting', activeTurnId: null, awaitingApproval: false, lastError: null },
+      }),
+    );
+    expect(derived.badges.some((b) => b.kind === 'live')).toBe(true);
+  });
+
+  test('an idle session with an active turn still counts as live', () => {
+    const derived = reconcile(
+      facts({
+        liveSpawn: null,
+        t3: { threadId: 't', sessionStatus: 'idle', activeTurnId: 'turn-9', awaitingApproval: false, lastError: null },
+      }),
+    );
+    expect(derived.badges.some((b) => b.kind === 'live')).toBe(true);
+  });
+
+  test('a stopped session with no active turn is not live', () => {
+    const derived = reconcile(
+      facts({
+        liveSpawn: null,
+        t3: { threadId: 't', sessionStatus: 'stopped', activeTurnId: null, awaitingApproval: false, lastError: null },
+      }),
+    );
+    expect(derived.badges.some((b) => b.kind === 'live')).toBe(false);
+  });
+
+  test('with no T3 fact the PID marker still decides liveness', () => {
+    // The fallback is not vestigial: it covers wt and vscode launches, and it
+    // covers the board running while T3 is down.
+    const derived = reconcile(
+      facts({
+        liveSpawn: { phase: 'plan', pid: 1234, startedAt: '2026-08-07T09:00:00Z', source: 'marker' },
+      }),
+    );
+    expect(derived.badges.some((b) => b.kind === 'live')).toBe(true);
+  });
+
+  test('a thread awaiting approval needs you', () => {
+    // Exactly what the attention rail exists for, and something Mission
+    // Control has no way to detect without T3.
+    const derived = reconcile(
+      facts({
+        liveSpawn: null,
+        t3: { threadId: 't', sessionStatus: 'running', activeTurnId: 'turn-1', awaitingApproval: true, lastError: null },
+      }),
+    );
+    expect(derived.needsYou).toBe(true);
+    expect(derived.needsYouReason).toMatch(/approval/i);
+  });
+
+  test('awaiting approval outranks being live, so the card does not go quiet', () => {
+    const derived = reconcile(
+      facts({
+        liveSpawn: { phase: 'plan', pid: 1234, startedAt: '2026-08-07T09:00:00Z', source: 'marker' },
+        t3: { threadId: 't', sessionStatus: 'running', activeTurnId: 'turn-1', awaitingApproval: true, lastError: null },
+      }),
+    );
+    expect(derived.needsYou).toBe(true);
+  });
+
+  test('a session error shows as a badge', () => {
+    const derived = reconcile(
+      facts({
+        liveSpawn: null,
+        t3: { threadId: 't', sessionStatus: 'error', activeTurnId: null, awaitingApproval: false, lastError: 'provider exited 1' },
+      }),
+    );
+    expect(derived.badges.some((b) => b.kind === 't3-error')).toBe(true);
+  });
+});
