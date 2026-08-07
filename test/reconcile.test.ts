@@ -284,7 +284,12 @@ describe('badges', () => {
     const d = reconcile(
       facts({
         worktreeExists: true,
-        liveSpawn: { phase: 'plan', pid: 1234, startedAt: '2026-07-21T10:00:00Z' },
+        liveSpawn: {
+          phase: 'plan',
+          pid: 1234,
+          startedAt: '2026-07-21T10:00:00Z',
+          source: 'marker',
+        },
       }),
     );
     expect(d.badges).toContainEqual(
@@ -350,7 +355,12 @@ describe('needsYou', () => {
     const d = reconcile(
       openPr({
         checks: 'failure',
-        liveSpawn: { phase: 'ci', pid: 42, startedAt: '2026-07-21T10:00:00Z' },
+        liveSpawn: {
+          phase: 'ci',
+          pid: 42,
+          startedAt: '2026-07-21T10:00:00Z',
+          source: 'marker',
+        },
       }),
     );
     expect(d.needsYou).toBe(false);

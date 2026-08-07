@@ -28,6 +28,7 @@ const agentProfileSchema = z
     instructionMode: z.enum(['flag', 'inline']),
     instructionFlag: z.string().min(1).optional(),
     extraArgs: z.array(z.string()).optional(),
+    t3Instance: z.string().min(1).optional(),
   })
   .superRefine((profile, ctx) => {
     if (profile.promptMode === 'flag' && !profile.promptFlag) {
@@ -59,6 +60,11 @@ const gateSchema = z.union([
   }),
 ]);
 
+const t3ModesSchema = z.object({
+  runtimeMode: z.enum(['approval-required', 'auto-accept-edits', 'auto', 'full-access']),
+  interactionMode: z.enum(['default', 'plan']),
+});
+
 const phaseSchema = z.object({
   id: z.enum(PHASES),
   label: z.string().min(1),
@@ -68,6 +74,7 @@ const phaseSchema = z.object({
   repeatable: z.boolean().optional(),
   gate: gateSchema,
   onFail: z.object({ offerSpawnPhase: z.string() }).optional(),
+  t3: t3ModesSchema.optional(),
 });
 
 const configSchema = z
@@ -87,7 +94,13 @@ const configSchema = z
     agents: z.record(z.string(), agentProfileSchema),
     pipeline: z.array(phaseSchema).min(1),
     server: z.object({ port: z.number().int().positive() }),
-    launcher: z.enum(['wt', 'vscode']).optional(),
+    launcher: z.enum(['wt', 'vscode', 't3']).optional(),
+    t3: z
+      .object({
+        projectTitle: z.string().min(1).optional(),
+        pinnedVersion: z.string().min(1).optional(),
+      })
+      .optional(),
   })
   .superRefine((cfg, ctx) => {
     const seen = new Set<string>();
