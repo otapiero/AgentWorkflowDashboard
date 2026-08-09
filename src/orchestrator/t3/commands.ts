@@ -60,13 +60,11 @@ export function buildProjectCreateCommand(input: {
   };
 }
 
-export interface TurnStartInput {
+export interface ThreadCreateInput {
   commandId: string;
   threadId: string;
-  messageId: string;
   projectId: string;
   title: string;
-  prompt: string;
   worktreePath: string;
   branch: string;
   modelSelection: ModelSelection;
@@ -75,18 +73,57 @@ export interface TurnStartInput {
 }
 
 /**
- * One call that creates the thread and starts the turn.
+ * Create the thread the turn will run in.
  *
- * The worktree already exists — Mission Control created it — so bootstrap
- * carries only createThread. prepareWorktree is deliberately unused: it
- * hard-codes path: null and picks its own directory under ~/.t3/worktrees,
- * which would turn the checkout location into a lookup instead of a
- * derivation from the issue number.
+ * This is a separate dispatch rather than `thread.turn.start`'s
+ * `bootstrap.createThread`, because a live T3 0.0.32 refused the one-dispatch
+ * form:
  *
- * Both modes appear twice, on the command and on the thread being created.
- * That is not redundancy worth trimming: T3's decoding default for runtimeMode
- * is `full-access`, so an omission anywhere grants more than the phase asked
- * for.
+ *   OrchestrationCommandInvariantError, commandType 'thread.turn.start',
+ *   "Thread 'b21d313d-…' does not exist for command 'thread.turn.start'."
+ *
+ * The bootstrap field is in T3's schema and every field sent matched it, so
+ * this is not a payload error — the dispatch path simply does not act on
+ * bootstrap. `thread.create` takes exactly the same fields, so creating first
+ * is both what the server asks for and one command per concern.
+ *
+ * The worktree already exists, because Mission Control created it, and T3 is
+ * never asked to prepare one: `prepareWorktree` hard-codes path: null and picks
+ * its own directory under ~/.t3/worktrees, which would turn the checkout
+ * location into a lookup instead of a derivation from the issue number.
+ */
+export function buildThreadCreateCommand(input: ThreadCreateInput): unknown {
+  return {
+    type: 'thread.create',
+    commandId: input.commandId,
+    threadId: input.threadId,
+    projectId: input.projectId,
+    title: input.title,
+    modelSelection: input.modelSelection,
+    runtimeMode: input.modes.runtimeMode,
+    interactionMode: input.modes.interactionMode,
+    branch: input.branch,
+    worktreePath: input.worktreePath,
+    createdAt: input.createdAt,
+  };
+}
+
+export interface TurnStartInput {
+  commandId: string;
+  threadId: string;
+  messageId: string;
+  prompt: string;
+  modelSelection: ModelSelection;
+  modes: T3PhaseModes;
+  createdAt: string;
+}
+
+/**
+ * Start the turn in a thread that already exists.
+ *
+ * Both modes are sent explicitly even though the thread already carries them:
+ * T3's decoding default for `runtimeMode` is `full-access`, so an omitted field
+ * does not mean "inherit", it means "no restrictions".
  */
 export function buildTurnStartCommand(input: TurnStartInput): unknown {
   return {
@@ -99,20 +136,9 @@ export function buildTurnStartCommand(input: TurnStartInput): unknown {
       text: input.prompt,
       attachments: [],
     },
+    modelSelection: input.modelSelection,
     runtimeMode: input.modes.runtimeMode,
     interactionMode: input.modes.interactionMode,
-    bootstrap: {
-      createThread: {
-        projectId: input.projectId,
-        title: input.title,
-        modelSelection: input.modelSelection,
-        runtimeMode: input.modes.runtimeMode,
-        interactionMode: input.modes.interactionMode,
-        branch: input.branch,
-        worktreePath: input.worktreePath,
-        createdAt: input.createdAt,
-      },
-    },
     createdAt: input.createdAt,
   };
 }

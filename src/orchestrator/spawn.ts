@@ -24,6 +24,7 @@ import { T3Client } from './t3/client.ts';
 import {
   buildModelSelection,
   buildProjectCreateCommand,
+  buildThreadCreateCommand,
   buildTurnStartCommand,
   type ModelSelection,
 } from './t3/commands.ts';
@@ -472,20 +473,34 @@ async function launchT3(
     // to add if a later release gains one is in Task 12 Step 5 of the plan.
   }
 
+  // Create the thread, then start the turn in it. T3 rejects a turn for a
+  // thread it does not already hold, and does not act on thread.turn.start's
+  // own `bootstrap.createThread` over this path.
   const threadId = randomUUID();
+  const thread = await client.dispatch(
+    buildThreadCreateCommand({
+      commandId: randomUUID(),
+      threadId,
+      projectId,
+      title: `#${task.issue} ${phase.id}`,
+      worktreePath: worktreePath(task.issue),
+      branch: task.branch,
+      modelSelection: plan.modelSelection,
+      modes: plan.modes,
+      createdAt,
+    }),
+  );
+  if (!thread.ok) throw new Error(`Could not create the T3 thread: ${thread.error}`);
+
   const result = await client.dispatch(
     buildTurnStartCommand({
       commandId: randomUUID(),
       threadId,
       messageId: randomUUID(),
-      projectId,
-      title: `#${task.issue} ${phase.id}`,
       // The same rendered text writePromptFile just persisted. Passing it
       // through rather than re-reading keeps the prompt file exactly what it
       // is for the other launchers: a record, not a channel.
       prompt: plan.prompt,
-      worktreePath: worktreePath(task.issue),
-      branch: task.branch,
       modelSelection: plan.modelSelection,
       modes: plan.modes,
       createdAt,

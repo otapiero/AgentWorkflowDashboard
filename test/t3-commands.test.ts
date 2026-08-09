@@ -5,6 +5,7 @@ import {
   buildMissionControlScript,
   buildProjectCreateCommand,
   buildProjectScriptsUpdateCommand,
+  buildThreadCreateCommand,
   buildTurnStartCommand,
 } from '../src/orchestrator/t3/commands.ts';
 import type { AgentProfile } from '../src/shared/types.ts';
@@ -85,16 +86,76 @@ describe('buildProjectCreateCommand', () => {
   });
 });
 
+/**
+ * The thread is created by its own dispatch, not by thread.turn.start's
+ * `bootstrap.createThread`.
+ *
+ * The plan's one-dispatch design was refused by a live T3 0.0.32:
+ *
+ *   OrchestrationCommandInvariantError, commandType 'thread.turn.start',
+ *   "Thread 'b21d313d-…' does not exist for command 'thread.turn.start'."
+ *
+ * The bootstrap field is in the schema and every field we sent matched it, but
+ * the dispatch path does not act on it. `thread.create` takes exactly the same
+ * fields, so creating explicitly and then starting the turn is both what the
+ * server asks for and one command per concern.
+ */
+describe('buildThreadCreateCommand', () => {
+  const input = {
+    commandId: 'cmd-1',
+    threadId: 'thread-1',
+    projectId: 'proj-1',
+    title: '#3060 plan',
+    worktreePath: 'C:\\Users\\ouriel\\.mc\\worktrees\\issue-3060',
+    branch: 'ouriel/3060-thing',
+    modelSelection: { instanceId: 'codex', model: 'gpt-5.6-sol' },
+    modes: { runtimeMode: 'approval-required' as const, interactionMode: 'plan' as const },
+    createdAt: '2026-08-07T09:00:00.000Z',
+  };
+
+  test('is a thread.create naming the thread the turn will use', () => {
+    const command = buildThreadCreateCommand(input) as any;
+    expect(command.type).toBe('thread.create');
+    expect(command.threadId).toBe('thread-1');
+    expect(command.projectId).toBe('proj-1');
+  });
+
+  test('binds the thread to Mission Controls worktree, not one T3 chose', () => {
+    // This is what lets worktreePath(issue) stay a pure function of the issue
+    // number, so markers, artifacts and badges keep working unchanged.
+    const command = buildThreadCreateCommand(input) as any;
+    expect(command.worktreePath).toBe(
+      'C:\\Users\\ouriel\\.mc\\worktrees\\issue-3060',
+    );
+    expect(command.branch).toBe('ouriel/3060-thing');
+  });
+
+  test('sends both modes explicitly', () => {
+    // T3's decoding default for runtimeMode is full-access, so an omission
+    // grants more than the phase asked for.
+    const command = buildThreadCreateCommand(input) as any;
+    expect(command.runtimeMode).toBe('approval-required');
+    expect(command.interactionMode).toBe('plan');
+  });
+
+  test('titles the thread so T3s sidebar groups phases legibly', () => {
+    expect((buildThreadCreateCommand(input) as any).title).toBe('#3060 plan');
+  });
+
+  test('carries the model selection', () => {
+    expect((buildThreadCreateCommand(input) as any).modelSelection).toEqual({
+      instanceId: 'codex',
+      model: 'gpt-5.6-sol',
+    });
+  });
+});
+
 describe('buildTurnStartCommand', () => {
   const input = {
     commandId: 'cmd-1',
     threadId: 'thread-1',
     messageId: 'msg-1',
-    projectId: 'proj-1',
-    title: '#3060 plan',
     prompt: 'Plan issue 3060.',
-    worktreePath: 'C:\\Users\\ouriel\\.mc\\worktrees\\issue-3060',
-    branch: 'ouriel/3060-thing',
     modelSelection: { instanceId: 'codex', model: 'gpt-5.6-sol' },
     modes: { runtimeMode: 'approval-required' as const, interactionMode: 'plan' as const },
     createdAt: '2026-08-07T09:00:00.000Z',
@@ -103,46 +164,28 @@ describe('buildTurnStartCommand', () => {
   test('is a thread.turn.start carrying the rendered prompt verbatim', () => {
     const command = buildTurnStartCommand(input) as any;
     expect(command.type).toBe('thread.turn.start');
+    expect(command.threadId).toBe('thread-1');
     expect(command.message.role).toBe('user');
     expect(command.message.text).toBe('Plan issue 3060.');
     expect(command.message.attachments).toEqual([]);
   });
 
-  test('binds the thread to Mission Controls worktree, not one T3 chose', () => {
-    // This is what lets worktreePath(issue) stay a pure function of the issue
-    // number, so markers, artifacts and badges keep working unchanged.
+  test('never asks T3 to bootstrap anything', () => {
+    // The thread already exists by the time this is sent, and prepareWorktree
+    // hard-codes path: null and picks its own directory, which would make the
+    // checkout location a lookup rather than a derivation.
     const command = buildTurnStartCommand(input) as any;
-    expect(command.bootstrap.createThread.worktreePath).toBe(
-      'C:\\Users\\ouriel\\.mc\\worktrees\\issue-3060',
-    );
-    expect(command.bootstrap.createThread.branch).toBe('ouriel/3060-thing');
+    expect(command.bootstrap).toBeUndefined();
   });
 
-  test('never asks T3 to prepare a worktree', () => {
-    // prepareWorktree hard-codes path: null and picks its own directory, which
-    // would make the checkout location a lookup rather than a derivation.
-    const command = buildTurnStartCommand(input) as any;
-    expect(command.bootstrap.prepareWorktree).toBeUndefined();
-  });
-
-  test('sends both modes explicitly at the top level and in the bootstrap', () => {
-    // T3's decoding default for runtimeMode is full-access. Omitting either
-    // field anywhere would silently grant more than the phase asks for.
+  test('sends both modes explicitly', () => {
     const command = buildTurnStartCommand(input) as any;
     expect(command.runtimeMode).toBe('approval-required');
     expect(command.interactionMode).toBe('plan');
-    expect(command.bootstrap.createThread.runtimeMode).toBe('approval-required');
-    expect(command.bootstrap.createThread.interactionMode).toBe('plan');
   });
 
-  test('titles the thread so T3s sidebar groups phases legibly', () => {
-    const command = buildTurnStartCommand(input) as any;
-    expect(command.bootstrap.createThread.title).toBe('#3060 plan');
-  });
-
-  test('carries the model selection into the new thread', () => {
-    const command = buildTurnStartCommand(input) as any;
-    expect(command.bootstrap.createThread.modelSelection).toEqual({
+  test('carries the model selection so the turn cannot drift from the thread', () => {
+    expect((buildTurnStartCommand(input) as any).modelSelection).toEqual({
       instanceId: 'codex',
       model: 'gpt-5.6-sol',
     });
