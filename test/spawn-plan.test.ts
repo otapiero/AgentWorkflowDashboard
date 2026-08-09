@@ -158,3 +158,30 @@ describe('resolveSpawnPlan', () => {
     );
   });
 });
+
+describe('resolveSpawnPlan with rawPrompt', () => {
+  test('uses the raw text as the whole prompt, with no command file', () => {
+    const plan = resolveSpawnPlan(config(), task(), implementPhase(), {}, {
+      rawPrompt: '  Investigate the auth flow.  ',
+    });
+    expect(plan.promptText).toBe('Investigate the auth flow.');
+    expect(plan.command).toBe('raw');
+  });
+
+  test('still prepends standing rules for an agent with no system-prompt flag', () => {
+    const plan = resolveSpawnPlan(config(), task(), implementPhase(), {}, {
+      rawPrompt: 'Investigate the auth flow.',
+      agent: 'copilot',
+    });
+    expect(plan.agent).toBe('copilot');
+    expect(plan.promptText.startsWith('You are running inside a git worktree')).toBe(true);
+    expect(plan.promptText).toContain('Investigate the auth flow.');
+  });
+
+  test('does not need a command on the phase at all', () => {
+    const commandless = { ...implementPhase(), command: undefined };
+    expect(() =>
+      resolveSpawnPlan(config(), task(), commandless, {}, { rawPrompt: 'go' }),
+    ).not.toThrow();
+  });
+});
