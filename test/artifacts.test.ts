@@ -7,13 +7,15 @@ import {
   parsePorcelainPaths,
   diffFiles,
   uniqueName,
-  shouldCollectPlan,
+  shouldCollectRun,
+  COLLECT_GRACE_MS,
   resolveArtifactStoredPath,
-  writePlanSnapshot,
+  writeRunSnapshot,
+  snapshotAgeMs,
   collectArtifacts,
   readArtifacts,
 } from '../src/orchestrator/artifacts.ts';
-import { taskDir, planPath, worktreePath } from '../src/orchestrator/paths.ts';
+import { taskDir, planPath, worktreePath, markerPath } from '../src/orchestrator/paths.ts';
 import type { Config } from '../src/shared/types.ts';
 
 describe('parsePorcelainPaths', () => {
@@ -42,29 +44,32 @@ describe('uniqueName', () => {
   });
 });
 
-describe('shouldCollectPlan', () => {
-  const base = {
-    liveSpawn: null,
-    planMdExists: true,
-    planDoneMarker: false,
-    manifestExists: false,
-    snapshotExists: true,
-  };
-  it('collects when the plan spawn has ended and produced a plan', () => {
-    expect(shouldCollectPlan(base)).toBe(true);
+describe('shouldCollectRun', () => {
+  const base = { liveSpawn: null, doneMarker: false, snapshotAgeMs: COLLECT_GRACE_MS + 1 };
+
+  it('collects once a run has ended and the grace period has passed', () => {
+    expect(shouldCollectRun(base)).toBe(true);
   });
-  it('collects on the done marker even if a process still looks live', () => {
-    expect(shouldCollectPlan({ ...base, liveSpawn: { pid: 1 }, planDoneMarker: true })).toBe(true);
+
+  it('collects immediately on the done marker, even while a process looks live', () => {
+    expect(
+      shouldCollectRun({ ...base, liveSpawn: { pid: 1 }, doneMarker: true, snapshotAgeMs: 0 }),
+    ).toBe(true);
   });
-  it('never collects once a manifest exists', () => {
-    expect(shouldCollectPlan({ ...base, manifestExists: true })).toBe(false);
-  });
+
   it('waits while a spawn is live with no done marker', () => {
-    expect(shouldCollectPlan({ ...base, liveSpawn: { pid: 1 } })).toBe(false);
+    expect(shouldCollectRun({ ...base, liveSpawn: { pid: 1 } })).toBe(false);
   });
-  it('never auto-collects without a snapshot (guards non-plan / legacy tasks)', () => {
-    expect(shouldCollectPlan({ ...base, snapshotExists: false })).toBe(false);
-    expect(shouldCollectPlan({ ...base, snapshotExists: false, planDoneMarker: true })).toBe(false);
+
+  it('never collects without a snapshot', () => {
+    expect(shouldCollectRun({ ...base, snapshotAgeMs: null })).toBe(false);
+    expect(shouldCollectRun({ ...base, snapshotAgeMs: null, doneMarker: true })).toBe(false);
+  });
+
+  it('waits out the grace period, so a spawn is never collected before its marker lands', () => {
+    // The window between writing the snapshot and the terminal writing
+    // <kind>.running: nothing is live yet, but the run has not started either.
+    expect(shouldCollectRun({ ...base, snapshotAgeMs: 500 })).toBe(false);
   });
 });
 
@@ -111,14 +116,14 @@ describe('snapshot + collectArtifacts', () => {
   });
 
   it('captures task-dir and repo-origin artifacts, tagging origin', async () => {
-    writePlanSnapshot(config, ISSUE);
+    writeRunSnapshot(config, ISSUE, 'plan');
     // Agent writes plan.md (task dir) + a design doc inside the checkout.
     writeFileSync(planPath(ISSUE), '# plan\n');
     writeFileSync(join(taskDir(ISSUE), 'spec.md'), '# spec\n');
     mkdirSync(join(repo, 'docs'), { recursive: true });
     writeFileSync(join(repo, 'docs', 'design.md'), '# design\n');
 
-    const refs = await collectArtifacts(config, ISSUE);
+    const refs = await collectArtifacts(config, ISSUE, 'plan');
     const byName = Object.fromEntries(refs.map((r) => [r.name, r]));
 
     expect(byName['spec.md']!.origin).toBe('taskdir');
@@ -130,14 +135,79 @@ describe('snapshot + collectArtifacts', () => {
     expect(readArtifacts(ISSUE)).toHaveLength(refs.length);
   });
 
-  it('is idempotent and a re-snapshot clears the prior manifest', async () => {
-    writePlanSnapshot(config, ISSUE);
+  it('is idempotent within a run', async () => {
+    writeRunSnapshot(config, ISSUE, 'plan');
     writeFileSync(join(taskDir(ISSUE), 'spec.md'), 'x');
-    await collectArtifacts(config, ISSUE);
-    await collectArtifacts(config, ISSUE);
+    await collectArtifacts(config, ISSUE, 'plan');
+    await collectArtifacts(config, ISSUE, 'plan');
     expect(readArtifacts(ISSUE)).toHaveLength(1);
+  });
 
-    writePlanSnapshot(config, ISSUE); // a new run
-    expect(existsSync(join(taskDir(ISSUE), 'artifacts.json'))).toBe(false);
+  it('keeps earlier artifacts when a later run collects', async () => {
+    writeRunSnapshot(config, ISSUE, 'custom');
+    writeFileSync(join(taskDir(ISSUE), 'research.md'), '# research\n');
+    await collectArtifacts(config, ISSUE, 'custom');
+
+    writeRunSnapshot(config, ISSUE, 'plan');
+    writeFileSync(join(taskDir(ISSUE), 'spec.md'), '# spec\n');
+    await collectArtifacts(config, ISSUE, 'plan');
+
+    expect(readArtifacts(ISSUE).map((r) => r.name).sort()).toEqual(['research.md', 'spec.md']);
+    expect(existsSync(join(taskDir(ISSUE), 'artifacts', 'research.md'))).toBe(true);
+  });
+
+  it('starting a plan run no longer clears what earlier runs produced', async () => {
+    writeRunSnapshot(config, ISSUE, 'custom');
+    writeFileSync(join(taskDir(ISSUE), 'research.md'), '# research\n');
+    await collectArtifacts(config, ISSUE, 'custom');
+
+    writeRunSnapshot(config, ISSUE, 'plan');
+
+    expect(readArtifacts(ISSUE)).toHaveLength(1);
+    expect(existsSync(join(taskDir(ISSUE), 'artifacts', 'research.md'))).toBe(true);
+  });
+
+  it('two runs claiming the same file produce one entry, not a suffixed duplicate', async () => {
+    // Exactly the overlap the poller can hit: a custom run launched while a
+    // plan run's output was still uncollected leaves both snapshots pending,
+    // and both then see the same new file.
+    writeRunSnapshot(config, ISSUE, 'plan');
+    writeRunSnapshot(config, ISSUE, 'custom');
+    writeFileSync(join(taskDir(ISSUE), 'design.md'), 'v1\n');
+
+    await collectArtifacts(config, ISSUE, 'plan');
+    await collectArtifacts(config, ISSUE, 'custom');
+
+    expect(readArtifacts(ISSUE).map((r) => r.name)).toEqual(['design.md']);
+  });
+
+  it('two different originals sharing a basename both land, suffixed', async () => {
+    mkdirSync(join(repo, 'docs'), { recursive: true });
+    writeRunSnapshot(config, ISSUE, 'plan');
+    writeFileSync(join(taskDir(ISSUE), 'notes.md'), 'a\n');
+    writeFileSync(join(repo, 'docs', 'notes.md'), 'b\n');
+
+    await collectArtifacts(config, ISSUE, 'plan');
+
+    expect(readArtifacts(ISSUE).map((r) => r.name).sort()).toEqual(['notes-1.md', 'notes.md']);
+  });
+
+  it('signs off with the run kind, never with plan.done for a custom run', async () => {
+    writeRunSnapshot(config, ISSUE, 'custom');
+    writeFileSync(join(taskDir(ISSUE), 'research.md'), 'x');
+    await collectArtifacts(config, ISSUE, 'custom');
+
+    expect(existsSync(markerPath(ISSUE, 'custom.done'))).toBe(true);
+    // Writing plan.done here would satisfy the Plan gate and jump the card to
+    // Implement because the operator ran a research prompt.
+    expect(existsSync(markerPath(ISSUE, 'plan.done'))).toBe(false);
+  });
+
+  it('consumes the snapshot, so a finished run is never collected twice', async () => {
+    writeRunSnapshot(config, ISSUE, 'custom');
+    expect(snapshotAgeMs(ISSUE, 'custom')).not.toBeNull();
+    writeFileSync(join(taskDir(ISSUE), 'research.md'), 'x');
+    await collectArtifacts(config, ISSUE, 'custom');
+    expect(snapshotAgeMs(ISSUE, 'custom')).toBeNull();
   });
 });
