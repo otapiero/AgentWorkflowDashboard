@@ -5,6 +5,7 @@ import type {
   PhaseConfig,
   PhaseDefaults,
   PollMeta,
+  RunKind,
   TaskWithDerived,
 } from '../shared/types.ts';
 
@@ -67,17 +68,23 @@ export const api = {
 
   spawn: (
     issue: number,
-    phase: Phase,
+    phase: RunKind,
     opts: {
       customInstructions?: string;
       agent?: string;
       model?: string;
       effort?: string;
+      includeContext?: boolean;
     } = {},
   ) => post<{ spawned: unknown }>(`/api/tasks/${issue}/spawn`, { phase, ...opts }),
 
-  previewPrompt: (issue: number, phase: Phase, instructions?: string) =>
-    post<PromptPreview>(`/api/tasks/${issue}/prompt`, { phase, instructions }),
+  previewPrompt: (
+    issue: number,
+    phase: RunKind,
+    instructions?: string,
+    includeContext?: boolean,
+  ) =>
+    post<PromptPreview>(`/api/tasks/${issue}/prompt`, { phase, instructions, includeContext }),
 
   markDone: (issue: number, phase: Phase) =>
     post<TaskWithDerived[]>(`/api/tasks/${issue}/mark-done`, { phase }),

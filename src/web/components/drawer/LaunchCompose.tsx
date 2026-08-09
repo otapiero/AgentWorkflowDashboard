@@ -8,6 +8,7 @@ import { IconPlay } from '../bits.tsx';
 import { PromptPreview } from './PromptPreview.tsx';
 import type { PhaseConfig, TaskWithDerived } from '../../../shared/types.ts';
 import { selectionForPhase } from '../../../shared/agent-selection.ts';
+import { isCustomRun, pipelineWith } from '../../../shared/custom-run.ts';
 import type { TabProps } from './types.ts';
 
 const EMPTY: AgentSelection = { agent: '', model: '', effort: '' };
@@ -39,9 +40,20 @@ export function LaunchCompose({
   run,
   onBack,
 }: LaunchComposeProps) {
-  const inheritedSelection = selectionForPhase(config, task, phase.id);
-  const [text, setText] = useState(task.overrides?.instructions ?? '');
-  const [kept, setKept] = useState(Boolean(task.overrides?.instructions));
+  // Splice the phase in so a synthetic one's actor is reachable; see
+  // pipelineWith. A no-op for every configured phase.
+  const inheritedSelection = selectionForPhase(
+    { ...config, pipeline: pipelineWith(config.pipeline, phase) },
+    task,
+    phase.id,
+  );
+  // A custom run never inherits the task's pinned instructions: that field is
+  // shared with every phase's compose box, so a kept research prompt would
+  // otherwise ride along into Implement.
+  const isCustom = isCustomRun(phase);
+  const [includeContext, setIncludeContext] = useState(true);
+  const [text, setText] = useState(isCustom ? '' : (task.overrides?.instructions ?? ''));
+  const [kept, setKept] = useState(!isCustom && Boolean(task.overrides?.instructions));
   const [onceOpen, setOnceOpen] = useState(false);
   const [once, setOnce] = useState<AgentSelection>(EMPTY);
   const [previewing, setPreviewing] = useState(false);
@@ -53,9 +65,10 @@ export function LaunchCompose({
   }, [phase.id]);
 
   useEffect(() => {
+    if (isCustom) return;
     setText(task.overrides?.instructions ?? '');
     setKept(Boolean(task.overrides?.instructions));
-  }, [task.issue, task.overrides?.instructions]);
+  }, [task.issue, task.overrides?.instructions, isCustom]);
 
   // Grow to fit, capped. Reset to auto first or it can only ever get taller.
   useEffect(() => {
@@ -88,13 +101,13 @@ export function LaunchCompose({
 
   // Flush a kept edit on the way out, so backing out of compose does not lose
   // it. A ref, so the cleanup reads current values rather than mount-time ones.
-  const latest = useRef({ kept, text, issue: task.issue });
-  latest.current = { kept, text, issue: task.issue };
+  const latest = useRef({ kept, text, issue: task.issue, isCustom });
+  latest.current = { kept, text, issue: task.issue, isCustom };
 
   useEffect(() => {
     return () => {
-      const { kept: k, text: t, issue } = latest.current;
-      if (!k) return;
+      const { kept: k, text: t, issue, isCustom: c } = latest.current;
+      if (c || !k) return;
       const value = t.trim() || null;
       // Fire-and-forget: the component is going away and the board refreshes
       // on its own poll regardless.
@@ -102,7 +115,13 @@ export function LaunchCompose({
     };
   }, []);
 
+  // A phase run's text is optional garnish on a command file; a custom run's
+  // text is the entire instruction, so there has to be some.
+  const empty = text.trim() === '';
+  const blocked = busy !== null || (isCustom && empty);
+
   async function launch() {
+    if (isCustom && empty) return;
     if (kept) await persist(text.trim() || null);
     return run(phase.id, () =>
       api.spawn(task.issue, phase.id, {
@@ -110,6 +129,7 @@ export function LaunchCompose({
         agent: onceOpen ? once.agent || undefined : undefined,
         model: onceOpen ? once.model || undefined : undefined,
         effort: onceOpen ? once.effort || undefined : undefined,
+        ...(isCustom ? { includeContext } : {}),
       }),
     );
   }
@@ -144,13 +164,17 @@ export function LaunchCompose({
       <textarea
         ref={boxRef}
         className="field compose-box"
-        placeholder="Extra instructions for this run (optional)"
+        placeholder={
+          isCustom
+            ? 'What should the agent do?'
+            : 'Extra instructions for this run (optional)'
+        }
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
-            if (busy === null) void launch();
+            if (!blocked) void launch();
           }
         }}
       />
@@ -160,6 +184,18 @@ export function LaunchCompose({
         <span>Ctrl+Enter launches</span>
       </div>
 
+      {isCustom && (
+        <label className="hint" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={includeContext}
+            onChange={(e) => setIncludeContext(e.target.checked)}
+          />
+          Include issue context — the issue number, branch, where to write output
+          and which documents already exist
+        </label>
+      )}
+
       <div className="compose-actions">
         <div className="compose-tools">
           <button className="btn is-sm" onClick={() => setFull(true)}>
@@ -168,18 +204,20 @@ export function LaunchCompose({
           <button className="btn is-sm" onClick={() => setPreviewing(true)}>
             👁 Preview prompt
           </button>
-          <button
-            className={`btn is-sm${kept ? ' is-on' : ''}`}
-            onClick={toggleKeep}
-            aria-pressed={kept}
-            title="Keep for every run of this task"
-          >
-            📌 {kept ? 'Kept' : 'Keep'}
-          </button>
+          {!isCustom && (
+            <button
+              className={`btn is-sm${kept ? ' is-on' : ''}`}
+              onClick={toggleKeep}
+              aria-pressed={kept}
+              title="Keep for every run of this task"
+            >
+              📌 {kept ? 'Kept' : 'Keep'}
+            </button>
+          )}
         </div>
         <button
           className="btn is-primary is-launch"
-          disabled={busy !== null}
+          disabled={blocked}
           onClick={() => void launch()}
         >
           <IconPlay /> {busy === phase.id ? 'Opening…' : `Launch ${phase.label}`}
@@ -204,7 +242,7 @@ export function LaunchCompose({
                 </button>
                 <button
                   className="btn is-sm is-primary"
-                  disabled={busy !== null}
+                  disabled={blocked}
                   onClick={() => void launch()}
                 >
                   ▶ Launch
@@ -222,7 +260,7 @@ export function LaunchCompose({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                     e.preventDefault();
-                    if (busy === null) void launch();
+                    if (!blocked) void launch();
                   }
                 }}
                 autoFocus
@@ -238,6 +276,7 @@ export function LaunchCompose({
           phase={phase.id}
           phaseLabel={phase.label}
           instructions={text}
+          includeContext={isCustom ? includeContext : undefined}
           onClose={() => setPreviewing(false)}
         />
       )}

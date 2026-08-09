@@ -36,10 +36,9 @@ export interface RunPhaseSource {
 /**
  * The synthetic phase a custom run launches through.
  *
- * The actor has to be supplied here because `resolveAgentValues` finds a
- * phase's default agent by looking its id up in the pipeline — a lookup a
- * synthetic phase can never satisfy. The plan phase's actor is the sensible
- * inheritance: it is the one whose work most resembles this.
+ * It carries an actor so agent resolution has a default to fall back on — the
+ * plan phase's, since that is the phase whose work most resembles this. But an
+ * actor on the object is not enough on its own: see `pipelineWith`.
  */
 export function customPhase(source: RunPhaseSource): PhaseConfig {
   const actor =
@@ -60,6 +59,24 @@ export function customPhase(source: RunPhaseSource): PhaseConfig {
     gate: { type: 'manual' },
     t3: CUSTOM_T3_MODES,
   };
+}
+
+/**
+ * `pipeline` with `phase` appended, unless it is already there.
+ *
+ * Agent resolution takes a phase *id* and finds that phase's actor by looking
+ * the id up in the pipeline (`resolveAgentValues`), so a synthetic phase
+ * resolves to no agent at all no matter what actor its object carries — the
+ * object is never the one consulted. Splicing it in for the duration of the
+ * lookup is what makes its actor reachable, without it ever becoming a lane.
+ */
+export function pipelineWith(
+  pipeline: readonly PhaseConfig[],
+  phase: PhaseConfig,
+): PhaseConfig[] {
+  return pipeline.some((candidate) => candidate.id === phase.id)
+    ? [...pipeline]
+    : [...pipeline, phase];
 }
 
 /**

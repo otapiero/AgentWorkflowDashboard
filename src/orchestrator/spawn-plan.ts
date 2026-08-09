@@ -1,5 +1,6 @@
 import { resolveAgent } from './agents.ts';
 import { buildPrompt } from './prompt.ts';
+import { pipelineWith } from '../shared/custom-run.ts';
 import { STANDING_RULES } from './spawn.ts';
 import type {
   AgentProfile,
@@ -51,11 +52,16 @@ export function resolveSpawnPlan(
   phaseDefaults: PhaseDefaults,
   options: SpawnPlanOptions = {},
 ): SpawnPlan {
-  const { agent, model, effort } = resolveAgent(config, task, phase.id, phaseDefaults, {
-    agent: options.agent,
-    model: options.model,
-    effort: options.effort,
-  });
+  // The phase is spliced into the pipeline for the lookup, so a synthetic
+  // phase's actor is reachable. A configured phase is already there, so this
+  // is a no-op for every pipeline run.
+  const { agent, model, effort } = resolveAgent(
+    { ...config, pipeline: pipelineWith(config.pipeline, phase) },
+    task,
+    phase.id,
+    phaseDefaults,
+    { agent: options.agent, model: options.model, effort: options.effort },
+  );
   if (!agent) {
     throw new Error(
       `Phase '${phase.id}' has no agent to spawn. Pin one on the task or set a phase default.`,
