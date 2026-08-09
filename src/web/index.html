@@ -4,6 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
+    <!--
+      Favicon as an inline data URI: three board lanes in the status colours
+      (needs you / live / ready). Inlined rather than shipped as a file so the
+      tab icon costs no extra request and never 404s in dev or a packaged build.
+    -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230e121b'/%3E%3Crect x='5' y='8' width='6' height='19' rx='2' fill='%23f2a13c'/%3E%3Crect x='13' y='5' width='6' height='22' rx='2' fill='%234bb4e0'/%3E%3Crect x='21' y='13' width='6' height='14' rx='2' fill='%2347c08a'/%3E%3C/svg%3E"
+    />
     <title>Mission Control</title>
   </head>
   <body>
