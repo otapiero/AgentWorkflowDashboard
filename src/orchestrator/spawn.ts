@@ -26,6 +26,7 @@ import {
   buildProjectCreateCommand,
   buildThreadCreateCommand,
   buildTurnStartCommand,
+  resolveInstanceModel,
   type ModelSelection,
 } from './t3/commands.ts';
 import { readInstanceReadiness, type InstanceReadiness } from './t3/instances.ts';
@@ -338,7 +339,22 @@ export function resolveT3Launch(input: {
     };
   }
 
-  return { ok: true, modelSelection, modes: t3ModesForPhase(input.phase) };
+  // The readiness check above already read the instance's model slugs; using
+  // them here is what stops a name from the agent's CLI vocabulary reaching
+  // T3 as a dispatch it can only reject.
+  const resolved = resolveInstanceModel(modelSelection.model, instance.models);
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      error: `T3 cannot run '${input.agent}' on provider instance '${input.profile.t3Instance}': ${resolved.error}`,
+    };
+  }
+
+  return {
+    ok: true,
+    modelSelection: { ...modelSelection, model: resolved.model },
+    modes: t3ModesForPhase(input.phase),
+  };
 }
 
 /**

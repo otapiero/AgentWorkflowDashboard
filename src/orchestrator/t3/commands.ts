@@ -43,6 +43,106 @@ export function buildModelSelection(
   return selection;
 }
 
+export type InstanceModelResolution =
+  | { ok: true; model: string }
+  | { ok: false; error: string };
+
+/**
+ * Reconcile a Mission Control model name with what the T3 instance offers.
+ *
+ * An agent's `models` list is written for the CLI the 'wt' launcher runs, and
+ * that vocabulary is not always the instance's. The clearest case is copilot:
+ * its list holds copilot CLI names, but its t3Instance is OpenCode, whose
+ * adapter takes only 'provider/model' — so `claude-sonnet-5` came back as
+ * "OpenCode model selection must use the 'provider/model' format", thrown
+ * inside T3 at sendTurn, long after the operator's click.
+ *
+ * Qualifying against the instance's own slugs lets one list serve both
+ * launchers, and turns the rest into a sentence on the card. Ambiguity is
+ * refused rather than guessed: picking a provider for the operator would be
+ * choosing who bills them.
+ *
+ * The other case is claude, whose list holds the CLI's family aliases —
+ * 'opus', 'sonnet', 'haiku'. The claudeAgent instance advertises released
+ * slugs (claude-opus-5, claude-opus-4-8, …), so 'opus' matched nothing and the
+ * launch was refused outright. An alias names a family, and the CLI reads it
+ * as that family's newest release; resolving it the same way here keeps the
+ * two launchers agreeing on what the operator picked.
+ *
+ * An instance that advertises no models is not evidence of anything, so the
+ * name passes through untouched.
+ */
+export function resolveInstanceModel(
+  model: string,
+  instanceModels: string[],
+): InstanceModelResolution {
+  if (instanceModels.length === 0 || instanceModels.includes(model)) {
+    return { ok: true, model };
+  }
+
+  const qualified = instanceModels.filter((slug) => slug.endsWith(`/${model}`));
+  if (qualified.length === 1 && qualified[0]) return { ok: true, model: qualified[0] };
+  if (qualified.length > 1) return ambiguous(model, qualified);
+
+  const family = instanceModels.filter((slug) => namesFamily(slug, model));
+  const newest = family[0] && newestRelease(family, model);
+  if (newest) {
+    // Two providers serving the same family is the copilot ambiguity again:
+    // the version ordering cannot say which account gets billed.
+    if (new Set(family.map(providerOf)).size > 1) return ambiguous(model, family);
+    return { ok: true, model: newest };
+  }
+
+  return {
+    ok: false,
+    error: `it does not offer '${model}'. It offers: ${instanceModels.join(', ')}.`,
+  };
+}
+
+function ambiguous(model: string, matches: string[]): InstanceModelResolution {
+  return {
+    ok: false,
+    error: `'${model}' names more than one of its models (${matches.join(', ')}). Use the full slug.`,
+  };
+}
+
+function providerOf(slug: string): string {
+  const cut = slug.indexOf('/');
+  return cut === -1 ? '' : slug.slice(0, cut);
+}
+
+function segmentsOf(slug: string): string[] {
+  return slug.slice(slug.indexOf('/') + 1).split('-');
+}
+
+/** True when the slug is `<vendor>-<family>-<version…>`, e.g. claude-opus-4-8. */
+function namesFamily(slug: string, family: string): boolean {
+  const parts = segmentsOf(slug);
+  const at = parts.indexOf(family);
+  return at !== -1 && at < parts.length - 1;
+}
+
+/**
+ * The family member with the highest version, comparing the segments after
+ * the family name as numbers: claude-opus-5 [5] outranks claude-opus-4-8
+ * [4, 8]. A missing segment counts as 0, so a dated slug beats its base.
+ */
+function newestRelease(family: string[], name: string): string | undefined {
+  const version = (slug: string) =>
+    segmentsOf(slug)
+      .slice(segmentsOf(slug).indexOf(name) + 1)
+      .map((part) => Number.parseInt(part, 10) || 0);
+
+  return [...family].sort((a, b) => {
+    const [left, right] = [version(a), version(b)];
+    for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+      const diff = (right[i] ?? 0) - (left[i] ?? 0);
+      if (diff !== 0) return diff;
+    }
+    return 0;
+  })[0];
+}
+
 export function buildProjectCreateCommand(input: {
   commandId: string;
   projectId: string;

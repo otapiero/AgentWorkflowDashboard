@@ -57,7 +57,10 @@ agents:
     model: default
     models: [default, opus, sonnet, haiku]
     efforts: [low, medium, high, xhigh, max]
-    # T3 provider instance that runs this agent on the 't3' launcher.
+    # T3 provider instance that runs this agent on the 't3' launcher. It
+    # advertises released slugs rather than the CLI's aliases, so the launcher
+    # reads each alias above as that family's newest release
+    # (opus -> claude-opus-5).
     t3Instance: 'claudeAgent'
 
   # Verified against copilot 1.0.73: -i starts an interactive session with the
@@ -81,6 +84,10 @@ agents:
     # This is a substitution, not a passthrough: it is OpenCode's agent loop
     # using Copilot's models, not the Copilot CLI harness the 'wt' launcher
     # drives. Requires the `opencode` CLI installed and authenticated.
+    # OpenCode names models 'provider/model', so the 't3' launcher qualifies
+    # the bare names above against the slugs the instance advertises
+    # (claude-sonnet-5 -> github-copilot/claude-sonnet-5). 'auto' is a Copilot
+    # CLI concept with no OpenCode equivalent, so it works only on 'wt'.
     t3Instance: 'opencode'
 
   # Codex CLI launches its interactive TUI from a positional prompt. Global
