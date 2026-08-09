@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
 
-import { latestThreadId, toT3Fact } from '../src/orchestrator/t3/facts.ts';
+import {
+  findProjectForWorkspace,
+  latestThreadId,
+  toT3Fact,
+} from '../src/orchestrator/t3/facts.ts';
 import type { T3Snapshot } from '../src/orchestrator/t3/schemas.ts';
 import type { TaskRecord } from '../src/shared/types.ts';
 
@@ -134,5 +138,81 @@ describe('toT3Fact', () => {
     );
     expect(fact?.sessionStatus).toBe('error');
     expect(fact?.lastError).toBe('provider exited 1');
+  });
+});
+
+/**
+ * T3 enforces one active project per workspace root. Creating a second one
+ * fails the whole spawn with a 500:
+ *
+ *   OrchestrationCommandInvariantError, commandType 'project.create',
+ *   "Active project 'd0a5b45c-…' already exists for workspace root
+ *    'c:\src\widgets'."
+ *
+ * Recorded from T3 0.0.31's own server trace on 2026-08-09. Adopting the
+ * existing project is the same discipline pickBranchForIssue already applies
+ * to a branch that exists before Mission Control would have generated one.
+ */
+describe('findProjectForWorkspace', () => {
+  const ROOT = 'C:\\src\\widgets';
+
+  const project = (over: Record<string, unknown> = {}) => ({
+    id: 'proj-1',
+    title: 'widgets',
+    workspaceRoot: ROOT,
+    ...over,
+  });
+
+  const snap = (projects: unknown[]) =>
+    ({ projects, threads: [] }) as unknown as T3Snapshot;
+
+  test('adopts the project already rooted at the repo', () => {
+    expect(findProjectForWorkspace(snap([project()]), ROOT)).toBe('proj-1');
+  });
+
+  test('matches regardless of case, because T3 compares normalised paths', () => {
+    // T3's own error reported the root lowercased while the API returns it
+    // cased. An exact comparison would miss the project and then be refused
+    // permission to create the replacement.
+    expect(
+      findProjectForWorkspace(
+        snap([project()]),
+        'c:\\src\\WIDGETS',
+      ),
+    ).toBe('proj-1');
+  });
+
+  test('matches regardless of slash direction or a trailing separator', () => {
+    expect(
+      findProjectForWorkspace(
+        snap([project()]),
+        'C:/src/widgets\\',
+      ),
+    ).toBe('proj-1');
+  });
+
+  test('ignores a soft-deleted project, which does not hold the invariant', () => {
+    // T3 says "Active project ... already exists". A deleted one does not
+    // block creation, so adopting it would bind threads to a dead project.
+    expect(
+      findProjectForWorkspace(
+        snap([project({ deletedAt: '2026-08-08T00:00:00.000Z' })]),
+        ROOT,
+      ),
+    ).toBeNull();
+  });
+
+  test('a project for a different repo is not adopted', () => {
+    expect(
+      findProjectForWorkspace(snap([project({ workspaceRoot: 'C:\\other\\repo' })]), ROOT),
+    ).toBeNull();
+  });
+
+  test('no snapshot means no answer — the caller must not assume "create"', () => {
+    expect(findProjectForWorkspace(undefined, ROOT)).toBeNull();
+  });
+
+  test('an empty project list is null', () => {
+    expect(findProjectForWorkspace(snap([]), ROOT)).toBeNull();
   });
 });

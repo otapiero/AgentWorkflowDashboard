@@ -28,6 +28,7 @@ import {
   type ModelSelection,
 } from './t3/commands.ts';
 import { readInstanceReadiness, type InstanceReadiness } from './t3/instances.ts';
+import { findProjectForWorkspace } from './t3/facts.ts';
 import { t3ModesForPhase } from '../shared/types.ts';
 import type {
   AgentProfile,
@@ -435,9 +436,22 @@ async function launchT3(
 
   const createdAt = new Date().toISOString();
 
-  // The project is created once, lazily, and reused so every task's threads
+  // The project is resolved once, lazily, and reused so every task's threads
   // group under one entry in T3's sidebar.
+  //
+  // Three steps in order, because T3 permits exactly one active project per
+  // workspace root and answers a second `project.create` with a 500:
+  //   1. what we already recorded,
+  //   2. what T3 already has for this repo — the normal case, since adding the
+  //      repo to T3 by hand is how anyone tries T3 out,
+  //   3. only then, create one.
   let projectId = getT3ProjectId();
+
+  if (!projectId) {
+    projectId = findProjectForWorkspace(await client.fetchSnapshot(), config.repo.path);
+    if (projectId) setT3ProjectId(projectId);
+  }
+
   if (!projectId) {
     projectId = randomUUID();
     const created = await client.dispatch(

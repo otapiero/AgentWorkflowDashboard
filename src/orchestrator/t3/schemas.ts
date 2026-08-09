@@ -116,7 +116,19 @@ export type T3SnapshotThread = z.infer<typeof threadSchema>;
 export const snapshotSchema = z.object({
   snapshotSequence: z.number().optional(),
   projects: z
-    .array(z.object({ id: z.string(), title: z.string(), workspaceRoot: z.string() }).loose())
+    .array(
+      z
+        .object({
+          id: z.string(),
+          title: z.string(),
+          workspaceRoot: z.string(),
+          // Read because T3's one-project-per-workspace-root invariant applies
+          // to *active* projects only; a soft-deleted one neither blocks a
+          // create nor is safe to adopt.
+          deletedAt: z.string().nullable().optional(),
+        })
+        .loose(),
+    )
     .default([]),
   // Required, unlike `projects`, and that asymmetry is load-bearing: a real
   // snapshot always carries the array, so demanding it is what stops an error

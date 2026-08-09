@@ -10,6 +10,44 @@ import type { T3Snapshot } from './schemas.ts';
  * working agent as dead.
  */
 
+/**
+ * Windows paths differ in case and separator without differing in meaning, and
+ * T3 compares the normalised form — its refusal quoted the root lowercased
+ * while the API returns it cased.
+ */
+function normalizeWorkspaceRoot(path: string): string {
+  return path.replace(/[\\/]+/g, '\\').replace(/\\+$/, '').toLowerCase();
+}
+
+/**
+ * The id of the T3 project already rooted at this workspace, if there is one.
+ *
+ * T3 allows exactly one active project per workspace root and refuses a second
+ * with a 500, not a validation error:
+ *
+ *   OrchestrationCommandInvariantError, commandType 'project.create',
+ *   "Active project '…' already exists for workspace root '…'."
+ *
+ * So a repo the operator already added to T3 by hand — the normal case, since
+ * that is how anyone tries T3 out — would make every single spawn fail. Adopt
+ * it instead, which is the discipline pickBranchForIssue already applies to a
+ * branch that exists before Mission Control would have generated one.
+ *
+ * Soft-deleted projects are skipped: they do not hold the invariant, so
+ * adopting one would bind threads to a project T3 considers gone.
+ */
+export function findProjectForWorkspace(
+  snapshot: T3Snapshot | undefined,
+  workspaceRoot: string,
+): string | null {
+  if (!snapshot) return null;
+  const wanted = normalizeWorkspaceRoot(workspaceRoot);
+  const match = snapshot.projects.find(
+    (p) => !p.deletedAt && normalizeWorkspaceRoot(p.workspaceRoot) === wanted,
+  );
+  return match?.id ?? null;
+}
+
 /** The thread id of the most recent T3-launched spawn, if any. */
 export function latestThreadId(task: TaskRecord): string | null {
   for (let i = task.spawnHistory.length - 1; i >= 0; i -= 1) {
