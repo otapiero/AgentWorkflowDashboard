@@ -1,8 +1,10 @@
 import { resolveAgent } from './agents.ts';
 import { buildPrompt } from './prompt.ts';
+import { pipelineWith } from '../shared/custom-run.ts';
 import { STANDING_RULES } from './spawn.ts';
 import type {
   AgentProfile,
+  ArtifactRef,
   Config,
   PhaseConfig,
   PhaseDefaults,
@@ -30,6 +32,13 @@ export interface SpawnPlanOptions {
   agent?: string;
   model?: string;
   effort?: string;
+  /** Collected artifacts, rendered into the prompt's {{artifacts}}. */
+  artifacts?: readonly ArtifactRef[];
+  /**
+   * Bypass the command file entirely: this text *is* the prompt body. Set when
+   * a custom run is launched with issue context turned off.
+   */
+  rawPrompt?: string;
 }
 
 /**
@@ -43,26 +52,48 @@ export function resolveSpawnPlan(
   phaseDefaults: PhaseDefaults,
   options: SpawnPlanOptions = {},
 ): SpawnPlan {
-  if (!phase.command) {
-    throw new Error(`Phase '${phase.id}' has no command to render a prompt from.`);
-  }
-
-  const { agent, model, effort } = resolveAgent(config, task, phase.id, phaseDefaults, {
-    agent: options.agent,
-    model: options.model,
-    effort: options.effort,
-  });
+  // The phase is spliced into the pipeline for the lookup, so a synthetic
+  // phase's actor is reachable. A configured phase is already there, so this
+  // is a no-op for every pipeline run.
+  const { agent, model, effort } = resolveAgent(
+    { ...config, pipeline: pipelineWith(config.pipeline, phase) },
+    task,
+    phase.id,
+    phaseDefaults,
+    { agent: options.agent, model: options.model, effort: options.effort },
+  );
   if (!agent) {
     throw new Error(
       `Phase '${phase.id}' has no agent to spawn. Pin one on the task or set a phase default.`,
     );
   }
   const profile = config.agents[agent]!;
+  // Agents without a system-prompt flag carry the rules in the prompt body.
+  const inline = profile.instructionMode === 'inline' ? STANDING_RULES : undefined;
+
+  // A raw prompt is the operator's text and nothing else — no command file is
+  // read, so a phase without one is fine here even though it never is below.
+  if (options.rawPrompt !== undefined) {
+    const body = options.rawPrompt.trim();
+    return {
+      agent,
+      model,
+      effort,
+      profile,
+      command: 'raw',
+      promptText: inline ? `${inline}\n\n${body}` : body,
+    };
+  }
+
+  if (!phase.command) {
+    throw new Error(`Phase '${phase.id}' has no command to render a prompt from.`);
+  }
 
   const promptText = buildPrompt(phase.command, task, {
     customInstructions: options.customInstructions ?? task.overrides?.instructions,
-    // Agents without a system-prompt flag carry the rules in the prompt body.
-    inlineInstructions: profile.instructionMode === 'inline' ? STANDING_RULES : undefined,
+    inlineInstructions: inline,
+    artifacts: options.artifacts,
+    doneMarkerName: `${phase.id}.done`,
   });
 
   return { agent, model, effort, profile, command: phase.command, promptText };

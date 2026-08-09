@@ -22,6 +22,13 @@ export const PHASES = [
 
 export type Phase = (typeof PHASES)[number];
 
+/**
+ * A thing that can run on a task: a pipeline phase, or the free-form custom
+ * run. Distinct from `Phase`, which is strictly a position in the pipeline —
+ * only fields that identify a *run* widen to this.
+ */
+export type RunKind = Phase | 'custom';
+
 /** A configured agent name, or one of the two non-agent pipeline actors. */
 export type Actor = string;
 
@@ -43,7 +50,7 @@ export type PrState = 'OPEN' | 'MERGED' | 'CLOSED';
 
 /** A spawn believed to be running, from a pwsh PID or from a T3 session. */
 export interface LiveSpawn {
-  phase: Phase;
+  phase: RunKind;
   /** The pwsh PID for wt/vscode launches; null when T3 supplies liveness. */
   pid: number | null;
   startedAt: string;
@@ -211,11 +218,18 @@ export interface DerivedState {
 }
 
 export interface SpawnRecord {
-  phase: Phase;
+  phase: RunKind;
   agent: string;
   startedAt: string;
   /** The full command line used, kept purely for debugging a bad spawn. */
   command: string;
+  /**
+   * The first ~100 characters of a custom run's prompt. Written for custom
+   * runs only: a phase run is already identified by its label, so summarising
+   * its optional extra instructions would only add noise. With no saved
+   * presets, this is the sole thing telling two past custom runs apart.
+   */
+  promptSummary?: string;
   /** The T3 thread this spawn created, when the launcher was 't3'. */
   threadId?: string;
 }

@@ -18,4 +18,10 @@ done — Mission Control watches for it to collect your artifacts:
 
     {{donePath}}
 
+Research, specs and notes already collected for this issue:
+
+{{artifacts}}
+
+Read them before planning. Do not redo work they already cover.
+
 {{customInstructions}}

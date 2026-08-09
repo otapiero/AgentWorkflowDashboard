@@ -57,9 +57,13 @@ export function promptPath(issue: number): string {
   return join(taskDir(issue), 'prompt.txt');
 }
 
-/** The "before" picture captured at plan spawn, used to attribute artifacts. */
-export function planSnapshotPath(issue: number): string {
-  return join(taskDir(issue), 'plan.snapshot.json');
+/**
+ * The "before" picture captured when a run starts, used to attribute the files
+ * it produces. Also the collection sentinel: while it exists, that run's output
+ * has not been gathered yet.
+ */
+export function runSnapshotPath(issue: number, kind: string): string {
+  return join(taskDir(issue), `${kind}.snapshot.json`);
 }
 
 /** The manifest of artifacts a plan run produced. */

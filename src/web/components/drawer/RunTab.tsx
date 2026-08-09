@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../../api.ts';
 import { LaunchCompose } from './LaunchCompose.tsx';
 import { IconPlay } from '../bits.tsx';
+import { CUSTOM_RUN_ID, customPhase } from '../../../shared/custom-run.ts';
 import type { TabProps } from './types.ts';
 
 export function RunTab({ task, config, busy, run }: TabProps) {
@@ -12,7 +13,12 @@ export function RunTab({ task, config, busy, run }: TabProps) {
   useEffect(() => setArmed(null), [task.issue]);
 
   const spawnable = config.pipeline.filter((p) => p.spawnable && p.command);
-  const phase = spawnable.find((p) => p.id === armed) ?? null;
+  const custom = customPhase({
+    pipeline: config.pipeline,
+    agentNames: config.agents.map((a) => a.name),
+  });
+  const phase =
+    armed === CUSTOM_RUN_ID ? custom : (spawnable.find((p) => p.id === armed) ?? null);
 
   return (
     <>
@@ -40,9 +46,18 @@ export function RunTab({ task, config, busy, run }: TabProps) {
                 <IconPlay /> {p.label}
               </button>
             ))}
+            <button
+              className="btn is-sm"
+              onClick={() => setArmed(CUSTOM_RUN_ID)}
+              title="Write the whole prompt yourself"
+            >
+              ⚡ Custom…
+            </button>
           </div>
           <p className="hint">
-            Underlined is where this task sits now — but any phase can be re-run.
+            Underlined is where this task sits now — but any phase can be
+            re-run. Custom writes the whole prompt yourself; it never moves the
+            card.
           </p>
         </section>
       )}

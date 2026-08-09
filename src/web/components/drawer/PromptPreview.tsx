@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 
 import { api } from '../../api.ts';
 import type { PromptPreview as Preview } from '../../api.ts';
-import type { Phase } from '../../../shared/types.ts';
+import type { RunKind } from '../../../shared/types.ts';
 
 interface Props {
   issue: number;
-  phase: Phase;
+  phase: RunKind;
   phaseLabel: string;
   instructions: string;
+  /** Custom runs only: false previews the raw prompt with no preamble. */
+  includeContext?: boolean;
   onClose: () => void;
 }
 
@@ -19,7 +21,14 @@ interface Props {
  * highlighted in place — seeing *where* they land is the whole point, and is
  * what makes it obvious which parts of the prompt need no repeating.
  */
-export function PromptPreview({ issue, phase, phaseLabel, instructions, onClose }: Props) {
+export function PromptPreview({
+  issue,
+  phase,
+  phaseLabel,
+  instructions,
+  includeContext,
+  onClose,
+}: Props) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,13 +37,13 @@ export function PromptPreview({ issue, phase, phaseLabel, instructions, onClose 
     setPreview(null);
     setError(null);
     api
-      .previewPrompt(issue, phase, instructions || undefined)
+      .previewPrompt(issue, phase, instructions || undefined, includeContext)
       .then((p) => live && setPreview(p))
       .catch((e: Error) => live && setError(e.message));
     return () => {
       live = false;
     };
-  }, [issue, phase, instructions]);
+  }, [issue, phase, instructions, includeContext]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

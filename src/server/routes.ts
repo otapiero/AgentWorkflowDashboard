@@ -10,6 +10,8 @@ import { readPlan, writePlan } from '../orchestrator/plan.ts';
 import { writeMarker, clearMarker } from '../orchestrator/markers.ts';
 import { openArtifactInEditor, openWorktreeInVscode, spawnPhase } from '../orchestrator/spawn.ts';
 import { resolveSpawnPlan } from '../orchestrator/spawn-plan.ts';
+import { readArtifacts } from '../orchestrator/artifacts.ts';
+import { isCustomRun, resolveRunPhase } from '../shared/custom-run.ts';
 import { mergeOverrides } from '../orchestrator/overrides.ts';
 import { missionUsage } from '../orchestrator/usage.ts';
 import {
@@ -66,6 +68,16 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
   async function refreshAndBroadcast(): Promise<TaskWithDerived[]> {
     return refresh();
   }
+
+  /**
+   * Phases the operator can launch: everything in the pipeline, plus the
+   * synthetic custom run, which is deliberately not in config.yaml.
+   */
+  const runPhase = (id: string | undefined) =>
+    resolveRunPhase(
+      { pipeline: config.pipeline, agentNames: Object.keys(config.agents) },
+      id,
+    );
 
   app.get('/api/health', async () => health);
 
@@ -155,15 +167,29 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
       agent?: string;
       model?: string;
       effort?: string;
+      /** Custom runs only: false sends the operator's text with no preamble. */
+      includeContext?: boolean;
     };
   }>('/api/tasks/:issue/spawn', async (req, reply) => {
     const task = getTask(Number(req.params.issue));
     if (!task) return reply.code(404).send({ error: 'task not on the board' });
 
-    const phase = config.pipeline.find((p) => p.id === req.body?.phase);
+    const phase = runPhase(req.body?.phase);
     if (!phase) return reply.code(400).send({ error: `unknown phase '${req.body?.phase}'` });
     if (!phase.spawnable) {
       return reply.code(400).send({ error: `phase '${phase.id}' is not spawnable` });
+    }
+
+    // Context off means the operator's text is the entire prompt, so there has
+    // to be some: a raw run of nothing is not a run.
+    const raw =
+      isCustomRun(phase) && req.body?.includeContext === false
+        ? (req.body?.customInstructions ?? '').trim()
+        : undefined;
+    if (raw === '') {
+      return reply
+        .code(400)
+        .send({ error: 'a custom run with issue context turned off needs a prompt' });
     }
 
     try {
@@ -172,6 +198,7 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
         agent: req.body?.agent,
         model: req.body?.model,
         effort: req.body?.effort,
+        rawPrompt: raw,
       });
       upsertTask({ ...task, spawnHistory: [...task.spawnHistory, record] });
       // The tab needs a moment to write its running marker before we re-derive.
@@ -191,17 +218,24 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
    */
   app.post<{
     Params: { issue: string };
-    Body: { phase?: string; instructions?: string };
+    Body: { phase?: string; instructions?: string; includeContext?: boolean };
   }>('/api/tasks/:issue/prompt', async (req, reply) => {
     const task = getTask(Number(req.params.issue));
     if (!task) return reply.code(404).send({ error: 'task not on the board' });
 
-    const phase = config.pipeline.find((p) => p.id === req.body?.phase);
+    const phase = runPhase(req.body?.phase);
     if (!phase) return reply.code(400).send({ error: `unknown phase '${req.body?.phase}'` });
 
     try {
       const plan = resolveSpawnPlan(config, task, phase, getPhaseDefaults(), {
         customInstructions: req.body?.instructions || undefined,
+        artifacts: readArtifacts(task.issue),
+        // Unlike the spawn route this does not reject an empty raw prompt: the
+        // operator hits this while typing, so it must stay forgiving.
+        rawPrompt:
+          isCustomRun(phase) && req.body?.includeContext === false
+            ? (req.body?.instructions ?? '')
+            : undefined,
       });
       return {
         text: plan.promptText,

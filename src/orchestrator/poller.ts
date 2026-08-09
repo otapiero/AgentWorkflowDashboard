@@ -1,9 +1,12 @@
-import { existsSync } from 'node:fs';
-
 import { applyLastGood, boardSignature, nextDelayMs } from './board.ts';
 import { gatherFacts } from './facts.ts';
-import { collectArtifacts, readArtifacts, shouldCollectPlan } from './artifacts.ts';
-import { artifactsManifestPath, planSnapshotPath } from './paths.ts';
+import {
+  collectArtifacts,
+  readArtifacts,
+  shouldCollectRun,
+  snapshotAgeMs,
+} from './artifacts.ts';
+import { CUSTOM_RUN_ID } from '../shared/custom-run.ts';
 import { fetchBranchPrs } from './github.ts';
 import { reconcile } from './reconcile.ts';
 import { toEditorIntegration } from './editor-integration.ts';
@@ -109,22 +112,29 @@ export async function reconcileAll(
     state.tasks.map(async (task): Promise<TaskWithDerived> => {
       try {
         let facts = await gatherFacts(config, task, branches, batch, t3Snapshot);
-        // Once a plan run has ended (or the agent signalled done) and nothing
-        // has been collected yet, gather its artifacts. This is the crash-safe
-        // floor: capture happens even if the agent never signed off.
-        if (
-          shouldCollectPlan({
-            liveSpawn: facts.liveSpawn,
-            planMdExists: facts.planMdExists,
-            planDoneMarker: facts.markers.includes('plan.done'),
-            manifestExists: existsSync(artifactsManifestPath(task.issue)),
-            snapshotExists: existsSync(planSnapshotPath(task.issue)),
-          })
-        ) {
+        // Once a run has ended (or the agent signalled done) and its output has
+        // not been gathered yet, collect it. This is the crash-safe floor:
+        // capture happens even if the agent never signed off.
+        //
+        // Both a plan run and a custom run can be waiting at once — launching a
+        // custom run does not cancel a plan run's pending capture — so each kind
+        // is settled on its own. When both fire, the plan's stale baseline also
+        // claims the custom run's files; the originalPath merge in
+        // collectArtifacts collapses that to one entry either way.
+        for (const kind of ['plan', CUSTOM_RUN_ID] as const) {
+          if (
+            !shouldCollectRun({
+              liveSpawn: facts.liveSpawn,
+              doneMarker: facts.markers.includes(`${kind}.done`),
+              snapshotAgeMs: snapshotAgeMs(task.issue, kind),
+            })
+          ) {
+            continue;
+          }
           try {
-            await collectArtifacts(config, task.issue, 'auto');
+            await collectArtifacts(config, task.issue, kind, 'auto');
           } catch (e) {
-            console.error(`[mc] artifact collection failed for #${task.issue}:`, e);
+            console.error(`[mc] ${kind} artifact collection failed for #${task.issue}:`, e);
           }
           facts = { ...facts, artifacts: readArtifacts(task.issue) };
         }

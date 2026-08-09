@@ -3,7 +3,12 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { stripFrontmatter, render, buildPrompt } from '../src/orchestrator/prompt.ts';
+import {
+  stripFrontmatter,
+  render,
+  buildPrompt,
+  renderArtifactList,
+} from '../src/orchestrator/prompt.ts';
 import { promptPath, claudeCommandsDir } from '../src/orchestrator/paths.ts';
 
 let home: string;
@@ -137,6 +142,55 @@ describe('buildPrompt', () => {
   test('does not prepend rules when the agent takes them via a flag', () => {
     writeCommand('mc-planner', 'Plan #$ARGUMENTS.');
     expect(buildPrompt('mc-planner', task, {})).toBe('Plan #3060.');
+  });
+
+  test('substitutes the artifact list into {{artifacts}}', () => {
+    writeCommand('mc-x', 'Prior work:\n{{artifacts}}');
+    const text = buildPrompt('mc-x', task, {
+      artifacts: [
+        { name: 'research.md', storedPath: 'artifacts/research.md', origin: 'taskdir', originalPath: 'x' },
+      ],
+    });
+    expect(text).toContain('research.md');
+    expect(text).not.toContain('{{artifacts}}');
+  });
+
+  test('renders (none) into {{artifacts}} when nothing has been collected', () => {
+    writeCommand('mc-x', 'Prior work:\n{{artifacts}}');
+    expect(buildPrompt('mc-x', task, {})).toContain('(none)');
+  });
+
+  test('points {{donePath}} at the named marker, not always plan.done', () => {
+    writeCommand('mc-x', 'Signal: {{donePath}}');
+    const text = buildPrompt('mc-x', task, { doneMarkerName: 'custom.done' });
+    expect(text).toContain('custom.done');
+    expect(text).not.toContain('plan.done');
+  });
+
+  test('defaults {{donePath}} to plan.done', () => {
+    writeCommand('mc-x', 'Signal: {{donePath}}');
+    expect(buildPrompt('mc-x', task, {})).toContain('plan.done');
+  });
+});
+
+describe('renderArtifactList', () => {
+  test('renders one line per artifact, pointing at the stored copy', () => {
+    const out = renderArtifactList(
+      [
+        { name: 'research.md', storedPath: 'artifacts/research.md', origin: 'taskdir', originalPath: 'x' },
+        { name: 'design.md', storedPath: 'artifacts/design.md', origin: 'repo', originalPath: 'y' },
+      ],
+      3060,
+    );
+    const lines = out.split('\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('research.md');
+    expect(lines[0]).toMatch(/[\\/]3060[\\/]artifacts[\\/]research\.md$/);
+    expect(lines[1]).toContain('design.md');
+  });
+
+  test('renders (none) for an empty manifest so the prompt has no dangling heading', () => {
+    expect(renderArtifactList([], 3060)).toBe('(none)');
   });
 });
 

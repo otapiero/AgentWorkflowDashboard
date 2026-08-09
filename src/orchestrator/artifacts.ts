@@ -5,6 +5,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -15,13 +16,13 @@ import {
   artifactsDir,
   artifactsManifestPath,
   markerPath,
-  planSnapshotPath,
+  runSnapshotPath,
   taskDir,
   worktreePath,
 } from './paths.ts';
 import { worktreeExists } from './worktree.ts';
 import { writeMarker } from './markers.ts';
-import type { ArtifactRef, Config, PlanSnapshot } from '../shared/types.ts';
+import type { ArtifactRef, Config, PlanSnapshot, RunKind } from '../shared/types.ts';
 
 /**
  * Plan artifact capture.
@@ -64,25 +65,48 @@ export function uniqueName(existing: string[], base: string): string {
 }
 
 /**
- * Whether the poller should collect a plan run's artifacts now. Collect once a
- * run is finished (or the agent signalled done), and never twice — a manifest
- * already on disk is the "already collected" sentinel.
+ * How long after a run's snapshot the poller waits before concluding, from the
+ * absence of a live process, that the run has finished.
  *
- * A snapshot must exist: it is the baseline written at plan spawn, and only a
- * real plan run has one. Without it, auto-collection would diff against nothing
- * and sweep an entire dirty worktree into the manifest — so a task that predates
- * this feature, or is deep in implementation, is correctly left alone. (The
- * explicit `collect` CLI bypasses this guard and degrades gracefully instead.)
+ * A spawn writes its snapshot immediately but its `<kind>.running` marker only
+ * once the terminal has started (~1.5s; see the delay in routes.ts). Without
+ * this floor the very next poll would find no live spawn, collect nothing,
+ * consume the snapshot, and lose everything the run went on to produce.
+ * The done marker bypasses it, so a run that signs off is collected at once.
  */
-export function shouldCollectPlan(i: {
+export const COLLECT_GRACE_MS = 90_000;
+
+/**
+ * Whether the poller should collect this run's artifacts now.
+ *
+ * The snapshot is the sentinel in both directions: no snapshot means either
+ * nothing is pending or it has already been collected, and collecting consumes
+ * it. That single rule replaces the old manifest check, which stopped working
+ * once manifests began outliving the run that wrote them.
+ *
+ * A snapshot must exist for another reason too: it is the baseline, and without
+ * one auto-collection would diff against nothing and sweep an entire dirty
+ * worktree into the manifest. (The explicit `collect` CLI bypasses this guard
+ * and degrades gracefully instead.)
+ */
+export function shouldCollectRun(i: {
   liveSpawn: unknown;
-  planMdExists: boolean;
-  planDoneMarker: boolean;
-  manifestExists: boolean;
-  snapshotExists: boolean;
+  doneMarker: boolean;
+  snapshotAgeMs: number | null;
 }): boolean {
-  if (i.manifestExists || !i.snapshotExists) return false;
-  return i.planDoneMarker || (!i.liveSpawn && i.planMdExists);
+  if (i.snapshotAgeMs === null) return false;
+  if (i.doneMarker) return true;
+  if (i.liveSpawn) return false;
+  return i.snapshotAgeMs > COLLECT_GRACE_MS;
+}
+
+/** Age of a run's pending snapshot, or null when there is none. */
+export function snapshotAgeMs(issue: number, kind: RunKind): number | null {
+  try {
+    return Date.now() - statSync(runSnapshotPath(issue, kind)).mtimeMs;
+  } catch {
+    return null;
+  }
 }
 
 /** The absolute stored copy for an artifact named `name`, or null if unknown. */
@@ -103,14 +127,19 @@ const RESERVED = new Set([
   'markers',
   'prompt.txt',
   'plan.md',
-  'plan.snapshot.json',
   'artifacts',
   'artifacts.json',
   'spawn.json',
 ]);
 
 function isReserved(name: string): boolean {
-  return RESERVED.has(name) || name.endsWith('.code-workspace');
+  // Every run kind has its own snapshot, so match the suffix rather than
+  // listing them — a new kind must never be collectable as its own artifact.
+  return (
+    RESERVED.has(name) ||
+    name.endsWith('.snapshot.json') ||
+    name.endsWith('.code-workspace')
+  );
 }
 
 function listDir(dir: string): string[] {
@@ -151,15 +180,17 @@ async function gitStatusPaths(cwd: string): Promise<string[]> {
 }
 
 /**
- * Capture the "before" picture, and clear any prior run's collected state so a
- * re-spawn re-collects. Fully synchronous: a fresh worktree has no status yet
- * (empty is the correct "before"), and doing the git read inline keeps the
- * snapshot deterministic rather than racing a background write.
+ * Capture the "before" picture for a run. Fully synchronous: a fresh worktree
+ * has no status yet (empty is the correct "before"), and doing the git read
+ * inline keeps the snapshot deterministic rather than racing a background write.
+ *
+ * Note what is *not* here: no artifact is cleared. A run's output has to
+ * survive every later run, including a re-plan, so the only thing reset is the
+ * run's own sign-off marker — without that, a stale one from the previous run
+ * would make the next poll collect before the agent had done anything.
  */
-export function writePlanSnapshot(config: Config, issue: number): void {
-  rmSync(artifactsManifestPath(issue), { force: true });
-  rmSync(artifactsDir(issue), { recursive: true, force: true });
-  rmSync(markerPath(issue, 'plan.done'), { force: true });
+export function writeRunSnapshot(config: Config, issue: number, kind: RunKind): void {
+  rmSync(markerPath(issue, `${kind}.done`), { force: true });
 
   const snapshot: PlanSnapshot = {
     takenAt: new Date().toISOString(),
@@ -171,24 +202,32 @@ export function writePlanSnapshot(config: Config, issue: number): void {
     snapshot.extraRoots[root] = listDir(root);
   }
   mkdirSync(taskDir(issue), { recursive: true });
-  writeFileSync(planSnapshotPath(issue), JSON.stringify(snapshot, null, 2), 'utf8');
+  writeFileSync(runSnapshotPath(issue, kind), JSON.stringify(snapshot, null, 2), 'utf8');
 }
 
-function readSnapshot(issue: number): PlanSnapshot {
+function readSnapshot(issue: number, kind: RunKind): PlanSnapshot {
   try {
-    return JSON.parse(readFileSync(planSnapshotPath(issue), 'utf8')) as PlanSnapshot;
+    return JSON.parse(readFileSync(runSnapshotPath(issue, kind), 'utf8')) as PlanSnapshot;
   } catch {
     return { takenAt: '', taskDirFiles: [], repoStatus: [], extraRoots: {} };
   }
 }
 
-/** Diff the roots against the snapshot, copy new files in, write the manifest. */
+/**
+ * Diff the roots against the run's snapshot, copy new files in, merge them into
+ * the manifest.
+ *
+ * Merging is keyed on `originalPath`, not on name: re-planning normally
+ * rewrites the same design document, and keying on name would accumulate
+ * design-1.md, design-2.md in the doc rail instead of refreshing one entry.
+ */
 export async function collectArtifacts(
   config: Config,
   issue: number,
+  kind: RunKind = 'plan',
   trigger: 'command' | 'auto' = 'auto',
 ): Promise<ArtifactRef[]> {
-  const snap = readSnapshot(issue);
+  const snap = readSnapshot(issue, kind);
   const dir = taskDir(issue);
   const store = artifactsDir(issue);
   mkdirSync(store, { recursive: true });
@@ -210,26 +249,43 @@ export async function collectArtifacts(
     }
   }
 
-  const refs: ArtifactRef[] = [];
-  const taken: string[] = [];
+  // Seeded with what earlier runs collected, so nothing is ever dropped and a
+  // re-collected file keeps the name the doc rail already shows.
+  const byOriginal = new Map<string, ArtifactRef>(
+    readArtifacts(issue).map((ref) => [ref.originalPath, ref]),
+  );
+  const taken = [...byOriginal.values()].map((ref) => ref.name);
+
   for (const f of found) {
     if (!existsSync(f.abs)) continue; // vanished between snapshot and now
-    const name = uniqueName(taken, f.base);
-    taken.push(name);
+    const prior = byOriginal.get(f.abs);
+    const name = prior ? prior.name : uniqueName(taken, f.base);
+    if (!prior) taken.push(name);
     try {
       copyFileSync(f.abs, join(store, name));
     } catch {
       continue; // locked/failed copy: record the rest
     }
-    refs.push({ name, storedPath: `artifacts/${name}`, origin: f.origin, originalPath: f.abs });
+    byOriginal.set(f.abs, {
+      name,
+      storedPath: `artifacts/${name}`,
+      origin: f.origin,
+      originalPath: f.abs,
+    });
   }
+
+  const refs = [...byOriginal.values()];
 
   writeFileSync(
     artifactsManifestPath(issue),
     JSON.stringify({ collectedAt: new Date().toISOString(), trigger, artifacts: refs }, null, 2),
     'utf8',
   );
-  writeMarker(issue, 'plan.done'); // mkdirs the markers dir as needed
+  // Each run signs off with its own marker. Writing 'plan.done' from a custom
+  // run would satisfy the Plan gate and move the card to Implement.
+  writeMarker(issue, `${kind}.done`); // mkdirs the markers dir as needed
+  // Consume the sentinel: this run is now collected.
+  rmSync(runSnapshotPath(issue, kind), { force: true });
   return refs;
 }
 

@@ -4,6 +4,7 @@ import {
   buildCodeArgs,
   buildWtArgs,
   buildCodeWorkspace,
+  summarisePrompt,
   PROMPT_TOKEN,
 } from '../src/orchestrator/spawn.ts';
 import type { AgentProfile } from '../src/shared/types.ts';
@@ -283,5 +284,21 @@ describe('buildCodeArgs', () => {
 
   test('opens in the current window unless a new one is asked for', () => {
     expect(buildCodeArgs(wsFile)).not.toContain('--new-window');
+  });
+});
+
+describe('summarisePrompt', () => {
+  test('flattens whitespace', () => {
+    expect(summarisePrompt('  research   the\nauth flow  ')).toBe('research the auth flow');
+  });
+
+  test('truncates long prompts with an ellipsis', () => {
+    const summary = summarisePrompt('x'.repeat(400));
+    expect(summary).toHaveLength(100);
+    expect(summary.endsWith('…')).toBe(true);
+  });
+
+  test('leaves a short prompt untouched', () => {
+    expect(summarisePrompt('go')).toBe('go');
   });
 });

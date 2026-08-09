@@ -1,5 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
+import type { ArtifactRef } from '../shared/types.ts';
 import {
   claudeCommandPath,
   claudeCommandsDir,
@@ -48,6 +50,23 @@ export function render(template: string, vars: Record<string, string>): string {
   return out;
 }
 
+/**
+ * The collected manifest as prompt text.
+ *
+ * Points at the stored copy rather than `originalPath` because the stored copy
+ * is the one Mission Control guarantees exists — an original written into the
+ * checkout can be moved, renamed or committed away between runs.
+ */
+export function renderArtifactList(
+  refs: readonly ArtifactRef[],
+  issue: number,
+): string {
+  if (refs.length === 0) return '(none)';
+  return refs
+    .map((ref) => `- ${ref.name} — ${join(taskDir(issue), ref.storedPath)}`)
+    .join('\n');
+}
+
 export interface PromptTask {
   issue: number;
   title: string;
@@ -58,6 +77,14 @@ export interface PromptOptions {
   customInstructions?: string;
   /** Standing rules to prepend, for agents with no system-prompt flag. */
   inlineInstructions?: string;
+  /** Collected artifacts, rendered into {{artifacts}}. */
+  artifacts?: readonly ArtifactRef[];
+  /**
+   * The marker this run signs off with, rendered into {{donePath}}. Each run
+   * must own its own: a custom run pointed at 'plan.done' would satisfy the
+   * Plan gate and move the card to Implement.
+   */
+  doneMarkerName?: string;
 }
 
 export function buildPrompt(
@@ -78,7 +105,8 @@ export function buildPrompt(
     title: task.title,
     branch: task.branch,
     planPath: planPath(task.issue),
-    donePath: markerPath(task.issue, 'plan.done'),
+    donePath: markerPath(task.issue, options.doneMarkerName ?? 'plan.done'),
+    artifacts: renderArtifactList(options.artifacts ?? [], task.issue),
     worktree: worktreePath(task.issue),
     taskDir: taskDir(task.issue),
     customInstructions: options.customInstructions ?? '',
