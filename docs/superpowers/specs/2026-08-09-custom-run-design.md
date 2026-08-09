@@ -38,6 +38,9 @@ produces artifacts the board can read.
   accepted.
 - **No `custom` entry in `config.yaml`.** Nothing about this is configurable
   beyond the command file's text.
+- **`plan.md` is not folded into the manifest.** It keeps its own path, its own
+  `planMdExists` fact, its own `DocId` kind and its own doc-rail row. Unifying it
+  was considered and declined; see §5a.
 
 ## Decisions taken
 
@@ -48,7 +51,8 @@ produces artifacts the board can read.
 | Issue context | Always on a card; a checkbox toggles the MC preamble |
 | Working directory | The task worktree, created if missing, as every phase does |
 | Plan-spawn artifact reset | Removed — artifacts persist across runs |
-| Cleanup affordance | None |
+| Cleanup affordance | None; deletion is by hand on disk only |
+| `plan.md` | Stays a separate concept, not folded into the manifest |
 
 The working-directory choice has one visible consequence, accepted knowingly:
 `reconcile.ts:85` moves a card to **Plan** as soon as a worktree or branch
@@ -195,17 +199,57 @@ Read them before planning. Do not redo work they already cover.
 
 ### 5. Artifacts persist
 
+Stated plainly first, because it is the property everything below serves.
+
+**One store, one index.** Every document any run produces is copied to
+`tasks/<issue>/artifacts/` and listed in `tasks/<issue>/artifacts.json`. There
+is no per-phase or per-kind partition: a plan run and a custom run write to the
+same two places, and the doc rail reads that one list.
+
+Originals stay where the agent wrote them, recorded in `originalPath`. That is
+deliberate rather than a gap — a design doc the agent put in
+`docs/superpowers/specs/` is often one that should be committed to the repo, so
+the collected copy is an index into the work, not a relocation of it.
+`resolveWriteTarget` (`documents.ts:51`) reads the original while it exists and
+the stored copy once it does not.
+
+**Nothing is ever deleted automatically.** After this change no code path
+removes an artifact entry or a stored copy. Two files are still cleared when a
+plan run starts — the `plan.done` marker and the run's snapshot — and neither is
+an artifact; they are phase lifecycle and collection bookkeeping. Re-collecting
+a path overwrites its stored copy in place, and editing in the workbench
+overwrites too, but no entry disappears. Removing one means deleting the file by
+hand under `%USERPROFILE%\.mc\tasks\<issue>\`.
+
+This is a guarantee about *artifacts*, not about all content: re-running Plan
+still overwrites `tasks/<issue>/plan.md`, because the agent is told to write to
+that exact path. The previous plan's text is lost. That is existing plan-phase
+behaviour and this design does not change it.
+
+#### 5a. Why `plan.md` stays outside the manifest
+
+Folding it in was considered. It would collapse `DocId` to a single kind and
+make the doc rail uniform, and it could be done without touching `reconcile.ts`,
+since `planMdExists` would go on reading the same path. It was declined: the
+plan is the one document with a defined role in the pipeline — `reconcile.ts:41`
+derives the Implement phase from it and the Plan gate depends on it — and giving
+it a dedicated surface reflects that rather than hiding it in a list. The cost
+is one special case in `doc-model.ts` and one entry in `RESERVED`, both already
+written and both small.
+
+#### 5b. The mechanics
+
 Today `writePlanSnapshot` (`artifacts.ts:159`) opens a plan run by deleting
 `artifacts.json`, the whole `artifacts/` directory, and `plan.done`. That reset
 is why there is exactly one manifest per task and why it belongs to Plan.
 
 It is removed. Three consequences, each handled:
 
-**a. `plan.done` deletion stays.** It is phase lifecycle, not artifact state.
+**i. `plan.done` deletion stays.** It is phase lifecycle, not artifact state.
 Without it a stale `plan.done` satisfies `shouldCollectPlan` on the very next
 poll, collecting nothing before the agent has done any work.
 
-**b. The "already collected" sentinel moves to the snapshot.** `artifacts.json`
+**ii. The "already collected" sentinel moves to the snapshot.** `artifacts.json`
 cannot mean "collected" once it outlives a run. `<kind>.snapshot.json` takes
 that job: present means a run is pending collection, and it is deleted once
 collection finishes. `shouldCollectPlan` becomes `shouldCollectRun`, drops its
@@ -220,10 +264,10 @@ Both can be pending at once — a custom run launched while a plan run's output
 was still uncollected leaves `plan.snapshot.json` and `custom.snapshot.json`
 side by side, and neither collects until nothing is live. When they do, the
 plan's stale baseline makes it claim the custom run's files too; the
-`originalPath` merge in (c) collapses that to one entry, so the overlap is
+`originalPath` merge in (iii) collapses that to one entry, so the overlap is
 harmless whichever order they run in.
 
-**c. Merge keys on `originalPath`, not on name.** Re-planning normally rewrites
+**iii. Merge keys on `originalPath`, not on name.** Re-planning normally rewrites
 the same design document; keyed by name, `uniqueName` would accumulate
 `design-1.md`, `design-2.md` in the doc rail. Keyed by original path, a
 re-collected file updates its existing entry in place — same `name`, same
