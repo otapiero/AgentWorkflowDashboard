@@ -14,8 +14,9 @@ import { writePromptFile } from './prompt.ts';
 import {
   readArtifacts,
   resolveArtifactStoredPath,
-  writePlanSnapshot,
+  writeRunSnapshot,
 } from './artifacts.ts';
+import { isCustomRun } from '../shared/custom-run.ts';
 import { agentCapabilities } from './agents.ts';
 import { resolveSpawnPlan } from './spawn-plan.ts';
 import { getPhaseDefaults, getSettings, getT3ProjectId, setT3ProjectId } from './state.ts';
@@ -280,6 +281,14 @@ export interface SpawnOptions {
   agent?: string;
   model?: string;
   effort?: string;
+  /** Bypass the command file: this text is the whole prompt body. */
+  rawPrompt?: string;
+}
+
+/** A custom run's prompt, flattened and clipped for the history list. */
+export function summarisePrompt(text: string): string {
+  const flat = text.trim().replace(/\s+/g, ' ');
+  return flat.length > 100 ? `${flat.slice(0, 99)}…` : flat;
 }
 
 function codeWorkspacePath(issue: number): string {
@@ -377,13 +386,19 @@ export async function spawnPhase(
       agent: options.agent,
       model: options.model,
       effort: options.effort,
+      rawPrompt: options.rawPrompt,
+      // What earlier runs produced, so this one can build on it.
+      artifacts: readArtifacts(task.issue),
     },
   );
   writePromptFile(task.issue, promptText);
 
-  // Record the "before" picture so a plan run's artifacts can be attributed to
-  // it later. Only the plan phase produces the artifacts we capture.
-  if (phase.id === 'plan') writePlanSnapshot(config, task.issue);
+  // Snapshot the "before" picture for the runs whose output we capture. A
+  // custom run counts: research and specs are exactly what should reach the
+  // doc rail. Implement and the review fixers are not — their output is code.
+  if (phase.id === 'plan' || isCustomRun(phase)) {
+    writeRunSnapshot(config, task.issue, phase.id);
+  }
 
   const spec: SpawnSpec = {
     issue: task.issue,
@@ -424,12 +439,17 @@ export async function spawnPhase(
     command = launchWt(task, phase, config, specFile);
   }
 
+  const summary = isCustomRun(phase)
+    ? summarisePrompt(options.rawPrompt ?? options.customInstructions ?? '')
+    : '';
+
   return {
     phase: phase.id,
     agent: describeAgent(agent, model, effort),
     startedAt: new Date().toISOString(),
     command,
     ...(threadId ? { threadId } : {}),
+    ...(summary ? { promptSummary: summary } : {}),
   };
 }
 

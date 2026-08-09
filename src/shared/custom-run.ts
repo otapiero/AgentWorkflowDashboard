@@ -62,6 +62,19 @@ export function customPhase(source: RunPhaseSource): PhaseConfig {
   };
 }
 
+/**
+ * Is this the synthetic custom run?
+ *
+ * Takes `{ id: string }` rather than a `PhaseConfig` deliberately. `PhaseConfig.id`
+ * is typed `Phase`, which by construction excludes 'custom', so a direct
+ * `phase.id === CUSTOM_RUN_ID` is a compile error at every call site. Widening
+ * the comparison here keeps that one narrow dishonesty in this file instead of
+ * spreading casts through the callers.
+ */
+export function isCustomRun(phase: { id: string }): boolean {
+  return phase.id === CUSTOM_RUN_ID;
+}
+
 /** A configured pipeline phase by id, or the synthetic custom one. */
 export function resolveRunPhase(
   source: RunPhaseSource,

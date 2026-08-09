@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { CUSTOM_RUN_ID, customPhase, resolveRunPhase } from '../src/shared/custom-run.ts';
+import {
+  CUSTOM_RUN_ID,
+  customPhase,
+  isCustomRun,
+  resolveRunPhase,
+} from '../src/shared/custom-run.ts';
 import type { PhaseConfig } from '../src/shared/types.ts';
 
 const pipeline: PhaseConfig[] = [
@@ -53,5 +58,15 @@ describe('resolveRunPhase', () => {
   it('returns null for an unknown id and for undefined', () => {
     expect(resolveRunPhase(source, 'nope')).toBeNull();
     expect(resolveRunPhase(source, undefined)).toBeNull();
+  });
+});
+
+describe('isCustomRun', () => {
+  it('recognises the synthetic phase', () => {
+    expect(isCustomRun(customPhase(source))).toBe(true);
+  });
+
+  it('rejects every real pipeline phase', () => {
+    expect(pipeline.some(isCustomRun)).toBe(false);
   });
 });
