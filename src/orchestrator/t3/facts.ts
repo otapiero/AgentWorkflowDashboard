@@ -64,9 +64,11 @@ export function toT3Fact(
   if (!snapshot || !threadId) return undefined;
 
   const thread = snapshot.threads.find((t) => t.id === threadId);
-  // Deleted inside T3, or belonging to another environment. Markers still hold
-  // the history; only liveness is lost.
-  if (!thread) return undefined;
+  // Missing from the snapshot, or soft-deleted — T3 keeps a deleted thread in
+  // the snapshot carrying whatever session it last had. Either way there is
+  // nothing to say about it, and `undefined` means "no information", so the
+  // card falls back to marker liveness rather than trusting a stale status.
+  if (!thread || thread.deletedAt) return undefined;
 
   // Only the latest activity matters: an approval that has been answered is
   // followed by further activity, so a historical one must not keep the card
@@ -79,5 +81,22 @@ export function toT3Fact(
     activeTurnId: thread.session?.activeTurnId ?? null,
     awaitingApproval: latest?.tone === 'approval',
     lastError: thread.session?.lastError ?? null,
-  };
+    settled: isSettled(thread),
+    };
+}
+
+/**
+ * Has the operator closed this thread out inside T3?
+ *
+ * Settling and archiving are separate gestures but mean the same thing here:
+ * nobody is working this any more. The session is left untouched by either, so
+ * this is the only signal that distinguishes a finished run from a live one.
+ *
+ * `settledOverride` is checked first because it is exactly that — an override.
+ * Reading `settledAt` alone would call a deliberately reopened thread finished.
+ */
+function isSettled(thread: T3Snapshot['threads'][number]): boolean {
+  if (thread.settledOverride === 'active') return false;
+  if (thread.settledOverride === 'settled') return true;
+  return Boolean(thread.settledAt) || Boolean(thread.archivedAt);
 }

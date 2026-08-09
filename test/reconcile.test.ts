@@ -497,6 +497,7 @@ describe('T3 session liveness', () => {
           activeTurnId: 'turn-1',
           awaitingApproval: false,
           lastError: null,
+          settled: false,
         },
       }),
     );
@@ -507,7 +508,7 @@ describe('T3 session liveness', () => {
     const derived = reconcile(
       facts({
         liveSpawn: null,
-        t3: { threadId: 't', sessionStatus: 'starting', activeTurnId: null, awaitingApproval: false, lastError: null },
+        t3: { threadId: 't', sessionStatus: 'starting', activeTurnId: null, awaitingApproval: false, lastError: null, settled: false },
       }),
     );
     expect(derived.badges.some((b) => b.kind === 'live')).toBe(true);
@@ -517,7 +518,7 @@ describe('T3 session liveness', () => {
     const derived = reconcile(
       facts({
         liveSpawn: null,
-        t3: { threadId: 't', sessionStatus: 'idle', activeTurnId: 'turn-9', awaitingApproval: false, lastError: null },
+        t3: { threadId: 't', sessionStatus: 'idle', activeTurnId: 'turn-9', awaitingApproval: false, lastError: null, settled: false },
       }),
     );
     expect(derived.badges.some((b) => b.kind === 'live')).toBe(true);
@@ -527,7 +528,7 @@ describe('T3 session liveness', () => {
     const derived = reconcile(
       facts({
         liveSpawn: null,
-        t3: { threadId: 't', sessionStatus: 'stopped', activeTurnId: null, awaitingApproval: false, lastError: null },
+        t3: { threadId: 't', sessionStatus: 'stopped', activeTurnId: null, awaitingApproval: false, lastError: null, settled: false },
       }),
     );
     expect(derived.badges.some((b) => b.kind === 'live')).toBe(false);
@@ -550,7 +551,7 @@ describe('T3 session liveness', () => {
     const derived = reconcile(
       facts({
         liveSpawn: null,
-        t3: { threadId: 't', sessionStatus: 'running', activeTurnId: 'turn-1', awaitingApproval: true, lastError: null },
+        t3: { threadId: 't', sessionStatus: 'running', activeTurnId: 'turn-1', awaitingApproval: true, lastError: null, settled: false },
       }),
     );
     expect(derived.needsYou).toBe(true);
@@ -561,7 +562,7 @@ describe('T3 session liveness', () => {
     const derived = reconcile(
       facts({
         liveSpawn: { phase: 'plan', pid: 1234, startedAt: '2026-08-07T09:00:00Z', source: 'marker' },
-        t3: { threadId: 't', sessionStatus: 'running', activeTurnId: 'turn-1', awaitingApproval: true, lastError: null },
+        t3: { threadId: 't', sessionStatus: 'running', activeTurnId: 'turn-1', awaitingApproval: true, lastError: null, settled: false },
       }),
     );
     expect(derived.needsYou).toBe(true);
@@ -571,9 +572,54 @@ describe('T3 session liveness', () => {
     const derived = reconcile(
       facts({
         liveSpawn: null,
-        t3: { threadId: 't', sessionStatus: 'error', activeTurnId: null, awaitingApproval: false, lastError: 'provider exited 1' },
+        t3: { threadId: 't', sessionStatus: 'error', activeTurnId: null, awaitingApproval: false, lastError: 'provider exited 1', settled: false },
       }),
     );
     expect(derived.badges.some((b) => b.kind === 't3-error')).toBe(true);
+  });
+});
+
+describe('T3 threads the operator has settled', () => {
+  const t3 = (over: Partial<NonNullable<Facts['t3']>> = {}): NonNullable<Facts['t3']> => ({
+    threadId: 't',
+    sessionStatus: 'running',
+    activeTurnId: 'turn-1',
+    awaitingApproval: false,
+    lastError: null,
+    settled: false,
+    ...over,
+  });
+
+  test('a settled thread is not live, however its last session read', () => {
+    // Settling in T3 is the operator saying "I am done with this". The thread
+    // keeps status 'running' with an active turn, so without this the card
+    // would show live forever.
+    const derived = reconcile(facts({ liveSpawn: null, t3: t3({ settled: true }) }));
+    expect(derived.badges.some((b) => b.kind === 'live')).toBe(false);
+  });
+
+  test('an unsettled thread with the same session is still live', () => {
+    const derived = reconcile(facts({ liveSpawn: null, t3: t3() }));
+    expect(derived.badges.some((b) => b.kind === 'live')).toBe(true);
+  });
+
+  test('a settled thread does not keep asking for an approval', () => {
+    // The approval was overtaken by the operator closing the thread out.
+    const derived = reconcile(
+      facts({ liveSpawn: null, t3: t3({ settled: true, awaitingApproval: true }) }),
+    );
+    expect(derived.needsYou).toBe(false);
+  });
+
+  test('settling in T3 does not hide a real pwsh spawn still running', () => {
+    // The marker is independent evidence about a different process; a settled
+    // T3 thread says nothing about it.
+    const derived = reconcile(
+      facts({
+        liveSpawn: { phase: 'plan', pid: 1234, startedAt: '2026-08-09T09:00:00Z', source: 'marker' },
+        t3: t3({ settled: true }),
+      }),
+    );
+    expect(derived.badges.some((b) => b.kind === 'live')).toBe(true);
   });
 });

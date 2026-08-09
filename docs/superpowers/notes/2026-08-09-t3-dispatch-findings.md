@@ -82,12 +82,43 @@ the provider in the worktree it was given.
 - `thread.delete` works and is a **soft** delete: the thread stays in the
   snapshot with `deletedAt` set.
 
-## Known gap
+## 4. Four ways a thread stops being worked on
 
-`toT3Fact` matches a thread by id without checking `deletedAt`, so a thread
-deleted inside T3 while its last session said `running` would keep a card
-showing live. `findProjectForWorkspace` already skips deleted projects; threads
-should do the same.
+Fixed after the gap above was found. `OrchestrationThread` carries:
+
+```
+deletedAt:        NullOr(IsoDateTime)
+archivedAt:       NullOr(IsoDateTime)
+settledAt:        NullOr(IsoDateTime)
+settledOverride:  NullOr("settled" | "active")
+```
+
+**A thread keeps its last session state through all of them.** T3 does not
+reset `session.status` when you settle, archive or delete a thread, so reading
+the session alone leaves a card reporting a finished run forever.
+
+- `deletedAt` → `toT3Fact` returns `undefined`. Deletion is soft: the thread
+  stays in the snapshot with its session intact. Observed on the probe thread,
+  which sat there with `session.status: "error"` after deletion and would
+  otherwise have pinned a `t3-error` badge on a card permanently.
+- settled or archived → reported, with `settled: true` on the fact, and
+  `isLive` in the reconciler ignores the session for those. Keeping the raw
+  status on the fact preserves the split the codebase already has: facts
+  observe, `reconcile` interprets.
+- `settledOverride` is checked **before** `settledAt`, because it is an
+  override — `"active"` reopens a thread that still carries a `settledAt`.
+  Reading the timestamp alone would call a deliberately reopened thread
+  finished.
+
+Verified against the real settled thread: `settledAt` set with
+`settledOverride: "settled"` and `session.status: "ready"` yields
+`settled=true`, `live=false`.
+
+Worth noting for expectations: a thread settled *after* it finished already
+reads as not-live from its status alone (`ready` with no active turn). The
+settled check earns its keep on a thread settled while its session still says
+`running`, and on suppressing an approval prompt that the operator has since
+closed out.
 
 ## Version drift
 

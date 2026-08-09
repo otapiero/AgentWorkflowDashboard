@@ -49,7 +49,10 @@ function planReady(facts: Facts): boolean {
  * T3 is down.
  */
 function isLive(facts: Facts): boolean {
-  if (facts.t3) {
+  // A settled or archived thread keeps its last session state, so it would
+  // otherwise read as running forever. Falling through to the marker is right:
+  // closing a thread in T3 says nothing about a pwsh spawn still working.
+  if (facts.t3 && !facts.t3.settled) {
     const { sessionStatus, activeTurnId } = facts.t3;
     return sessionStatus === 'starting' || sessionStatus === 'running' || activeTurnId !== null;
   }
@@ -209,7 +212,7 @@ function computeNeedsYou(
   // A thread blocked on an approval request is precisely what the attention
   // rail exists to surface, so it is checked before the "something is working
   // on it, wait" short-circuit.
-  if (facts.t3?.awaitingApproval) {
+  if (facts.t3?.awaitingApproval && !facts.t3.settled) {
     return { needsYou: true, needsYouReason: 'T3 session is waiting for your approval' };
   }
 

@@ -108,6 +108,12 @@ export interface Facts {
     activeTurnId: string | null;
     awaitingApproval: boolean;
     lastError: string | null;
+    /**
+     * The operator has closed this thread out in T3 — settled or archived.
+     * A thread keeps its last session state afterwards, so this is what stops
+     * a finished run from reading as live forever.
+     */
+    settled: boolean;
   };
   pr: {
     exists: boolean;

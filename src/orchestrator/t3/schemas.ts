@@ -110,6 +110,13 @@ const threadSchema = z.object({
   worktreePath: z.string().nullable().optional(),
   activities: z.array(activitySchema).default([]),
   session: sessionSchema.nullable().default(null),
+  // The four ways a thread stops being something anyone is working on. A
+  // thread keeps its last session state after any of them, so ignoring these
+  // leaves a card showing "running" forever.
+  deletedAt: z.string().nullable().optional(),
+  archivedAt: z.string().nullable().optional(),
+  settledAt: z.string().nullable().optional(),
+  settledOverride: z.enum(['settled', 'active']).nullable().optional(),
 });
 export type T3SnapshotThread = z.infer<typeof threadSchema>;
 

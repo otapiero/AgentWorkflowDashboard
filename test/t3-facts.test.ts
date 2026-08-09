@@ -129,6 +129,56 @@ describe('toT3Fact', () => {
     expect(fact?.awaitingApproval).toBe(false);
   });
 
+  /**
+   * A thread keeps its last session state after the operator closes it out, so
+   * every one of these would otherwise leave a card reading "running" forever.
+   * Field names and semantics read from OrchestrationThread in T3 0.0.32's
+   * bundle on 2026-08-09.
+   */
+  describe('threads the operator has finished with', () => {
+    test('a deleted thread is no information, not a dead session', () => {
+      // Deleted is a soft delete: the thread stays in the snapshot carrying
+      // whatever session it last had. Returning undefined falls back to marker
+      // liveness rather than asserting something about a thread that is gone.
+      expect(toT3Fact(snapshotWith({ deletedAt: '2026-08-09T05:36:48.611Z' }), 'thread-1')).toBeUndefined();
+    });
+
+    test('a settled thread is reported, but marked settled', () => {
+      const fact = toT3Fact(snapshotWith({ settledAt: '2026-08-09T05:45:00.000Z' }), 'thread-1');
+      expect(fact?.settled).toBe(true);
+      // The status itself is still reported verbatim; interpreting it is
+      // reconcile's job, not this function's.
+      expect(fact?.sessionStatus).toBe('running');
+    });
+
+    test('an archived thread counts as settled too', () => {
+      expect(
+        toT3Fact(snapshotWith({ archivedAt: '2026-08-09T05:45:00.000Z' }), 'thread-1')?.settled,
+      ).toBe(true);
+    });
+
+    test('settledOverride settles a thread with no settledAt', () => {
+      expect(
+        toT3Fact(snapshotWith({ settledOverride: 'settled' }), 'thread-1')?.settled,
+      ).toBe(true);
+    });
+
+    test("settledOverride 'active' un-settles a thread that has a settledAt", () => {
+      // The override is exactly that — an override. Reading settledAt alone
+      // would call a deliberately reopened thread finished.
+      expect(
+        toT3Fact(
+          snapshotWith({ settledAt: '2026-08-09T05:45:00.000Z', settledOverride: 'active' }),
+          'thread-1',
+        )?.settled,
+      ).toBe(false);
+    });
+
+    test('an ordinary working thread is not settled', () => {
+      expect(toT3Fact(snapshotWith({}), 'thread-1')?.settled).toBe(false);
+    });
+  });
+
   test('a session error is carried through for the card to show', () => {
     const fact = toT3Fact(
       snapshotWith({
