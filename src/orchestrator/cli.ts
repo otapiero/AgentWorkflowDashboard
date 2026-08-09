@@ -200,7 +200,7 @@ async function main(): Promise<void> {
 
     case 'collect': {
       const task = requireTask(Number(rest[0]));
-      const refs = await collectArtifacts(config, task.issue, 'command');
+      const refs = await collectArtifacts(config, task.issue, 'plan', 'command');
       console.log(`collected ${refs.length} artifact(s) for #${task.issue}`);
       for (const r of refs) console.log(`  ${r.origin.padEnd(7)} ${r.name}`);
       return;
