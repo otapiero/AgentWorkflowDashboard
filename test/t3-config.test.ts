@@ -86,35 +86,34 @@ describe('t3ModesForPhase', () => {
     ).toEqual({ runtimeMode: 'auto', interactionMode: 'default' });
   });
 
-  test('plan defaults to approval-required in plan mode', () => {
+  test('plan defaults to full access in plan mode', () => {
     expect(t3ModesForPhase(phase('plan'))).toEqual({
-      runtimeMode: 'approval-required',
+      runtimeMode: 'full-access',
       interactionMode: 'plan',
     });
   });
 
-  test('implement defaults to auto-accept-edits', () => {
-    expect(t3ModesForPhase(phase('implement')).runtimeMode).toBe('auto-accept-edits');
+  test('implement defaults to full access', () => {
+    expect(t3ModesForPhase(phase('implement')).runtimeMode).toBe('full-access');
   });
 
-  test('publish defaults to approval-required', () => {
-    expect(t3ModesForPhase(phase('publish')).runtimeMode).toBe('approval-required');
+  test('publish defaults to full access', () => {
+    expect(t3ModesForPhase(phase('publish')).runtimeMode).toBe('full-access');
   });
 
   /**
-   * The safety property. T3's own decoding default for runtimeMode is
-   * `full-access` — an omitted field means "no restrictions", not "be
-   * careful". Mission Control must never fall through to it.
+   * Every agent phase should get the operator's requested unrestricted mode,
+   * including a new phase that has no explicit configuration yet.
    */
-  test('an unlisted phase falls back to the most restrictive mode, never full-access', () => {
+  test('an unlisted phase falls back to full access', () => {
     const modes = t3ModesForPhase(phase('some_new_phase'));
-    expect(modes.runtimeMode).toBe('approval-required');
+    expect(modes.runtimeMode).toBe('full-access');
     expect(modes.interactionMode).toBe('default');
   });
 
-  test('no default is ever full-access', () => {
+  test('every phase default uses full access', () => {
     for (const modes of Object.values(DEFAULT_T3_MODES)) {
-      expect(modes.runtimeMode).not.toBe('full-access');
+      expect(modes.runtimeMode).toBe('full-access');
     }
   });
 });

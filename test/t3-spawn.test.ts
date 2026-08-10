@@ -107,7 +107,7 @@ describe('resolveT3Launch', () => {
       model: 'gpt-5.6-sol',
       options: [{ id: 'effort', value: 'high' }],
     });
-    expect(result.modes).toEqual({ runtimeMode: 'approval-required', interactionMode: 'plan' });
+    expect(result.modes).toEqual({ runtimeMode: 'full-access', interactionMode: 'plan' });
   });
 
   // The copilot agent's models list is written for the copilot CLI, but its
@@ -255,7 +255,7 @@ describe('resolveT3Launch', () => {
     expect(result.error).toContain('claude-opus-5');
   });
 
-  test('a phase with no configured modes still never gets full-access', () => {
+  test('a phase with no configured modes gets full-access', () => {
     const result = resolveT3Launch({
       agent: 'codex',
       profile: codex,
@@ -265,6 +265,6 @@ describe('resolveT3Launch', () => {
       readiness: () => ({ instanceId: 'codex', ready: true, reason: null, models: [] }),
     });
     if (!result.ok) throw new Error('expected success');
-    expect(result.modes.runtimeMode).not.toBe('full-access');
+    expect(result.modes.runtimeMode).toBe('full-access');
   });
 });

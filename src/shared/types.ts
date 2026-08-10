@@ -315,22 +315,20 @@ export interface T3PhaseModes {
 /**
  * Per-phase modes used when config.yaml does not set them.
  *
- * Chosen to match each phase's intent, not validated by use — which is exactly
- * why they are configuration. Note that none of them is 'full-access': T3's own
- * decoding default is, so falling through to T3 would silently grant more than
- * any phase here asks for.
+ * Chosen to match the operator's full-access preference. Explicit values keep
+ * all provider adapters aligned rather than relying on a T3 decoding default.
  */
 export const DEFAULT_T3_MODES: Record<string, T3PhaseModes> = {
-  plan: { runtimeMode: 'approval-required', interactionMode: 'plan' },
-  implement: { runtimeMode: 'auto-accept-edits', interactionMode: 'default' },
-  publish: { runtimeMode: 'approval-required', interactionMode: 'default' },
-  copilot_review: { runtimeMode: 'auto-accept-edits', interactionMode: 'default' },
-  dev_review: { runtimeMode: 'auto-accept-edits', interactionMode: 'default' },
+  plan: { runtimeMode: 'full-access', interactionMode: 'plan' },
+  implement: { runtimeMode: 'full-access', interactionMode: 'default' },
+  publish: { runtimeMode: 'full-access', interactionMode: 'default' },
+  copilot_review: { runtimeMode: 'full-access', interactionMode: 'default' },
+  dev_review: { runtimeMode: 'full-access', interactionMode: 'default' },
 };
 
-/** The safe floor for a phase nobody configured. Never 'full-access'. */
+/** Default for a phase nobody configured. */
 const T3_MODE_FLOOR: T3PhaseModes = {
-  runtimeMode: 'approval-required',
+  runtimeMode: 'full-access',
   interactionMode: 'default',
 };
 

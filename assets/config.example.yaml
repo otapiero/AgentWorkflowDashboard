@@ -118,7 +118,7 @@ pipeline:
     # T3-only: how much the agent may do without asking, and whether it
     # starts in T3's native plan mode. Ignored by the wt and vscode launchers.
     t3:
-      runtimeMode: approval-required
+      runtimeMode: full-access
       interactionMode: plan
 
   - id: implement
@@ -129,7 +129,7 @@ pipeline:
     repeatable: true
     gate: { type: manual }
     t3:
-      runtimeMode: auto-accept-edits
+      runtimeMode: full-access
       interactionMode: default
 
   - id: publish
@@ -139,7 +139,7 @@ pipeline:
     spawnable: true
     gate: { type: auto, signal: pr_exists }
     t3:
-      runtimeMode: approval-required
+      runtimeMode: full-access
       interactionMode: default
 
   - id: ci
@@ -155,6 +155,9 @@ pipeline:
     spawnable: true
     repeatable: true
     gate: { type: auto, signal: copilot_comments_resolved }
+    t3:
+      runtimeMode: full-access
+      interactionMode: default
 
   - id: dev_review
     label: Dev review
@@ -163,6 +166,9 @@ pipeline:
     spawnable: true
     repeatable: true
     gate: { type: auto, signal: approved_and_threads_resolved }
+    t3:
+      runtimeMode: full-access
+      interactionMode: default
 
   - id: merge
     label: Merge
