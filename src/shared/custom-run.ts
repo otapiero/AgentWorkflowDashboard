@@ -12,12 +12,11 @@ import type { Phase, PhaseConfig, T3PhaseModes } from './types.ts';
 export const CUSTOM_RUN_ID = 'custom';
 
 /**
- * T3 permissions for a free-form run: the safe floor, never inherited from the
- * plan phase. A prompt written at launch time is exactly where auto-accepting
- * edits should not apply.
+ * T3 permissions for a free-form run. Keep these explicit so custom runs match
+ * the unrestricted runtime policy used by every other run type.
  */
 const CUSTOM_T3_MODES: T3PhaseModes = {
-  runtimeMode: 'approval-required',
+  runtimeMode: 'full-access',
   interactionMode: 'default',
 };
 

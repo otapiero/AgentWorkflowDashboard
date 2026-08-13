@@ -33,9 +33,9 @@ describe('customPhase', () => {
     expect(phase.command).toBe('mc-custom');
   });
 
-  it('pins T3 to the safe floor rather than inheriting the plan phase modes', () => {
+  it('starts T3 with full access like the other run types', () => {
     expect(customPhase(source).t3).toEqual({
-      runtimeMode: 'approval-required',
+      runtimeMode: 'full-access',
       interactionMode: 'default',
     });
   });
