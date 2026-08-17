@@ -1,5 +1,5 @@
 ---
-description: Produce an Acme implementation plan for a GitHub issue.
+description: Produce an implementation plan for a GitHub issue.
 ---
 Read GitHub issue #$ARGUMENTS ("{{title}}") in this repository and produce an
 implementation plan for it. Plan however you normally would.

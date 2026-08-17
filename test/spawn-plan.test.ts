@@ -103,6 +103,20 @@ describe('resolveSpawnPlan', () => {
     expect(plan.promptText).toContain('ouriel/3060-Add-progress-bar');
   });
 
+  test('the prompt is rendered with the configured repository, not a baked-in one', () => {
+    // Stand in for what an installed mc-fix-ci.md looks like.
+    writeFileSync(
+      join(commands, 'mc-implementer.md'),
+      'gh pr checks --repo {{owner}}/{{repo}} --base {{baseBranch}} in {{repoPath}}',
+      'utf8',
+    );
+    const cfg = config();
+    const plan = resolveSpawnPlan(cfg, task(), implementPhase(), {}, {});
+    expect(plan.promptText).toBe(
+      `gh pr checks --repo ${cfg.repo.owner}/${cfg.repo.name} --base ${cfg.repo.baseBranch} in ${cfg.repo.path}`,
+    );
+  });
+
   test('one-off instructions win over the task-level saved ones', () => {
     const plan = resolveSpawnPlan(
       config(),

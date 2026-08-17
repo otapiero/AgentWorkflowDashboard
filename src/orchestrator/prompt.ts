@@ -85,6 +85,12 @@ export interface PromptOptions {
    * Plan gate and move the card to Implement.
    */
   doneMarkerName?: string;
+  /**
+   * The repository this task belongs to, rendered into {{owner}}, {{repo}},
+   * {{baseBranch}} and {{repoPath}}. Optional so the pure prompt tests can
+   * omit it; every real spawn passes it from config.
+   */
+  repo?: { owner: string; name: string; baseBranch: string; path: string };
 }
 
 export function buildPrompt(
@@ -99,7 +105,7 @@ export function buildPrompt(
     );
   }
 
-  const body = render(stripFrontmatter(readFileSync(file, 'utf8')), {
+  const vars: Record<string, string> = {
     ARGUMENTS: String(task.issue),
     issue: String(task.issue),
     title: task.title,
@@ -110,7 +116,18 @@ export function buildPrompt(
     worktree: worktreePath(task.issue),
     taskDir: taskDir(task.issue),
     customInstructions: options.customInstructions ?? '',
-  }).trim();
+  };
+
+  // Added only when known, so an omitted repo leaves {{owner}} visible in the
+  // terminal rather than substituting an empty string into a `gh --repo` flag.
+  if (options.repo) {
+    vars.owner = options.repo.owner;
+    vars.repo = options.repo.name;
+    vars.baseBranch = options.repo.baseBranch;
+    vars.repoPath = options.repo.path;
+  }
+
+  const body = render(stripFrontmatter(readFileSync(file, 'utf8')), vars).trim();
 
   return options.inlineInstructions
     ? `${options.inlineInstructions}\n\n${body}`

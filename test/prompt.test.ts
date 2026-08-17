@@ -171,6 +171,21 @@ describe('buildPrompt', () => {
     writeCommand('mc-x', 'Signal: {{donePath}}');
     expect(buildPrompt('mc-x', task, {})).toContain('plan.done');
   });
+
+  test('renders repository identity into the repo placeholders', () => {
+    writeCommand('mc-x', 'Repo {{owner}}/{{repo}} base {{baseBranch}} at {{repoPath}}.');
+    const text = buildPrompt('mc-x', task, {
+      repo: { owner: 'acme', name: 'widgets', baseBranch: 'main', path: 'C:\\src\\widgets' },
+    });
+    expect(text).toBe('Repo acme/widgets base main at C:\\src\\widgets.');
+  });
+
+  test('leaves the repo placeholders visible when no repo is supplied', () => {
+    // Same reasoning as every other unknown placeholder: a visibly broken
+    // prompt beats a silently blanked one.
+    writeCommand('mc-x', 'Repo {{owner}}/{{repo}}.');
+    expect(buildPrompt('mc-x', task, {})).toBe('Repo {{owner}}/{{repo}}.');
+  });
 });
 
 describe('renderArtifactList', () => {

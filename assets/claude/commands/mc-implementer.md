@@ -1,5 +1,5 @@
 ---
-description: Implement an Acme issue by following its Mission Control plan.
+description: Implement a GitHub issue by following its Mission Control plan.
 ---
 Implement GitHub issue #$ARGUMENTS ("{{title}}") on branch `{{branch}}`.
 

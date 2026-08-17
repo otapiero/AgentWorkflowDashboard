@@ -1,5 +1,5 @@
 ---
-description: Run a free-form instruction against an Acme issue.
+description: Run a free-form instruction against a GitHub issue.
 ---
 You are working on GitHub issue #{{issue}} ("{{title}}") on branch {{branch}}.
 Read the issue with `gh issue view {{issue}}` before you start.

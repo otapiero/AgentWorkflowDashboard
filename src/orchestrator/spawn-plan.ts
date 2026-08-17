@@ -94,6 +94,12 @@ export function resolveSpawnPlan(
     inlineInstructions: inline,
     artifacts: options.artifacts,
     doneMarkerName: `${phase.id}.done`,
+    repo: {
+      owner: config.repo.owner,
+      name: config.repo.name,
+      baseBranch: config.repo.baseBranch,
+      path: config.repo.path,
+    },
   });
 
   return { agent, model, effort, profile, command: phase.command, promptText };
