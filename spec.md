@@ -1,3 +1,7 @@
+> Historical. This is the original design record from when Mission Control
+> was built for a single repository, kept for the reasoning it captures. It
+> names that repository throughout; the shipped tool is repository-agnostic.
+
 # Mission Control — Specification
 
 **A personal, local task cockpit for driving AI coding agents through the Acme development pipeline.**

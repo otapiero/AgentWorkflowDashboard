@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    # Mission Control is a Windows application: the phase scripts are
+    # PowerShell and the default launcher is Windows Terminal. Testing on
+    # anything else would verify a configuration nobody runs.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - run: npm run build
+
+  extension:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - run: npm run extension:install-deps
+
+      - run: npm --prefix vscode-extension run typecheck
+
+      - run: npm --prefix vscode-extension run test:unit
+
+      - run: npm --prefix vscode-extension run build
+
+      # Deliberately not `extension:verify`. That also runs test:performance,
+      # whose wall-clock budgets swing with machine load - the same SSE
+      # dispatch check measured 7 ms, 95 ms and 111 ms against a 100 ms limit
+      # on one developer machine within a few minutes. A shared runner would
+      # fail it at random. Run `npm run extension:verify` locally instead.
+      #
+      # The VS Code integration test is also left out: it downloads a full
+      # editor. Run `npm run extension:test-host` by hand.
