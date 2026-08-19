@@ -2,6 +2,30 @@
   "name": "mission-control",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "author": "Ouriel Tapiero",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/otapiero/AgentWorkflowDashboard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/otapiero/AgentWorkflowDashboard/issues"
+  },
+  "homepage": "https://github.com/otapiero/AgentWorkflowDashboard#readme",
+  "keywords": [
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "github",
+    "worktree",
+    "orchestration"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "os": [
+    "win32"
+  ],
   "type": "module",
   "description": "A local cockpit for driving AI coding agents through a GitHub issue-to-merge pipeline",
   "scripts": {

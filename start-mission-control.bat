@@ -1,6 +1,6 @@
 @echo off
 title Mission Control
-cd /d "c:\Users\ouriel\source\repos\otapiero\AgentWorkflowDashboard"
+cd /d "%~dp0"
 
 REM Open the browser after a short delay so the server has time to boot
 start "" /min cmd /c "timeout /t 3 >nul & start "" http://127.0.0.1:4317"
