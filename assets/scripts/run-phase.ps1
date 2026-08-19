@@ -27,6 +27,11 @@ $spec = Get-Content -Raw $SpecFile | ConvertFrom-Json
 $issue = [int]$spec.issue
 $phase = [string]$spec.phase
 
+$mcHome = [string]$spec.mcHome
+if (-not $mcHome) {
+    throw "Spawn spec has no mcHome. It was written by an older Mission Control; relaunch the phase from the board."
+}
+
 Write-Host ""
 Write-Host "  Mission Control - issue #$issue - $phase" -ForegroundColor Green
 Write-Host "  branch: $($spec.branch)" -ForegroundColor DarkGray
@@ -63,7 +68,7 @@ if ($GuardFile) {
 Ensure-Worktree -Issue $issue -Worktree $spec.worktree -Branch $spec.branch `
     -RepoPath $spec.repoPath -BaseBranch $spec.baseBranch
 
-Write-RunningMarker -Issue $issue -Phase $phase
+Write-RunningMarker -McHome $mcHome -Issue $issue -Phase $phase
 
 # The agent needs to know which task it is on if it ever asks.
 $env:MC_ISSUE = $issue
@@ -92,11 +97,11 @@ try {
 finally {
     # Always clear the running marker, even on Ctrl-C or a thrown error, so a
     # finished session never leaves the card showing "live" forever.
-    Clear-Marker -Issue $issue -Name "$phase.running"
+    Clear-Marker -McHome $mcHome -Issue $issue -Name "$phase.running"
 
     Write-Host ""
     Write-Host "[mc] $phase session ended for #$issue." -ForegroundColor Green
-    if (Test-Path (Join-Path (Get-TaskDir $issue) 'plan.md')) {
+    if (Test-Path (Join-Path (Get-TaskDir -McHome $mcHome -Issue $issue) 'plan.md')) {
         Write-Host "[mc] plan.md is attached; Mission Control will pick it up on refresh." -ForegroundColor DarkGray
     }
     Write-Host "[mc] This tab stays open so you can read the output. Close it when done." -ForegroundColor DarkGray

@@ -1,4 +1,7 @@
-import { describe, expect, test, vi, beforeEach } from 'vitest';
+import { afterEach, describe, expect, test, vi, beforeEach } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const gatherGitFacts = vi.fn();
 
@@ -38,8 +41,19 @@ function batch(over: Partial<BatchedBranchPrs> = {}): BatchedBranchPrs {
   };
 }
 
+let home: string;
+
 beforeEach(() => {
+  // gatherFacts composes marker and worktree paths, so this needs a project
+  // home like every other suite that touches paths.ts.
+  home = mkdtempSync(join(tmpdir(), 'mc-facts-'));
+  process.env.MC_HOME = home;
   gatherGitFacts.mockReset();
+});
+
+afterEach(() => {
+  delete process.env.MC_HOME;
+  rmSync(home, { recursive: true, force: true });
 });
 
 describe('gatherFacts — merged freeze', () => {

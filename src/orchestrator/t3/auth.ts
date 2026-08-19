@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { mcHome } from '../paths.ts';
+import { mcRoot } from '../paths.ts';
 import { T3_TIMEOUT_MS } from './paths.ts';
 import { t3Url } from './discovery.ts';
 import { accessTokenSchema, safeParseT3 } from './schemas.ts';
@@ -47,13 +47,20 @@ const REQUESTED_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:access_token';
 /** Re-exchange this far before expiry, so a token never dies mid-request. */
 const REFRESH_MARGIN_MS = 60_000;
 
+/**
+ * The pairing URL, saved by hand at the install root.
+ *
+ * Root rather than project: a pairing link is single-use and expires within
+ * about three minutes, so making every project mint its own would be unusable.
+ * One pairing serves the machine.
+ */
 export function t3CredentialPath(): string {
-  return join(mcHome(), 't3-credential');
+  return join(mcRoot(), 't3-credential');
 }
 
 /** The exchanged access token, kept so a spent pairing token is never needed twice. */
 export function t3TokenCachePath(): string {
-  return join(mcHome(), 't3-token.json');
+  return join(mcRoot(), 't3-token.json');
 }
 
 interface CachedToken {
@@ -76,7 +83,7 @@ function readCachedToken(): CachedToken | null {
 
 function writeCachedToken(token: CachedToken, scope: string | undefined): void {
   try {
-    mkdirSync(mcHome(), { recursive: true });
+    mkdirSync(mcRoot(), { recursive: true });
     writeFileSync(
       t3TokenCachePath(),
       JSON.stringify({ ...token, scope, savedAt: new Date().toISOString() }, null, 2),

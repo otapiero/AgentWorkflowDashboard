@@ -84,12 +84,14 @@ beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'mc-'));
   t3home = mkdtempSync(join(tmpdir(), 't3-'));
   process.env.MC_HOME = home;
+  process.env.MC_ROOT = home;
   process.env.T3_HOME = t3home;
   writeRuntime();
 });
 
 afterEach(() => {
   delete process.env.MC_HOME;
+  delete process.env.MC_ROOT;
   delete process.env.T3_HOME;
   rmSync(home, { recursive: true, force: true });
   rmSync(t3home, { recursive: true, force: true });

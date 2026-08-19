@@ -2,39 +2,46 @@
 #
 # Everything here is deterministic bookkeeping. It runs inside the spawned
 # terminal tab, which is what makes it independent of the app being alive.
-
-function Get-McHome {
-    if ($env:MC_HOME) { return $env:MC_HOME }
-    return (Join-Path $env:USERPROFILE '.mc')
-}
+#
+# The project home is passed in rather than computed here. The app owns the
+# rules for which project is active; a second implementation of that lookup in
+# PowerShell would eventually disagree with the first.
 
 function Get-TaskDir {
-    param([Parameter(Mandatory)][int]$Issue)
-    return (Join-Path (Join-Path (Get-McHome) 'tasks') $Issue)
+    param(
+        [Parameter(Mandatory)][string]$McHome,
+        [Parameter(Mandatory)][int]$Issue
+    )
+    return (Join-Path (Join-Path $McHome 'tasks') $Issue)
 }
 
 function Get-MarkersDir {
-    param([Parameter(Mandatory)][int]$Issue)
-    return (Join-Path (Get-TaskDir $Issue) 'markers')
+    param(
+        [Parameter(Mandatory)][string]$McHome,
+        [Parameter(Mandatory)][int]$Issue
+    )
+    return (Join-Path (Get-TaskDir -McHome $McHome -Issue $Issue) 'markers')
 }
 
 function Write-Marker {
     param(
+        [Parameter(Mandatory)][string]$McHome,
         [Parameter(Mandatory)][int]$Issue,
         [Parameter(Mandatory)][string]$Name,
         [string]$Body = ''
     )
-    $dir = Get-MarkersDir $Issue
+    $dir = Get-MarkersDir -McHome $McHome -Issue $Issue
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     Set-Content -Path (Join-Path $dir $Name) -Value $Body -NoNewline -Encoding utf8
 }
 
 function Clear-Marker {
     param(
+        [Parameter(Mandatory)][string]$McHome,
         [Parameter(Mandatory)][int]$Issue,
         [Parameter(Mandatory)][string]$Name
     )
-    $path = Join-Path (Get-MarkersDir $Issue) $Name
+    $path = Join-Path (Get-MarkersDir -McHome $McHome -Issue $Issue) $Name
     if (Test-Path $path) { Remove-Item $path -Force -ErrorAction SilentlyContinue }
 }
 
@@ -43,6 +50,7 @@ function Clear-Marker {
 # a terminal that was closed or crashed.
 function Write-RunningMarker {
     param(
+        [Parameter(Mandatory)][string]$McHome,
         [Parameter(Mandatory)][int]$Issue,
         [Parameter(Mandatory)][string]$Phase
     )
@@ -51,7 +59,7 @@ function Write-RunningMarker {
         pid       = $PID
         startedAt = (Get-Date).ToUniversalTime().ToString('o')
     } | ConvertTo-Json -Compress
-    Write-Marker -Issue $Issue -Name "$Phase.running" -Body $payload
+    Write-Marker -McHome $McHome -Issue $Issue -Name "$Phase.running" -Body $payload
 }
 
 # Creates the task's isolated checkout if it is not already there.

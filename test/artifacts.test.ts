@@ -74,6 +74,18 @@ describe('shouldCollectRun', () => {
 });
 
 describe('resolveArtifactStoredPath', () => {
+  let storeHome: string;
+
+  beforeEach(() => {
+    storeHome = mkdtempSync(join(tmpdir(), 'mc-store-'));
+    process.env.MC_HOME = storeHome;
+  });
+
+  afterEach(() => {
+    delete process.env.MC_HOME;
+    rmSync(storeHome, { recursive: true, force: true });
+  });
+
   const refs = [
     { name: 'design.md', storedPath: 'artifacts/design.md', origin: 'repo' as const, originalPath: 'x' },
   ];

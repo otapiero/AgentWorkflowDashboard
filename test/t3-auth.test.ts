@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { existsSync, readFileSync } from 'node:fs';
 
-import { mcHome } from '../src/orchestrator/paths.ts';
+import { mcHome, mcRoot } from '../src/orchestrator/paths.ts';
 import {
   T3TokenStore,
   T3_SCOPES,
@@ -20,10 +20,12 @@ let home: string;
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'mc-t3-'));
   process.env.MC_HOME = home;
+  process.env.MC_ROOT = home;
 });
 
 afterEach(() => {
   delete process.env.MC_HOME;
+  delete process.env.MC_ROOT;
   rmSync(home, { recursive: true, force: true });
 });
 
@@ -55,6 +57,13 @@ const goodToken = {
 describe('pairing credential on disk', () => {
   test('the credential lives under MC_HOME, never in the project repo', () => {
     expect(t3CredentialPath().startsWith(mcHome())).toBe(true);
+  });
+
+  test('the credential lives at the install root, so projects share one pairing', () => {
+    // A T3 pairing link is single-use and expires in about three minutes.
+    // Re-pairing per project would be unusable, so this is deliberate.
+    expect(t3CredentialPath()).toBe(join(mcRoot(), 't3-credential'));
+    expect(t3TokenCachePath()).toBe(join(mcRoot(), 't3-token.json'));
   });
 
   test('a written credential is read back with surrounding whitespace stripped', () => {

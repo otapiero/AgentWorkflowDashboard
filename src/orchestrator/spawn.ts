@@ -5,6 +5,7 @@ import { execa } from 'execa';
 
 import {
   markerPath,
+  mcHome,
   promptPath,
   runPhaseScript,
   taskDir,
@@ -259,6 +260,13 @@ export interface SpawnSpec {
   worktree: string;
   baseBranch: string;
   repoPath: string;
+  /**
+   * The project home the phase script writes markers into. Passed rather than
+   * recomputed: the script is a separate process with no notion of an active
+   * project, and a second implementation of that lookup would eventually
+   * disagree with this one.
+   */
+  mcHome: string;
   promptFile: string;
   exe: string;
   args: string[];
@@ -407,6 +415,7 @@ export async function spawnPhase(
     worktree: worktreePath(task.issue),
     baseBranch: config.repo.baseBranch,
     repoPath: config.repo.path,
+    mcHome: mcHome(),
     promptFile: promptPath(task.issue),
     exe: profile.launch,
     args: buildAgentArgs(agent, profile, {

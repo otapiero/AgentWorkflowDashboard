@@ -1,18 +1,109 @@
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 /**
  * Absolute paths for everything Mission Control owns at runtime.
  *
- * All of it lives under a personal home folder, never inside the Acme
- * checkout — that separation is the zero-footprint guarantee, so it is
- * expressed here once rather than reconstructed at each call site.
+ * Two levels, and the split is the whole design:
  *
- * MC_HOME overrides the location, which is what lets tests run against a
- * temp directory instead of the real home folder.
+ *   mcRoot()   the install. Shared phase scripts and the T3 pairing
+ *              credential — things that belong to this machine, not to any
+ *              one repository.
+ *   mcHome()   one project. config.yaml, state.json, tasks/, worktrees/ —
+ *              everything that is about a single repository.
+ *
+ * None of it is ever inside a project checkout; that separation is the
+ * zero-footprint guarantee, so it is expressed here once rather than
+ * reconstructed at each call site.
+ *
+ * Three env overrides, each with a distinct job:
+ *   MC_ROOT     relocates the install (tests, and anyone with an unusual home).
+ *   MC_PROJECT  selects the active project for one process.
+ *   MC_HOME     replaces the project home outright, bypassing the project
+ *               lookup entirely. This is what lets a test point at a temp
+ *               directory without inventing a project first.
  */
+export function mcRoot(): string {
+  return process.env.MC_ROOT ?? join(homedir(), '.mission-control');
+}
+
+export function projectsDir(): string {
+  return join(mcRoot(), 'projects');
+}
+
+/**
+ * Directory-safe identity for one repository.
+ *
+ * Owner is included because repository names are only unique within an owner —
+ * two `app` repos under different orgs must not share a state file. The double
+ * underscore is a separator no GitHub name can contain, so the slug can be read
+ * back apart unambiguously.
+ */
+export function projectSlug(owner: string, name: string): string {
+  const clean = (value: string): string =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, '-')
+      .replace(/^[-.]+|[-.]+$/g, '');
+  return `${clean(owner)}__${clean(name)}`;
+}
+
+export function projectHome(slug: string): string {
+  return join(projectsDir(), slug);
+}
+
+/** Records which project the next process should drive. */
+export function activeProjectPath(): string {
+  return join(mcRoot(), 'active');
+}
+
+export function listProjects(): string[] {
+  const dir = projectsDir();
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}
+
+export function setActiveProject(slug: string): void {
+  mkdirSync(mcRoot(), { recursive: true });
+  writeFileSync(activeProjectPath(), slug, 'utf8');
+}
+
+/**
+ * Which project this process drives.
+ *
+ * Both failure modes throw with the command that fixes them, because this is
+ * reached at startup and a bare "ENOENT config.yaml" tells a new user nothing.
+ */
+export function activeProjectSlug(): string {
+  const fromEnv = process.env.MC_PROJECT?.trim();
+  if (fromEnv) return fromEnv;
+
+  const recorded = existsSync(activeProjectPath())
+    ? readFileSync(activeProjectPath(), 'utf8').trim()
+    : '';
+  if (recorded) return recorded;
+
+  const projects = listProjects();
+  if (projects.length === 1) return projects[0]!;
+  if (projects.length === 0) {
+    throw new Error(
+      `No project is set up yet. Run 'npm run mc -- init' from inside the repository you want to drive` +
+        (existsSync(join(homedir(), '.mc'))
+          ? `, or 'npm run mc -- migrate' to bring your existing ~/.mc install across.`
+          : `.`),
+    );
+  }
+  throw new Error(
+    `Several projects exist (${projects.join(', ')}) and none is active. Run 'npm run mc -- project use <slug>'.`,
+  );
+}
+
 export function mcHome(): string {
-  return process.env.MC_HOME ?? join(homedir(), '.mc');
+  return process.env.MC_HOME ?? projectHome(activeProjectSlug());
 }
 
 export function configPath(): string {
@@ -23,8 +114,12 @@ export function statePath(): string {
   return join(mcHome(), 'state.json');
 }
 
+/**
+ * Phase scripts belong to the install, not to a project: they are identical for
+ * every repository and are refreshed wholesale by the installer.
+ */
 export function scriptsDir(): string {
-  return join(mcHome(), 'scripts');
+  return join(mcRoot(), 'scripts');
 }
 
 export function runPhaseScript(): string {

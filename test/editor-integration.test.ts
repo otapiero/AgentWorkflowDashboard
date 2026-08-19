@@ -1,7 +1,24 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { toEditorIntegration } from '../src/orchestrator/editor-integration.ts';
 import type { Facts } from '../src/shared/types.ts';
+
+let home: string;
+
+beforeEach(() => {
+  // toEditorIntegration supplies the canonical worktree path, which is
+  // composed from the project home.
+  home = mkdtempSync(join(tmpdir(), 'mc-editor-'));
+  process.env.MC_HOME = home;
+});
+
+afterEach(() => {
+  delete process.env.MC_HOME;
+  rmSync(home, { recursive: true, force: true });
+});
 
 function facts(overrides: Partial<Facts> = {}): Facts {
   return {
