@@ -1,23 +1,26 @@
 # Mission Control configuration.
 #
-# Copied to %USERPROFILE%\.mc\config.yaml by scripts/install.ps1.
-# Everything workflow-shaped lives here so it can change without code edits.
+# Written by `npm run mc -- init`, which fills the repo block in from `git` and
+# `gh`. Everything workflow-shaped lives here so it can change without code
+# edits. Edit it by hand whenever you like; it is never overwritten.
 
 repo:
-  # Absolute path to the local clone. Note the folder name differs from the
-  # GitHub repo name on this machine.
-  path: 'C:\src\widgets'
-  owner: 'acme'
-  name: 'widgets'
-  baseBranch: 'dev'
-  # Branch prefix is a personal convention and is NOT the GitHub login
-  # (gh is authenticated as otapiero).
-  branchPrefix: 'ouriel'
+  # Absolute path to the local clone. It does not have to be named after the
+  # GitHub repository.
+  path: '{{repoPath}}'
+  owner: '{{owner}}'
+  name: '{{repoName}}'
+  baseBranch: '{{baseBranch}}'
+  # Prefix for the branches Mission Control creates: <prefix>/<issue>-<slug>.
+  # `mc init` seeds this from your GitHub login; change it to whatever
+  # convention your team uses.
+  branchPrefix: '{{branchPrefix}}'
 
 github:
   auth: gh-cli
   pollIntervalSeconds: 30
-  # Verified against real review threads on this repo.
+  # The login that posts automated review comments. Used by the copilot_review
+  # gate to tell bot threads from human ones.
   copilotReviewerLogin: 'copilot-pull-request-reviewer'
 
 # How a spawn opens its terminal:
@@ -38,7 +41,7 @@ launcher: wt
 # The access token that link buys lasts 30 days and is cached in
 # %USERPROFILE%\.mc\t3-token.json, so this is a one-time step.
 t3:
-  projectTitle: 'Acme'
+  projectTitle: '{{repoName}}'
   # The T3 version this integration was verified against. `mc doctor` warns
   # when the running server differs; it never blocks.
   pinnedVersion: '0.0.31'

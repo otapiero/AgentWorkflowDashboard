@@ -22,6 +22,7 @@ import { spawnPhase } from './spawn.ts';
 import { collectArtifacts } from './artifacts.ts';
 import { listBranches, resolveBranch } from './worktree.ts';
 import { mcHome } from './paths.ts';
+import { detectRepo, initProject } from './init.ts';
 import { T3Client } from './t3/client.ts';
 import { readInstanceReadiness } from './t3/instances.ts';
 import { formatT3Doctor } from './t3/doctor.ts';
@@ -115,7 +116,22 @@ function printDerived(task: TaskRecord, derived: ReturnType<typeof reconcile>): 
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   if (!command || command === 'help') {
-    console.log('commands: doctor | issues | import <issue> | forget <issue> | facts <issue> | reconcile <issue> | list | spawn <issue> <phase> | collect <issue>');
+    console.log('commands: init | doctor | issues | import <issue> | forget <issue> | facts <issue> | reconcile <issue> | list | spawn <issue> <phase> | collect <issue>');
+    return;
+  }
+
+  // Commands that run *before* a config exists must be handled here — the
+  // loadConfig() below is exactly what they are there to make possible.
+  if (command === 'init') {
+    const repo = await detectRepo(process.cwd());
+    const { slug, configPath } = initProject(repo, { force: rest.includes('--force') });
+    console.log(`project  ${slug}  (now active)`);
+    console.log(`repo     ${repo.owner}/${repo.name}  (base ${repo.baseBranch})`);
+    console.log(`path     ${repo.path}`);
+    console.log(`branches ${repo.branchPrefix}/<issue>-<slug>`);
+    console.log(`config   ${configPath}`);
+    console.log('');
+    console.log('Review the config, then run: npm start');
     return;
   }
 
