@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -150,5 +151,56 @@ describe('migrateLegacyHome', () => {
     const asideNames = readdirSync(mcRoot()).filter((n) => n.includes('.replaced-'));
     expect(asideNames).toHaveLength(1);
     expect(readFileSync(join(mcRoot(), asideNames[0]!), 'utf8')).toContain('stale');
+  });
+
+  test('the legacy directory is only removed when it is genuinely empty', () => {
+    const result = migrateLegacyHome({ repairWorktrees: noop });
+    expect(result.skippedWorktrees).toEqual([]);
+    expect(result.legacyRemains).toBe(false);
+    expect(existsSync(result.from)).toBe(false);
+  });
+
+  test('a worktree that cannot be moved is reported, and the rest still land', () => {
+    // On Windows a rename fails if anything holds a handle inside the tree,
+    // and a worktree is exactly what an editor or dev server keeps open. One
+    // watcher must not block the whole migration.
+    mkdirSync(join(legacy, 'worktrees', 'issue-9999'), { recursive: true });
+    writeFileSync(join(legacy, 'worktrees', 'issue-9999', 'file.txt'), 'x', 'utf8');
+
+    const result = migrateLegacyHome({
+      repairWorktrees: noop,
+      renameEntry: (from, to) => {
+        if (from.endsWith('issue-9999')) {
+          throw Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' });
+        }
+        renameSync(from, to);
+      },
+    });
+
+    expect(result.skippedWorktrees).toEqual(['issue-9999']);
+    expect(result.legacyRemains).toBe(true);
+    // The rest of the install still arrived.
+    expect(existsSync(join(result.to, 'config.yaml'))).toBe(true);
+    expect(existsSync(join(result.to, 'tasks', '3060', 'plan.md'))).toBe(true);
+    expect(existsSync(join(result.to, 'worktrees', 'issue-3060'))).toBe(true);
+    // And the stuck one is still where it was, not lost.
+    expect(existsSync(join(legacy, 'worktrees', 'issue-9999', 'file.txt'))).toBe(true);
+  });
+
+  test('only the worktrees that actually moved are handed to git repair', () => {
+    mkdirSync(join(legacy, 'worktrees', 'issue-9999'), { recursive: true });
+
+    const calls: string[][] = [];
+    migrateLegacyHome({
+      repairWorktrees: (_repo, worktrees) => calls.push(worktrees),
+      renameEntry: (from, to) => {
+        if (from.endsWith('issue-9999')) throw new Error('EPERM');
+        renameSync(from, to);
+      },
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.some((w) => w.endsWith('issue-9999'))).toBe(false);
+    expect(calls[0]!.some((w) => w.endsWith('issue-3060'))).toBe(true);
   });
 });

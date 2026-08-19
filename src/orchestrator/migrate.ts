@@ -1,5 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmdirSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -15,6 +22,13 @@ import { mcRoot, projectHome, projectSlug, setActiveProject } from './paths.ts';
  * doing that silently behind a server boot is how a half-moved install
  * happens. MC_LEGACY_HOME overrides the source, which is what lets this be
  * tested without a real ~/.mc.
+ *
+ * The move is done entry by entry rather than as one directory rename. On
+ * Windows a rename fails if *anything* holds a handle anywhere inside the
+ * tree, and a worktree is exactly the kind of directory an editor, a language
+ * server or a dev server keeps open — one watcher on one worktree would
+ * otherwise block the entire migration with nothing moved and no way to
+ * proceed. Per-entry moves let the rest land and name what did not.
  */
 
 /** Files and directories that belong to the machine, not to one repository. */
@@ -29,6 +43,10 @@ export interface MigrationResult {
   displaced: string[];
   /** Worktrees whose git registration was re-pointed at the new location. */
   repairedWorktrees: string[];
+  /** Worktrees left behind because something held them open. */
+  skippedWorktrees: string[];
+  /** True when the legacy directory still holds something. */
+  legacyRemains: boolean;
 }
 
 export function legacyHomePath(): string {
@@ -55,10 +73,16 @@ function repairWorktreesWithGit(repoPath: string, worktrees: string[]): void {
 export interface MigrateOptions {
   /** Injected so the move can be tested without a real git repository. */
   repairWorktrees?: (repoPath: string, worktrees: string[]) => void;
+  /**
+   * Injected so a held-open worktree can be simulated. Real locks are a
+   * Windows filesystem behaviour and cannot be produced portably in a test.
+   */
+  renameEntry?: (from: string, to: string) => void;
 }
 
 export function migrateLegacyHome(options: MigrateOptions = {}): MigrationResult {
   const repair = options.repairWorktrees ?? repairWorktreesWithGit;
+  const move = options.renameEntry ?? renameSync;
   const from = legacyHomePath();
   const legacyConfig = join(from, 'config.yaml');
 
@@ -76,8 +100,32 @@ export function migrateLegacyHome(options: MigrateOptions = {}): MigrationResult
     );
   }
 
-  mkdirSync(join(mcRoot(), 'projects'), { recursive: true });
-  renameSync(from, to);
+  mkdirSync(to, { recursive: true });
+
+  // Everything except the worktrees, which are handled one at a time below.
+  for (const entry of readdirSync(from)) {
+    if (entry === 'worktrees') continue;
+    move(join(from, entry), join(to, entry));
+  }
+
+  const legacyWorktrees = join(from, 'worktrees');
+  const movedWorktrees: string[] = [];
+  const skippedWorktrees: string[] = [];
+
+  if (existsSync(legacyWorktrees)) {
+    mkdirSync(join(to, 'worktrees'), { recursive: true });
+    for (const name of readdirSync(legacyWorktrees)) {
+      const target = join(to, 'worktrees', name);
+      try {
+        move(join(legacyWorktrees, name), target);
+        movedWorktrees.push(target);
+      } catch {
+        // Held open by an editor, language server or dev server. A worktree is
+        // reconstructible from its branch, so this is never fatal.
+        skippedWorktrees.push(name);
+      }
+    }
+  }
 
   // Lift the machine-wide files out of what is now a project directory. The
   // T3 pairing especially: it is single-use and short-lived, so a second
@@ -102,16 +150,30 @@ export function migrateLegacyHome(options: MigrateOptions = {}): MigrationResult
     sharedFiles.push(entry);
   }
 
-  // Worktrees moved with the project directory, so their git registration now
-  // points at a path that no longer exists.
-  const worktreesDir = join(to, 'worktrees');
-  const repairedWorktrees = existsSync(worktreesDir)
-    ? readdirSync(worktreesDir, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => join(worktreesDir, entry.name))
-    : [];
-  repair(config.repo.path, repairedWorktrees);
+  repair(config.repo.path, movedWorktrees);
+
+  // Tidy the source away when it is genuinely empty. Anything left is a
+  // worktree that could not be moved, and that is reported rather than forced.
+  let legacyRemains = true;
+  if (skippedWorktrees.length === 0) {
+    try {
+      if (existsSync(legacyWorktrees)) rmdirSync(legacyWorktrees);
+      rmdirSync(from);
+      legacyRemains = false;
+    } catch {
+      legacyRemains = true;
+    }
+  }
 
   setActiveProject(slug);
-  return { slug, from, to, sharedFiles, displaced, repairedWorktrees };
+  return {
+    slug,
+    from,
+    to,
+    sharedFiles,
+    displaced,
+    repairedWorktrees: movedWorktrees,
+    skippedWorktrees,
+    legacyRemains,
+  };
 }

@@ -11,6 +11,8 @@
  *   npm run mc -- list
  *   npm run mc -- spawn 3060 plan
  */
+import { join } from 'node:path';
+
 import { execa } from 'execa';
 
 import { loadConfig } from './config.ts';
@@ -157,6 +159,14 @@ async function main(): Promise<void> {
     }
     if (result.repairedWorktrees.length) {
       console.log(`git      repaired ${result.repairedWorktrees.length} worktree registration(s)`);
+    }
+    if (result.skippedWorktrees.length) {
+      console.log('');
+      console.log(`Left behind in ${result.from} (something is holding them open):`);
+      for (const name of result.skippedWorktrees) console.log(`  ${name}`);
+      console.log('Close whatever has them open, then move them into');
+      console.log(`  ${join(result.to, 'worktrees')}`);
+      console.log("and run: git -C <repo> worktree repair <path>");
     }
     return;
   }
