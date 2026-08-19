@@ -21,7 +21,14 @@ import { fetchBranchPrs, fetchIssueTitle, listOpenIssues } from './github.ts';
 import { spawnPhase } from './spawn.ts';
 import { collectArtifacts } from './artifacts.ts';
 import { listBranches, resolveBranch } from './worktree.ts';
-import { mcHome, mcRoot } from './paths.ts';
+import {
+  activeProjectSlug,
+  listProjects,
+  mcHome,
+  mcRoot,
+  projectHome,
+  setActiveProject,
+} from './paths.ts';
 import { detectRepo, initProject } from './init.ts';
 import { migrateLegacyHome } from './migrate.ts';
 import { T3Client } from './t3/client.ts';
@@ -41,6 +48,8 @@ function requireTask(issue: number): TaskRecord {
 }
 
 async function doctor(config: Config): Promise<void> {
+  console.log(`root        ${mcRoot()}`);
+  console.log(`project     ${activeProjectSlug()}`);
   console.log(`home        ${mcHome()}`);
   console.log(`repo        ${config.repo.path}`);
   console.log(`github      ${config.repo.owner}/${config.repo.name} (base ${config.repo.baseBranch})`);
@@ -117,7 +126,7 @@ function printDerived(task: TaskRecord, derived: ReturnType<typeof reconcile>): 
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   if (!command || command === 'help') {
-    console.log('commands: init | migrate | doctor | issues | import <issue> | forget <issue> | facts <issue> | reconcile <issue> | list | spawn <issue> <phase> | collect <issue>');
+    console.log('commands: init | migrate | project [list|use <slug>] | doctor | issues | import <issue> | forget <issue> | facts <issue> | reconcile <issue> | list | spawn <issue> <phase> | collect <issue>');
     return;
   }
 
@@ -144,6 +153,43 @@ async function main(): Promise<void> {
       console.log(`shared   ${result.sharedFiles.join(', ')} moved to ${mcRoot()}`);
     }
     return;
+  }
+
+  if (command === 'project') {
+    const [action, slug] = rest;
+
+    if (!action || action === 'list') {
+      const projects = listProjects();
+      if (projects.length === 0) {
+        console.log('no projects yet (run: npm run mc -- init)');
+        return;
+      }
+      // Resolution can legitimately fail here (several projects, no choice),
+      // and listing them is exactly how you recover from that.
+      let active = '';
+      try {
+        active = activeProjectSlug();
+      } catch {
+        active = '';
+      }
+      for (const project of projects) {
+        console.log(`${project === active ? '*' : ' '} ${project}  ${projectHome(project)}`);
+      }
+      return;
+    }
+
+    if (action === 'use') {
+      if (!slug) die('usage: project use <slug>');
+      if (!listProjects().includes(slug)) {
+        die(`unknown project '${slug}'. known: ${listProjects().join(', ') || 'none'}`);
+      }
+      setActiveProject(slug);
+      console.log(`active project is now ${slug}`);
+      console.log('Restart the server for it to take effect.');
+      return;
+    }
+
+    die('usage: project [list] | project use <slug>');
   }
 
   const config = loadConfig();
