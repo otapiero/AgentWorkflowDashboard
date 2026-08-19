@@ -152,6 +152,12 @@ async function main(): Promise<void> {
     if (result.sharedFiles.length) {
       console.log(`shared   ${result.sharedFiles.join(', ')} moved to ${mcRoot()}`);
     }
+    if (result.displaced.length) {
+      console.log(`kept     ${result.displaced.join(', ')} already at the root, renamed *.replaced-*`);
+    }
+    if (result.repairedWorktrees.length) {
+      console.log(`git      repaired ${result.repairedWorktrees.length} worktree registration(s)`);
+    }
     return;
   }
 

@@ -1,8 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { parseConfig } from './config.ts';
+import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
 import { mcRoot, projectHome, projectSlug, setActiveProject } from './paths.ts';
 
 /**
@@ -23,13 +25,40 @@ export interface MigrationResult {
   from: string;
   to: string;
   sharedFiles: string[];
+  /** Shared entries already at the root, renamed aside rather than dropped. */
+  displaced: string[];
+  /** Worktrees whose git registration was re-pointed at the new location. */
+  repairedWorktrees: string[];
 }
 
 export function legacyHomePath(): string {
   return process.env.MC_LEGACY_HOME ?? join(homedir(), '.mc');
 }
 
-export function migrateLegacyHome(): MigrationResult {
+/**
+ * Re-point git at the worktrees this move relocated.
+ *
+ * A worktree is registered by absolute path in two places: the main repo's
+ * .git/worktrees/<name>/gitdir, and the worktree's own .git file pointing
+ * back. Moving the directory breaks both, and git then reports the worktree as
+ * prunable — one `git worktree prune` away from losing unmerged work.
+ * `git worktree repair` rewrites both links from the paths it is handed.
+ */
+function repairWorktreesWithGit(repoPath: string, worktrees: string[]): void {
+  if (worktrees.length === 0) return;
+  execFileSync('git', ['-C', repoPath, 'worktree', 'repair', ...worktrees], {
+    timeout: SUBPROCESS_TIMEOUT_MS,
+    stdio: 'pipe',
+  });
+}
+
+export interface MigrateOptions {
+  /** Injected so the move can be tested without a real git repository. */
+  repairWorktrees?: (repoPath: string, worktrees: string[]) => void;
+}
+
+export function migrateLegacyHome(options: MigrateOptions = {}): MigrationResult {
+  const repair = options.repairWorktrees ?? repairWorktreesWithGit;
   const from = legacyHomePath();
   const legacyConfig = join(from, 'config.yaml');
 
@@ -54,18 +83,35 @@ export function migrateLegacyHome(): MigrationResult {
   // T3 pairing especially: it is single-use and short-lived, so a second
   // project must inherit it rather than mint its own.
   const sharedFiles: string[] = [];
+  const displaced: string[] = [];
   for (const entry of SHARED_ENTRIES) {
     const source = join(to, entry);
     if (!existsSync(source)) continue;
     const destination = join(mcRoot(), entry);
+
+    // The install being migrated is the authoritative one, so it wins. Anything
+    // already sitting at the root is renamed aside rather than deleted: it may
+    // be the only copy of a credential, and a migration that silently destroys
+    // one is worse than a migration that leaves a file to tidy up.
     if (existsSync(destination)) {
-      rmSync(source, { recursive: true, force: true });
-    } else {
-      renameSync(source, destination);
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      renameSync(destination, `${destination}.replaced-${stamp}`);
+      displaced.push(entry);
     }
+    renameSync(source, destination);
     sharedFiles.push(entry);
   }
 
+  // Worktrees moved with the project directory, so their git registration now
+  // points at a path that no longer exists.
+  const worktreesDir = join(to, 'worktrees');
+  const repairedWorktrees = existsSync(worktreesDir)
+    ? readdirSync(worktreesDir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => join(worktreesDir, entry.name))
+    : [];
+  repair(config.repo.path, repairedWorktrees);
+
   setActiveProject(slug);
-  return { slug, from, to, sharedFiles };
+  return { slug, from, to, sharedFiles, displaced, repairedWorktrees };
 }

@@ -24,5 +24,8 @@ export default defineConfig({
     environment: 'node',
     root: '.',
     include: ['test/**/*.test.ts'],
+    // Gives every suite a temp install root by default, so forgetting MC_ROOT
+    // cannot reach the operator's real ~/.mission-control.
+    setupFiles: ['test/setup.ts'],
   },
 });
