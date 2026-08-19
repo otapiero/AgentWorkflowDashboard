@@ -1,37 +1,37 @@
 # Mission Control installer.
 #
-# Seeds %USERPROFILE%\.mc\ and installs the user-scoped mc-* command
-# files. Nothing is ever written into the Acme repo.
+# Seeds the install root (%USERPROFILE%\.mission-control) with the phase
+# scripts and the mc-* command files, then points you at `mc init` for the
+# per-repository part. Nothing is ever written into a project checkout.
 #
-# Safe to re-run: scripts and commands are refreshed, config.yaml is never
-# overwritten once it exists.
+# Safe to re-run: scripts and commands are refreshed every time; no config is
+# touched.
 
 [CmdletBinding()]
-param(
-    [switch]$Force  # overwrite an existing config.yaml
-)
+param()
 
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $assets = Join-Path $repoRoot 'assets'
 
-$mcHome = if ($env:MC_HOME) { $env:MC_HOME } else { Join-Path $env:USERPROFILE '.mc' }
+$mcRoot = if ($env:MC_ROOT) { $env:MC_ROOT } else { Join-Path $env:USERPROFILE '.mission-control' }
 $claudeCommands = Join-Path $env:USERPROFILE '.claude\commands'
+$legacyHome = Join-Path $env:USERPROFILE '.mc'
 
 Write-Host ""
 Write-Host "Mission Control installer" -ForegroundColor Green
-Write-Host "  home:     $mcHome"
+Write-Host "  root:     $mcRoot"
 Write-Host "  commands: $claudeCommands"
 Write-Host ""
 
-foreach ($dir in @($mcHome, (Join-Path $mcHome 'scripts'), (Join-Path $mcHome 'tasks'), (Join-Path $mcHome 'worktrees'), $claudeCommands)) {
+foreach ($dir in @($mcRoot, (Join-Path $mcRoot 'scripts'), (Join-Path $mcRoot 'projects'), $claudeCommands)) {
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
 }
 
 # --- phase scripts -------------------------------------------------------
 Get-ChildItem (Join-Path $assets 'scripts') -Filter *.ps1 | ForEach-Object {
-    Copy-Item $_.FullName (Join-Path $mcHome 'scripts') -Force
+    Copy-Item $_.FullName (Join-Path $mcRoot 'scripts') -Force
     Write-Host "  script   $($_.Name)" -ForegroundColor DarkGray
 }
 
@@ -42,16 +42,6 @@ Get-ChildItem (Join-Path $assets 'scripts') -Filter *.ps1 | ForEach-Object {
 Get-ChildItem (Join-Path $assets 'claude\commands') -Filter *.md | ForEach-Object {
     Copy-Item $_.FullName $claudeCommands -Force
     Write-Host "  command  /$($_.BaseName)" -ForegroundColor DarkGray
-}
-
-# --- config --------------------------------------------------------------
-$configPath = Join-Path $mcHome 'config.yaml'
-if ((Test-Path $configPath) -and -not $Force) {
-    Write-Host "  config   kept existing config.yaml (use -Force to replace)" -ForegroundColor Yellow
-}
-else {
-    Copy-Item (Join-Path $assets 'config.example.yaml') $configPath -Force
-    Write-Host "  config   wrote config.yaml" -ForegroundColor DarkGray
 }
 
 # --- sanity checks -------------------------------------------------------
@@ -67,17 +57,12 @@ foreach ($tool in @('git', 'gh', 'wt', 'pwsh')) {
 gh auth status 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { $problems += 'gh is not authenticated (run: gh auth login)' }
 
-$repoPath = (Select-String -Path $configPath -Pattern "^\s*path:\s*'(.+)'" | Select-Object -First 1).Matches.Groups[1].Value
-if (-not (Test-Path $repoPath)) {
-    $problems += "repo.path in config.yaml does not exist: $repoPath"
-}
-
 # T3 Code is optional: the t3 launcher needs it, wt and vscode do not.
 $t3Runtime = Join-Path $env:USERPROFILE '.t3\userdata\server-runtime.json'
 if (Test-Path $t3Runtime) {
     Write-Host "  ok: T3 Code state found at $t3Runtime"
-    $t3Credential = Join-Path $env:USERPROFILE '.mc\t3-credential'
-    $t3Token = Join-Path $env:USERPROFILE '.mc\t3-token.json'
+    $t3Credential = Join-Path $mcRoot 't3-credential'
+    $t3Token = Join-Path $mcRoot 't3-token.json'
     if (-not (Test-Path $t3Credential) -and -not (Test-Path $t3Token)) {
         Write-Host "  note: no T3 credential yet. The 't3' launcher needs one."
         Write-Host "        In T3: Settings -> This environment -> Authorized clients -> Create link."
@@ -102,5 +87,15 @@ else {
 }
 
 Write-Host ""
-Write-Host "Next: npm run dev" -ForegroundColor Green
+if (Test-Path (Join-Path $legacyHome 'config.yaml')) {
+    Write-Host "An older install was found at $legacyHome." -ForegroundColor Yellow
+    Write-Host "Bring it across with:  npm run mc -- migrate" -ForegroundColor Yellow
+}
+elseif (-not (Get-ChildItem (Join-Path $mcRoot 'projects') -Directory -ErrorAction SilentlyContinue)) {
+    Write-Host "Next: cd into the repository you want to drive, then run:" -ForegroundColor Green
+    Write-Host "  npm run mc -- init" -ForegroundColor Green
+}
+else {
+    Write-Host "Next: npm start" -ForegroundColor Green
+}
 Write-Host ""
