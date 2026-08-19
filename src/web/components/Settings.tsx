@@ -102,7 +102,7 @@ export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
               reports whether a session is really running and when it is blocked on an
               approval. Needs T3 Code running, an agent with a <code>t3Instance</code> in
               config.yaml, and a pairing credential at{' '}
-              <code>~/.mc/t3-credential</code> — create one in T3 under Settings →
+              <code>~/.mission-control/t3-credential</code> — create one in T3 under Settings →
               Create pairing link.
             </p>
           )}

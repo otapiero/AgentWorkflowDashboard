@@ -424,7 +424,7 @@ export interface Config {
   launcher?: LauncherKind;
   /** T3 Code integration settings. Absent means the 't3' launcher is unconfigured. */
   t3?: {
-    /** Title of the T3 project Mission Control creates. Default 'Acme'. */
+    /** Title of the T3 project Mission Control creates. Defaults to the repo name. */
     projectTitle?: string;
     /** T3 version the recorded fixtures were captured against. */
     pinnedVersion?: string;

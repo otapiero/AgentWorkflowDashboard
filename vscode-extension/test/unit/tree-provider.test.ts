@@ -52,8 +52,8 @@ describe('MissionControlTreeProvider', () => {
   });
 
   test('marks only the exact current live task as session eligible', () => {
-    const current = task(); current.integration.liveSpawn = { phase: 'implement', pid: 42, startedAt: '2026-08-03T10:00:00.000Z' };
-    const other = task({ issue: 2 }); other.integration.liveSpawn = { phase: 'implement', pid: 43, startedAt: '2026-08-03T10:00:00.000Z' };
+    const current = task(); current.integration.liveSpawn = { phase: 'implement', pid: 42, startedAt: '2026-08-03T10:00:00.000Z', source: 'marker' };
+    const other = task({ issue: 2 }); other.integration.liveSpawn = { phase: 'implement', pid: 43, startedAt: '2026-08-03T10:00:00.000Z', source: 'marker' };
     const store = new TaskStore(); store.applyBaseline(config, [current, other]);
     const provider = new MissionControlTreeProvider(store, () => ({ scheme: 'file', fsPath: current.integration.workspacePath }), fakeVscode());
     expect(provider.getTreeItem({ kind: 'task', id: 'task:current:3060', scope: 'current', issue: 3060, label: 'current', description: '', severity: 'normal' }).contextValue).toContain(':current-live:');

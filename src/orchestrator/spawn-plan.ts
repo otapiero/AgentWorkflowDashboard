@@ -43,7 +43,7 @@ export interface SpawnPlanOptions {
 
 /**
  * `phaseDefaults` is passed in rather than read via getPhaseDefaults() here, so
- * this stays pure and testable without touching ~/.mc. Callers read it.
+ * this stays pure and testable without touching ~/.mission-control. Callers read it.
  */
 export function resolveSpawnPlan(
   config: Config,

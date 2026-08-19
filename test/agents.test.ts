@@ -40,7 +40,7 @@ function task(overrides?: TaskRecord['overrides']): TaskRecord {
     issue: 3060,
     title: 'x',
     slug: 'x',
-    branch: 'ouriel/3060-x',
+    branch: 'alice/3060-x',
     worktreePath: null,
     prNumber: null,
     prUrl: null,

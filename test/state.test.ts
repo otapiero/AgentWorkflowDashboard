@@ -44,7 +44,7 @@ describe('loadState', () => {
   });
 
   test('state written by saveState round-trips', () => {
-    const task = newTask(3060, 'Add audio playback mode', 'ouriel');
+    const task = newTask(3060, 'Add audio playback mode', 'alice');
     saveState({ version: 1, tasks: [task] });
     expect(loadState().tasks).toEqual([task]);
   });
@@ -52,13 +52,13 @@ describe('loadState', () => {
 
 describe('newTask', () => {
   test('derives the branch from the prefix, issue and title', () => {
-    const task = newTask(3060, 'Add audio playback mode', 'ouriel');
-    expect(task.branch).toBe('ouriel/3060-add-audio-playback-mode');
+    const task = newTask(3060, 'Add audio playback mode', 'alice');
+    expect(task.branch).toBe('alice/3060-add-audio-playback-mode');
     expect(task.slug).toBe('add-audio-playback-mode');
   });
 
   test('starts with no PR, no override and no history', () => {
-    const task = newTask(3060, 'Anything', 'ouriel');
+    const task = newTask(3060, 'Anything', 'alice');
     expect(task.prNumber).toBeNull();
     expect(task.manualPhase).toBeNull();
     expect(task.spawnHistory).toEqual([]);
@@ -68,13 +68,13 @@ describe('newTask', () => {
 
 describe('task mutations', () => {
   test('an upserted task can be read back by issue number', () => {
-    upsertTask(newTask(3060, 'Audio mode', 'ouriel'));
+    upsertTask(newTask(3060, 'Audio mode', 'alice'));
     expect(getTask(3060)?.title).toBe('Audio mode');
   });
 
   test('upserting an existing issue replaces it rather than duplicating', () => {
-    upsertTask(newTask(3060, 'Original title', 'ouriel'));
-    upsertTask({ ...newTask(3060, 'Renamed title', 'ouriel'), manualPhase: 'merge' });
+    upsertTask(newTask(3060, 'Original title', 'alice'));
+    upsertTask({ ...newTask(3060, 'Renamed title', 'alice'), manualPhase: 'merge' });
     expect(listTasks()).toHaveLength(1);
     expect(getTask(3060)?.title).toBe('Renamed title');
     expect(getTask(3060)?.manualPhase).toBe('merge');
@@ -85,8 +85,8 @@ describe('task mutations', () => {
   });
 
   test('removeTask takes an issue off the board', () => {
-    upsertTask(newTask(3060, 'Audio mode', 'ouriel'));
-    upsertTask(newTask(3120, 'Prompt change', 'ouriel'));
+    upsertTask(newTask(3060, 'Audio mode', 'alice'));
+    upsertTask(newTask(3120, 'Prompt change', 'alice'));
     removeTask(3060);
     expect(listTasks().map((t) => t.issue)).toEqual([3120]);
   });
@@ -96,7 +96,7 @@ describe('task mutations', () => {
   });
 
   test('mutations persist across a reload', () => {
-    upsertTask(newTask(3060, 'Audio mode', 'ouriel'));
+    upsertTask(newTask(3060, 'Audio mode', 'alice'));
     expect(loadState().tasks.map((t) => t.issue)).toEqual([3060]);
   });
 });
@@ -104,12 +104,12 @@ describe('task mutations', () => {
 describe('durability', () => {
   test('saved state is human-readable json', () => {
     // A cache the user can inspect and hand-edit when something goes wrong.
-    upsertTask(newTask(3060, 'Audio mode', 'ouriel'));
+    upsertTask(newTask(3060, 'Audio mode', 'alice'));
     expect(readFileSync(statePath(), 'utf8')).toContain('\n  ');
   });
 
   test('a failed write does not leave a truncated state file', () => {
-    upsertTask(newTask(3060, 'Audio mode', 'ouriel'));
+    upsertTask(newTask(3060, 'Audio mode', 'alice'));
     const before = readFileSync(statePath(), 'utf8');
     // Writing must go via a temp file and rename, so a reader never sees
     // a half-written file.

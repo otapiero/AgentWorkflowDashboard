@@ -53,13 +53,13 @@ describe('slugify', () => {
 describe('branchName', () => {
   test('composes prefix, issue number and slug', () => {
     expect(
-      branchName('ouriel', 3060, 'Add audio playback mode'),
-    ).toBe('ouriel/3060-add-audio-playback-mode');
+      branchName('alice', 3060, 'Add audio playback mode'),
+    ).toBe('alice/3060-add-audio-playback-mode');
   });
 
   test('produces a branch that publish-pr can parse the issue number from', () => {
     // /publish-pr takes the numeric portion after the first "/".
-    const branch = branchName('ouriel', 3120, 'change audio mode prompt');
+    const branch = branchName('alice', 3120, 'change audio mode prompt');
     const parsed = Number(branch.split('/')[1]?.split('-')[0]);
     expect(parsed).toBe(3120);
   });

@@ -9,7 +9,7 @@ import { Broadcaster } from '../src/server/sse.ts';
 import type { Config } from '../src/shared/types.ts';
 
 const config = {
-  repo: { path: 'C:\\repo', owner: 'o', name: 'r', baseBranch: 'main', branchPrefix: 'ouriel/' },
+  repo: { path: 'C:\\repo', owner: 'o', name: 'r', baseBranch: 'main', branchPrefix: 'alice/' },
   github: { auth: 'gh-cli', pollIntervalSeconds: 30, copilotReviewerLogin: 'bot' },
   agents: {},
   pipeline: [],

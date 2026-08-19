@@ -19,11 +19,11 @@ afterEach(() => {
 
 const VALID = `
 repo:
-  path: 'C:\\src\\widgets'
+  path: 'C:\\Users\\alice\\Desktop\\V1\\widgets'
   owner: 'acme'
   name: 'widgets'
   baseBranch: 'dev'
-  branchPrefix: 'ouriel'
+  branchPrefix: 'alice'
 github:
   auth: gh-cli
   pollIntervalSeconds: 30

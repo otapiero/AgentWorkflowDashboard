@@ -22,7 +22,7 @@ function task(overrides: Partial<TaskWithDerived> = {}): TaskWithDerived {
     issue: 1,
     title: 'A task',
     slug: 'a-task',
-    branch: 'ouriel/1-a-task',
+    branch: 'alice/1-a-task',
     worktreePath: null,
     prNumber: null,
     prUrl: null,

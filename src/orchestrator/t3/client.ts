@@ -77,7 +77,7 @@ export class T3Client {
         ok: false,
         reason: 'no-credential',
         detail:
-          'T3 is running but Mission Control has no credential. In T3, go to Settings -> This environment -> Authorized clients -> Create link, copy the "This machine" pairing URL, and save it to ~/.mc/t3-credential. The link is single-use and expires within minutes, so save it straight away.',
+          'T3 is running but Mission Control has no credential. In T3, go to Settings -> This environment -> Authorized clients -> Create link, copy the "This machine" pairing URL, and save it to ~/.mission-control/t3-credential. The link is single-use and expires within minutes, so save it straight away.',
       };
     }
     if (!(await tokens.getToken())) {

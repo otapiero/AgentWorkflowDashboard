@@ -32,14 +32,14 @@ launcher: wt
 
 # T3 Code integration, used only by the 't3' launcher.
 #
-# Requires a pairing credential at %USERPROFILE%\.mc\t3-credential.
+# Requires a pairing credential at %USERPROFILE%\.mission-control\t3-credential.
 # Mint one in T3: Settings -> This environment -> Authorized clients ->
 # Create link, then save the "This machine" URL there. Do it promptly: the
 # link is single-use and expires within about three minutes. Mission Control
 # cannot mint it for you — T3 only bootstraps its own renderer.
 #
 # The access token that link buys lasts 30 days and is cached in
-# %USERPROFILE%\.mc\t3-token.json, so this is a one-time step.
+# %USERPROFILE%\.mission-control\t3-token.json, so this is a one-time step.
 t3:
   projectTitle: '{{repoName}}'
   # The T3 version this integration was verified against. `mc doctor` warns

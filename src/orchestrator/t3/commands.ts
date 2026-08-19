@@ -254,7 +254,7 @@ export function buildTurnStartCommand(input: TurnStartInput): unknown {
  * preview panel the only change needed is to call it.
  *
  * Pushed through project.meta.update rather than written as a t3.json into the
- * Acme checkout — that is the zero-footprint principle applied to a file T3
+ * project checkout — that is the zero-footprint principle applied to a file T3
  * would otherwise expect to find in the repo.
  *
  * The command is a health probe, not a launcher, because T3 runs scripts in a

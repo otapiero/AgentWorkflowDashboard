@@ -1,4 +1,4 @@
-import type { BoardConfig, Phase, TaskWithDerived } from '../../src/shared/types.ts';
+import type { BoardConfig, Phase, RunKind, TaskWithDerived } from '../../src/shared/types.ts';
 import type { TaskStoreSnapshot } from './task-store.ts';
 import { matchWorkspace } from './workspace-matcher.ts';
 
@@ -49,7 +49,8 @@ export function severityFor(task: TaskWithDerived): Severity {
   return 'normal';
 }
 
-export function phaseLabel(phase: Phase): string {
+/** Also renders the synthetic 'custom' run kind, which is not a pipeline phase. */
+export function phaseLabel(phase: RunKind): string {
   return phase.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 

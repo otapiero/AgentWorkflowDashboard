@@ -182,8 +182,8 @@ describe('snapshotSchema', () => {
     id: 'thread-1',
     projectId: 'project-1',
     title: '#3060 plan',
-    branch: 'ouriel/3060-thing',
-    worktreePath: 'C:\\Users\\ouriel\\.mc\\worktrees\\issue-3060',
+    branch: 'alice/3060-thing',
+    worktreePath: 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\worktrees\\issue-3060',
     activities: [{ id: 'e1', tone: 'info', kind: 'turn.started', summary: 'started' }],
     session: {
       threadId: 'thread-1',

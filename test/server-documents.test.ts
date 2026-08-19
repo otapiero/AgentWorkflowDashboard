@@ -12,7 +12,7 @@ import { saveState } from '../src/orchestrator/state.ts';
 import type { Config } from '../src/shared/types.ts';
 
 const config = {
-  repo: { path: 'C:\\repo', owner: 'o', name: 'r', baseBranch: 'main', branchPrefix: 'ouriel/' },
+  repo: { path: 'C:\\repo', owner: 'o', name: 'r', baseBranch: 'main', branchPrefix: 'alice/' },
   github: { auth: 'gh-cli', pollIntervalSeconds: 30, copilotReviewerLogin: 'bot' },
   agents: {},
   pipeline: [],
@@ -66,7 +66,7 @@ beforeEach(() => {
         issue: ISSUE,
         title: 'doc workbench',
         slug: 'doc-workbench',
-        branch: 'ouriel/91-doc-workbench',
+        branch: 'alice/91-doc-workbench',
         worktreePath: null,
         prNumber: null,
         prUrl: null,

@@ -10,7 +10,7 @@ repo:
   owner: 'acme'
   name: 'widgets'
   baseBranch: 'dev'
-  branchPrefix: 'ouriel'
+  branchPrefix: 'alice'
 github:
   auth: gh-cli
   pollIntervalSeconds: 30

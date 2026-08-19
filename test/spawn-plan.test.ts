@@ -51,7 +51,7 @@ function config(pipeline: PhaseConfig[] = [implementPhase()]): Config {
       owner: 'acme',
       name: 'widgets',
       baseBranch: 'dev',
-      branchPrefix: 'ouriel',
+      branchPrefix: 'alice',
     },
     github: { auth: 'gh-cli', pollIntervalSeconds: 30, copilotReviewerLogin: 'bot' },
     agents: { claude, copilot },
@@ -65,7 +65,7 @@ function task(overrides: Partial<TaskRecord> = {}): TaskRecord {
     issue: 3060,
     title: 'Add progress bar',
     slug: 'add-progress-bar',
-    branch: 'ouriel/3060-Add-progress-bar',
+    branch: 'alice/3060-Add-progress-bar',
     worktreePath: null,
     prNumber: null,
     prUrl: null,
@@ -100,7 +100,7 @@ describe('resolveSpawnPlan', () => {
     expect(plan.command).toBe('mc-implementer');
     expect(plan.agent).toBe('claude');
     expect(plan.promptText).toContain('Implement #3060');
-    expect(plan.promptText).toContain('ouriel/3060-Add-progress-bar');
+    expect(plan.promptText).toContain('alice/3060-Add-progress-bar');
   });
 
   test('the prompt is rendered with the configured repository, not a baked-in one', () => {

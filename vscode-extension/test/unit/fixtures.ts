@@ -1,7 +1,7 @@
 import type { BoardConfig, ChecksState, Phase, TaskWithDerived } from '../../../src/shared/types.ts';
 
 export const config: BoardConfig = {
-  repo: { path: 'C:\\repo', owner: 'otapiero', name: 'repo', baseBranch: 'main', branchPrefix: 'ouriel/' },
+  repo: { path: 'C:\\repo', owner: 'acme', name: 'widgets', baseBranch: 'main', branchPrefix: 'alice/' },
   pipeline: [
     { id: 'plan', label: 'Plan', actor: 'codex', spawnable: true, gate: { type: 'manual' } },
     { id: 'implement', label: 'Implement', actor: 'codex', spawnable: true, gate: { type: 'manual' } },
@@ -28,7 +28,7 @@ export function task(options: {
     issue,
     title: `Task ${issue}`,
     slug: `task-${issue}`,
-    branch: `ouriel/${issue}`,
+    branch: `alice/${issue}`,
     worktreePath: null,
     prNumber: null,
     prUrl: null,

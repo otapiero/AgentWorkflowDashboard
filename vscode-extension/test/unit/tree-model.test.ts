@@ -17,7 +17,7 @@ describe('tree model', () => {
 
   test('shows the exact current worktree task, resolved agent, and permitted native actions', () => {
     const live = taskWithPath('C:\\mc\\worktrees\\issue-3060');
-    live.integration.liveSpawn = { phase: 'implement', pid: 42, startedAt: '2026-08-03T10:00:00.000Z' };
+    live.integration.liveSpawn = { phase: 'implement', pid: 42, startedAt: '2026-08-03T10:00:00.000Z', source: 'marker' };
     const current = buildChildren(snapshot([live]), { scheme: 'file', fsPath: 'C:\\mc\\worktrees\\issue-3060' }, 'section:current');
     expect(current).toEqual([
       { kind: 'task', id: 'task:current:3060', scope: 'current', issue: 3060, label: '#3060 Task 3060', description: 'Implement', severity: 'normal' },

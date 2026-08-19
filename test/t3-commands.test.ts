@@ -74,7 +74,7 @@ describe('buildProjectCreateCommand', () => {
     const command = buildProjectCreateCommand({
       commandId: 'cmd-1',
       projectId: 'proj-1',
-      title: 'Acme',
+      title: 'widgets',
       workspaceRoot: 'C:\\repo',
       createdAt: '2026-08-07T09:00:00.000Z',
     }) as Record<string, unknown>;
@@ -106,8 +106,8 @@ describe('buildThreadCreateCommand', () => {
     threadId: 'thread-1',
     projectId: 'proj-1',
     title: '#3060 plan',
-    worktreePath: 'C:\\Users\\ouriel\\.mc\\worktrees\\issue-3060',
-    branch: 'ouriel/3060-thing',
+    worktreePath: 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\worktrees\\issue-3060',
+    branch: 'alice/3060-thing',
     modelSelection: { instanceId: 'codex', model: 'gpt-5.6-sol' },
     modes: { runtimeMode: 'approval-required' as const, interactionMode: 'plan' as const },
     createdAt: '2026-08-07T09:00:00.000Z',
@@ -125,9 +125,9 @@ describe('buildThreadCreateCommand', () => {
     // number, so markers, artifacts and badges keep working unchanged.
     const command = buildThreadCreateCommand(input) as any;
     expect(command.worktreePath).toBe(
-      'C:\\Users\\ouriel\\.mc\\worktrees\\issue-3060',
+      'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\worktrees\\issue-3060',
     );
-    expect(command.branch).toBe('ouriel/3060-thing');
+    expect(command.branch).toBe('alice/3060-thing');
   });
 
   test('sends both modes explicitly', () => {

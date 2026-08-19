@@ -29,7 +29,7 @@ import { accessTokenSchema, safeParseT3 } from './schemas.ts';
  *  - Exchanging it returns an **access token** good for 30 days
  *    (`expires_in: 2591999`), which is the credential for steady-state use.
  *
- * So the access token is persisted to ~/.mc/t3-token.json rather than
+ * So the access token is persisted to ~/.mission-control/t3-token.json rather than
  * held in memory. Holding it in memory would mean every board restart tried to
  * re-exchange a pairing token that was spent minutes after it was created, and
  * the integration would demand a fresh pairing link on every launch.
@@ -221,7 +221,7 @@ export class T3TokenStore {
         // Named precisely, because a pairing token is single-use and lives
         // about three minutes: "expired" here almost always means "you took
         // longer than three minutes", not "something is misconfigured".
-        this.lastError = `token exchange returned ${res.status}. A T3 pairing token is single-use and expires within minutes of being created, so this one is most likely spent. Create a fresh link in T3 under Settings -> This environment -> Authorized clients -> Create link, and save it to ~/.mc/t3-credential.`;
+        this.lastError = `token exchange returned ${res.status}. A T3 pairing token is single-use and expires within minutes of being created, so this one is most likely spent. Create a fresh link in T3 under Settings -> This environment -> Authorized clients -> Create link, and save it to ~/.mission-control/t3-credential.`;
         return null;
       }
 

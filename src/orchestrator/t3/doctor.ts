@@ -39,14 +39,14 @@ export function formatT3Doctor(input: T3DoctorInput): string[] {
       case 'no-credential':
         lines.push('  - T3 is running but Mission Control has no credential.');
         lines.push('    Fix: in T3, Settings -> This environment -> Authorized clients -> Create link.');
-        lines.push('    Take the "This machine" pairing URL and save it to ~/.mc/t3-credential.');
+        lines.push('    Take the "This machine" pairing URL and save it to ~/.mission-control/t3-credential.');
         lines.push('    The link is single-use and expires within minutes, so save it straight away.');
         break;
       case 'credential-rejected':
         lines.push('  - T3 rejected the credential.');
         lines.push(`    ${status.detail}`);
         lines.push('    Fix: Settings -> This environment -> Authorized clients -> Create link,');
-        lines.push('    then replace ~/.mc/t3-credential with the new "This machine" URL.');
+        lines.push('    then replace ~/.mission-control/t3-credential with the new "This machine" URL.');
         break;
       default:
         lines.push(`  - T3 is unreachable: ${status.detail}`);

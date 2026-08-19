@@ -74,7 +74,7 @@ describe('CommandController', () => {
   test('refuses a session from a different task than the current workspace', async () => {
     const { commands, current, api, store } = controller();
     const other = task({ issue: 9, workspacePath: 'C:\\mc\\worktrees\\issue-9' });
-    other.integration.liveSpawn = { phase: 'implement', pid: 9, startedAt: '2026-08-03T10:00:00.000Z' };
+    other.integration.liveSpawn = { phase: 'implement', pid: 9, startedAt: '2026-08-03T10:00:00.000Z', source: 'marker' };
     store.task.mockImplementation((issue: number) => issue === current.issue ? current : issue === other.issue ? other : undefined);
     store.tasks.mockReturnValue([current, other]);
     await commands.viewSession(other.issue);
@@ -89,7 +89,7 @@ describe('CommandController', () => {
 
   test('reveals only a terminal integrated with the exact current live worktree', async () => {
     const { commands, current, api } = controller();
-    current.integration.liveSpawn = { phase: 'implement', pid: 42, startedAt: '2026-08-03T10:00:00.000Z' };
+    current.integration.liveSpawn = { phase: 'implement', pid: 42, startedAt: '2026-08-03T10:00:00.000Z', source: 'marker' };
     const wrong = { shellIntegration: { cwd: { fsPath: 'C:\\other' } }, show: vi.fn() };
     const exact = { shellIntegration: { cwd: { fsPath: 'C:\\mc\\worktrees\\issue-3060' } }, show: vi.fn() };
     api.terminals.push(wrong, exact);

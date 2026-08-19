@@ -145,7 +145,7 @@ describe('buildAgentArgs — codex', () => {
   });
 
   test('uses a scoped writable task directory without broad sandbox access', () => {
-    const taskDir = 'C:\\Users\\o\\.mc\\tasks\\3060';
+    const taskDir = 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\tasks\\3060';
     const args = buildAgentArgs('codex', codex, {
       instructions: RULES,
       variables: { taskDir },
@@ -180,9 +180,9 @@ describe('buildWtArgs', () => {
   const opts = {
     issue: 3060,
     phase: 'plan',
-    startDir: 'C:\\src\\widgets',
-    script: 'C:\\Users\\ouriel\\.mc\\scripts\\run-phase.ps1',
-    specFile: 'C:\\Users\\ouriel\\.mc\\tasks\\3060\\spawn.json',
+    startDir: 'C:\\Users\\alice\\Desktop\\V1\\widgets',
+    script: 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\scripts\\run-phase.ps1',
+    specFile: 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\tasks\\3060\\spawn.json',
   };
 
   test('titles the tab with the issue and phase so parallel tabs are identifiable', () => {
@@ -226,11 +226,11 @@ describe('buildCodeWorkspace', () => {
   const opts = {
     issue: 3060,
     phase: 'plan',
-    worktree: 'C:\\Users\\ouriel\\.mc\\worktrees\\issue-3060',
-    script: 'C:\\Users\\ouriel\\.mc\\scripts\\run-phase.ps1',
-    specFile: 'C:\\Users\\ouriel\\.mc\\tasks\\3060\\spawn.json',
+    worktree: 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\worktrees\\issue-3060',
+    script: 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\scripts\\run-phase.ps1',
+    specFile: 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\tasks\\3060\\spawn.json',
     guardFile:
-      'C:\\Users\\ouriel\\.mc\\tasks\\3060\\markers\\plan.vscode-launched',
+      'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\tasks\\3060\\markers\\plan.vscode-launched',
   };
 
   test('opens VS Code on the worktree so the code is visible', () => {
@@ -269,7 +269,7 @@ describe('buildCodeWorkspace', () => {
 });
 
 describe('buildCodeArgs', () => {
-  const wsFile = 'C:\\Users\\ouriel\\.mc\\tasks\\3060\\mc-3060.code-workspace';
+  const wsFile = 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\tasks\\3060\\mc-3060.code-workspace';
 
   test('disables workspace trust so the folder-open task is not blocked', () => {
     // A fresh worktree has never been trusted, so without this VS Code opens in

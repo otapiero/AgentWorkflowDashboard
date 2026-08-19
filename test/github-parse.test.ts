@@ -252,7 +252,7 @@ describe('parseBranchPrResponse', () => {
           ],
           threads: [
             { isResolved: false, comments: { nodes: [{ author: { login: COPILOT } }] } },
-            { isResolved: false, comments: { nodes: [{ author: { login: 'ouriel' } }] } },
+            { isResolved: false, comments: { nodes: [{ author: { login: 'alice' } }] } },
           ],
         }),
       ]),
@@ -275,7 +275,7 @@ describe('parseBranchPrResponse', () => {
           reviewDecision: 'APPROVED',
           checks: [{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'FAILURE' }],
           threads: [
-            { isResolved: false, comments: { nodes: [{ author: { login: 'ouriel' } }] } },
+            { isResolved: false, comments: { nodes: [{ author: { login: 'alice' } }] } },
           ],
         }),
       ]),

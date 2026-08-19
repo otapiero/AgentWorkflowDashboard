@@ -35,8 +35,8 @@
     "test:extension": "npm run build && npm run build:test && vscode-test",
     "build:test": "node esbuild.mjs --tests",
     "verify": "npm run typecheck && npm run test:unit && npm run test:performance && npm run build",
-    "package": "npm run verify && vsce package --out dist/mission-control-0.1.0.vsix && npm run check:vsix-size",
-    "check:vsix-size": "node scripts/check-vsix-size.mjs dist/mission-control-0.1.0.vsix",
+    "package": "npm run verify && vsce package --out dist/mission-control.vsix && npm run check:vsix-size",
+    "check:vsix-size": "node scripts/check-vsix-size.mjs dist/mission-control.vsix",
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {

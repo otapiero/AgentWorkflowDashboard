@@ -22,7 +22,7 @@ function task(
     issue,
     title: `Task ${issue}`,
     slug: `task-${issue}`,
-    branch: `ouriel/${issue}`,
+    branch: `alice/${issue}`,
     worktreePath: null,
     prNumber: null,
     prUrl: null,

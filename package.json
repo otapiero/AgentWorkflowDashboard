@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Personal local task cockpit for driving AI coding agents through the Acme pipeline",
+  "description": "A local cockpit for driving AI coding agents through a GitHub issue-to-merge pipeline",
   "scripts": {
     "dev": "concurrently -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "tsx watch src/server/index.ts",

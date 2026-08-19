@@ -13,7 +13,7 @@ function task(spawnHistory: TaskRecord['spawnHistory']): TaskRecord {
     issue: 3060,
     title: 'thing',
     slug: 'thing',
-    branch: 'ouriel/3060-thing',
+    branch: 'alice/3060-thing',
     worktreePath: null,
     prNumber: null,
     prUrl: null,

@@ -93,7 +93,7 @@ describe('buildPrompt', () => {
   const task = {
     issue: 3060,
     title: 'Add audio playback mode',
-    branch: 'ouriel/3060-add-audio-playback-mode',
+    branch: 'alice/3060-add-audio-playback-mode',
   };
 
   function writeCommand(name: string, body: string) {

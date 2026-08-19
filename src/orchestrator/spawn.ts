@@ -504,7 +504,7 @@ async function launchT3(
       buildProjectCreateCommand({
         commandId: randomUUID(),
         projectId,
-        title: config.t3?.projectTitle ?? 'Acme',
+        title: config.t3?.projectTitle ?? config.repo.name,
         workspaceRoot: config.repo.path,
         createdAt,
       }),

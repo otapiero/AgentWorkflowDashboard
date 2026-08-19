@@ -24,7 +24,7 @@ describe('samePath', () => {
 });
 
 describe('parseSessionFile', () => {
-  const cwd = 'c:\\Users\\o\\.mc\\worktrees\\issue-1';
+  const cwd = 'c:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\worktrees\\issue-1';
   test('sums the four usage fields for matching-cwd assistant lines', () => {
     const content = [
       asst(cwd, { input_tokens: 2, output_tokens: 5, cache_creation_input_tokens: 10, cache_read_input_tokens: 20 }, '2026-07-26T00:00:00Z'),
@@ -52,7 +52,7 @@ describe('parseSessionFile', () => {
 });
 
 describe('parseCodexSessionFile', () => {
-  const cwd = 'c:\\Users\\o\\.mc\\worktrees\\issue-1';
+  const cwd = 'c:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\worktrees\\issue-1';
 
   test('uses the final cumulative total and does not double-count cached input', () => {
     const content = [

@@ -23,14 +23,14 @@ const tokenReply = {
 
 const snapshot = {
   snapshotSequence: 3,
-  projects: [{ id: 'p1', title: 'Acme', workspaceRoot: 'C:\\repo' }],
+  projects: [{ id: 'p1', title: 'widgets', workspaceRoot: 'C:\\repo' }],
   threads: [
     {
       id: 'thread-1',
       projectId: 'p1',
       title: '#3060 plan',
-      branch: 'ouriel/3060-thing',
-      worktreePath: 'C:\\Users\\ouriel\\.mc\\worktrees\\issue-3060',
+      branch: 'alice/3060-thing',
+      worktreePath: 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\worktrees\\issue-3060',
       activities: [{ id: 'e1', tone: 'info' }],
       session: { threadId: 'thread-1', status: 'running', activeTurnId: 'turn-1', lastError: null },
     },

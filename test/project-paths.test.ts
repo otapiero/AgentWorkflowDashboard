@@ -38,7 +38,7 @@ function makeProject(slug: string): void {
 
 describe('projectSlug', () => {
   test('joins owner and name with a double underscore, lowercased', () => {
-    expect(projectSlug('acme', 'widgets')).toBe('acme__widgets');
+    expect(projectSlug('Acme-Corp', 'Widget-Store')).toBe('acme-corp__widget-store');
   });
 
   test('replaces characters that are not directory-safe', () => {
