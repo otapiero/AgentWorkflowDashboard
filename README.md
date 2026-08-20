@@ -113,20 +113,23 @@ template has gained since, copy its block from `assets/config.example.yaml`
 into your project's `config.yaml` (`npm run mc -- project list` prints the
 path); it then appears automatically in every agent picker.
 
-### Finished tasks clean up after themselves
+### Marking a task done retires its checkout
 
-When a task's PR is merged, the board removes its worktree and drops the local
-branch on the next poll. Before the checkout goes, anything git still reports
-as uncommitted is copied into the task's own directory under
+Pin a task to **done** (drawer → Setup → Placement) and Mission Control removes
+its worktree and drops the local branch. Before the checkout goes, anything git
+still reports as uncommitted is copied into the task's own directory under
 `tasks/<issue>/rescued-from-worktree/` — scratch notes, exported fixtures,
-research an agent wrote beside the code. An automatic cleanup never destroys
-work that was never committed. Gitignored files are left alone, so build output
-and `node_modules` are not dragged along.
+research an agent wrote beside the code. Cleanup never destroys work that was
+never committed. Gitignored files are left alone, so build output and
+`node_modules` are not dragged along.
+
+A merged PR does **not** trigger this. That is GitHub's opinion about the code;
+marking the task done is yours about the work, and you may still want the
+checkout after the merge lands.
 
 The branch is force-deleted because squash merges leave a branch's own commits
 out of the base branch, so `git branch -d` would refuse every merged branch it
-is handed. GitHub reporting the PR as merged is the authority that the work
-landed.
+is handed.
 
 Turn either half off in `config.yaml`:
 

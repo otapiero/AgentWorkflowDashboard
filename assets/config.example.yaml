@@ -30,9 +30,11 @@ github:
 # Also switchable live from the Agents settings panel.
 launcher: wt
 
-# What to retire when a task finishes.
+# What to retire when you mark a task done.
 #
-# A merged PR means the checkout has done its job. Before it goes, anything
+# Pinning a task to 'done' is you saying the work is finished, and that is what
+# retires its checkout -- not a merged PR, which is GitHub's opinion about the
+# code rather than yours about the work. Before the checkout goes, anything
 # git still reports as uncommitted -- scratch notes, exported fixtures,
 # research an agent wrote beside the code -- is copied into the task's own
 # directory, so an automatic cleanup can never destroy work that was never

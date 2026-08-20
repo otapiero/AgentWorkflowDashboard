@@ -25,7 +25,8 @@ import {
   upsertTask,
 } from '../orchestrator/state.ts';
 import { agentCapabilities } from '../orchestrator/agents.ts';
-import { removeWorktree, resolveBranch } from '../orchestrator/worktree.ts';
+import { removeWorktree, resolveBranch, worktreeExists } from '../orchestrator/worktree.ts';
+import { cleanupDoneTask, shouldCleanupOnDone } from '../orchestrator/cleanup.ts';
 import { PHASES } from '../shared/types.ts';
 import type {
   Config,
@@ -41,6 +42,8 @@ interface Deps {
   broadcaster: Broadcaster;
   refresh: () => Promise<TaskWithDerived[]>;
   health: HealthResponse;
+  /** Injected so the move route can be tested without shelling out to git. */
+  cleanup?: typeof cleanupDoneTask;
 }
 
 function isPhase(value: unknown): value is Phase {
@@ -63,6 +66,7 @@ const DOCUMENT_FAILURE: Record<DocumentError, { status: number; error: string }>
 
 export function registerRoutes(app: FastifyInstance, deps: Deps): void {
   const { config, broadcaster, refresh, health } = deps;
+  const cleanupTask = deps.cleanup ?? cleanupDoneTask;
 
   /** Re-derive and push to every connected board. A forced run broadcasts. */
   async function refreshAndBroadcast(): Promise<TaskWithDerived[]> {
@@ -287,6 +291,28 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
         return reply.code(400).send({ error: 'phase must be a valid phase or null' });
       }
       upsertTask({ ...task, manualPhase: phase ?? null });
+
+      // Marking a task done is the operator saying the work is finished, so
+      // this is where its checkout is retired. Derivation is deliberately not
+      // the trigger: a merged PR is GitHub's opinion, and the operator may
+      // still be using the worktree for something.
+      if (phase && shouldCleanupOnDone(config, phase, worktreeExists(task.issue))) {
+        try {
+          const result = await cleanupTask(config, task.issue, task.branch);
+          const extras = [
+            result.rescued.length ? `rescued ${result.rescued.length} file(s)` : null,
+            result.branchDeleted ? `deleted ${task.branch}` : null,
+          ].filter(Boolean);
+          console.log(
+            `[mc] #${task.issue} marked done - removed its worktree${extras.length ? ` (${extras.join(', ')})` : ''}`,
+          );
+        } catch (e) {
+          // The placement is already saved; a checkout that will not go is
+          // untidy, not a reason to reject the operator's action.
+          console.error(`[mc] worktree cleanup failed for #${task.issue}:`, e);
+        }
+      }
+
       return refreshAndBroadcast();
     },
   );
