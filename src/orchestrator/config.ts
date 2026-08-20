@@ -95,6 +95,12 @@ const configSchema = z
     pipeline: z.array(phaseSchema).min(1),
     server: z.object({ port: z.number().int().positive() }),
     launcher: z.enum(['wt', 'vscode', 't3']).optional(),
+    cleanup: z
+      .object({
+        onDone: z.boolean().optional(),
+        deleteBranch: z.boolean().optional(),
+      })
+      .optional(),
     t3: z
       .object({
         projectTitle: z.string().min(1).optional(),

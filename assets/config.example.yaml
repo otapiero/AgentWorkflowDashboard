@@ -30,6 +30,22 @@ github:
 # Also switchable live from the Agents settings panel.
 launcher: wt
 
+# What to retire when a task finishes.
+#
+# A merged PR means the checkout has done its job. Before it goes, anything
+# git still reports as uncommitted -- scratch notes, exported fixtures,
+# research an agent wrote beside the code -- is copied into the task's own
+# directory, so an automatic cleanup can never destroy work that was never
+# committed. Gitignored files are not touched, so build output and
+# node_modules are left where they belong.
+#
+# deleteBranch force-deletes: these repositories squash-merge, so the branch's
+# own commits never land in the base branch and `git branch -d` would refuse
+# every merged branch it is handed.
+cleanup:
+  onDone: true
+  deleteBranch: true
+
 # T3 Code integration, used only by the 't3' launcher.
 #
 # Requires a pairing credential at %USERPROFILE%\.mission-control\t3-credential.

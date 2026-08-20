@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { execa } from 'execa';
 
 import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
@@ -150,15 +150,32 @@ export async function ensureWorktree(
   return { path, created: !exists };
 }
 
+/**
+ * Retire a task's checkout.
+ *
+ * git's own remove deregisters the worktree and deletes the directory, but on
+ * Windows the directory half fails whenever anything holds a handle inside it
+ * -- an editor, a language server, a watcher -- and git reports success for
+ * the deregistration regardless. Left alone that produces an orphaned tree on
+ * disk that nothing owns any more, so the directory is checked and cleared
+ * here rather than assumed gone.
+ */
 export async function removeWorktree(
   config: Config,
   issue: number,
 ): Promise<void> {
-  await git(
-    ['worktree', 'remove', worktreePath(issue), '--force'],
-    config.repo.path,
-  );
+  const path = worktreePath(issue);
+  await git(['worktree', 'remove', path, '--force'], config.repo.path);
   await git(['worktree', 'prune'], config.repo.path);
+
+  if (!existsSync(path)) return;
+
+  rmSync(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  if (existsSync(path)) {
+    throw new Error(
+      `Deregistered the worktree for issue ${issue} but could not delete ${path}. Something is holding it open; close it and remove the folder by hand.`,
+    );
+  }
 }
 
 export interface GitFacts {

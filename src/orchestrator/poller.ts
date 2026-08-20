@@ -12,6 +12,7 @@ import { reconcile } from './reconcile.ts';
 import { toEditorIntegration } from './editor-integration.ts';
 import { loadState, saveState } from './state.ts';
 import { listBranches, worktreeExists } from './worktree.ts';
+import { cleanupDoneTask, shouldCleanupOnDone } from './cleanup.ts';
 import { resolveAgent } from './agents.ts';
 import { T3Client } from './t3/client.ts';
 import { latestThreadId } from './t3/facts.ts';
@@ -139,6 +140,27 @@ export async function reconcileAll(
           facts = { ...facts, artifacts: readArtifacts(task.issue) };
         }
         const derived = reconcile(facts, task.manualPhase);
+
+        // A merged PR means the checkout has done its job. Retiring it here
+        // rather than on a button keeps the board honest about what is still
+        // on disk. Failures are logged and dropped: a worktree that will not
+        // go is untidy, never a reason to fail a whole poll cycle.
+        if (shouldCleanupOnDone(config, derived.derivedPhase, facts.worktreeExists)) {
+          try {
+            const result = await cleanupDoneTask(config, task.issue, task.branch);
+            const extras = [
+              result.rescued.length ? `rescued ${result.rescued.length} file(s)` : null,
+              result.branchDeleted ? `deleted ${task.branch}` : null,
+            ].filter(Boolean);
+            console.log(
+              `[mc] #${task.issue} merged - removed its worktree${extras.length ? ` (${extras.join(', ')})` : ''}`,
+            );
+            facts = { ...facts, worktreeExists: false };
+          } catch (e) {
+            console.error(`[mc] worktree cleanup failed for #${task.issue}:`, e);
+          }
+        }
+
         const now = new Date().toISOString();
         const merged = mergedFields(task, facts.pr.state, now);
         const updated = {

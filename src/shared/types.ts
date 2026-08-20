@@ -422,6 +422,16 @@ export interface Config {
   server: { port: number };
   /** How a spawn opens its terminal. Default 'wt'. */
   launcher?: LauncherKind;
+  /**
+   * What to retire when a task finishes. Absent means on: configs written
+   * before this existed should still get the behaviour.
+   */
+  cleanup?: {
+    /** Remove the task's worktree once its PR is merged. Default true. */
+    onDone?: boolean;
+    /** Also drop the local branch. Default true. */
+    deleteBranch?: boolean;
+  };
   /** T3 Code integration settings. Absent means the 't3' launcher is unconfigured. */
   t3?: {
     /** Title of the T3 project Mission Control creates. Defaults to the repo name. */
