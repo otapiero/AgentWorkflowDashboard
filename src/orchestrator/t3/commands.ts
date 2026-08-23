@@ -1,4 +1,5 @@
 import type { AgentProfile, T3PhaseModes } from '../../shared/types.ts';
+import type { ModelOptionDescriptor } from './instances.ts';
 
 /**
  * The commands Mission Control sends to T3 Code, as plain data.
@@ -28,7 +29,11 @@ export interface ModelSelection {
  */
 export function buildModelSelection(
   profile: AgentProfile,
-  opts: { model?: string | null; effort?: string | null },
+  opts: {
+    model?: string | null;
+    effort?: string | null;
+    descriptors?: readonly ModelOptionDescriptor[];
+  },
 ): ModelSelection | null {
   const instanceId = profile.t3Instance;
   if (!instanceId) return null;
@@ -39,9 +44,52 @@ export function buildModelSelection(
   if (!model || model === 'default') return null;
 
   const selection: ModelSelection = { instanceId, model };
-  if (opts.effort) selection.options = [{ id: 'effort', value: opts.effort }];
+  const option = opts.effort ? effortOption(opts.effort, opts.descriptors) : null;
+  if (option) selection.options = [option];
   return selection;
 }
+
+/**
+ * Which knob the operator's effort belongs to, in this instance's vocabulary.
+ *
+ * T3 hands the selected options straight to the provider driver, which reads
+ * the ones it knows by id and ignores the rest — so a wrong id is not an
+ * error, it is a run at the model's default. That is exactly what shipped:
+ * 'effort' is claudeAgent's id, but codex names the same scale
+ * 'reasoningEffort' and opencode calls it 'variant', so every codex launch
+ * dropped the choice and ran at gpt-5.6-sol's default of low.
+ *
+ * The descriptor is therefore chosen by the value rather than by a table of
+ * ids: the scale that offers 'xhigh' is the scale the operator picked from.
+ * That validates the value and finds the id in one step, and needs no edit
+ * when a provider adds a knob. With no descriptors to consult — an older T3
+ * cache, or a test fixture — 'effort' remains the fallback.
+ */
+function effortOption(
+  effort: string,
+  descriptors: readonly ModelOptionDescriptor[] | undefined,
+): { id: string; value: string } | null {
+  if (!descriptors) return { id: 'effort', value: effort };
+  const match = descriptors.find((descriptor) => descriptor.values.includes(effort));
+  return match ? { id: match.id, value: effort } : null;
+}
+
+/** The efforts this model actually offers, for a refusal that can be acted on. */
+export function offeredEfforts(
+  descriptors: readonly ModelOptionDescriptor[] | undefined,
+): string[] {
+  const scale = descriptors?.find((descriptor) =>
+    descriptor.values.some((value) => EFFORT_WORDS.has(value)),
+  );
+  return scale ? [...scale.values] : [];
+}
+
+/**
+ * Words that only ever name a reasoning level. Used to tell an effort scale
+ * apart from the other select knobs (serviceTier, contextWindow, agent) when
+ * reporting what a model offers.
+ */
+const EFFORT_WORDS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 
 export type InstanceModelResolution =
   | { ok: true; model: string }

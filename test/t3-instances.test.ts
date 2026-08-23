@@ -45,6 +45,37 @@ describe('readInstanceReadiness', () => {
     expect(readiness.models).toEqual(['gpt-5.6-sol', 'gpt-5.6-terra']);
   });
 
+  test("reads each model's select knobs, keeping only the ones with values", () => {
+    // Recorded from ~/.t3/caches/codex.json on 2026-08-23. 'fastMode' is a
+    // boolean descriptor and carries no options array.
+    writeCache('codex', {
+      displayName: 'Codex',
+      enabled: true,
+      installed: true,
+      status: 'ready',
+      models: [
+        {
+          slug: 'gpt-5.6-sol',
+          capabilities: {
+            optionDescriptors: [
+              {
+                id: 'reasoningEffort',
+                label: 'Reasoning',
+                type: 'select',
+                options: [{ id: 'low', label: 'Low' }, { id: 'xhigh', label: 'Extra High' }],
+                currentValue: 'low',
+              },
+              { id: 'fastMode', label: 'Fast', type: 'boolean' },
+            ],
+          },
+        },
+      ],
+    });
+    expect(readInstanceReadiness('codex').options).toEqual({
+      'gpt-5.6-sol': [{ id: 'reasoningEffort', values: ['low', 'xhigh'] }],
+    });
+  });
+
   test('an instance whose CLI is not installed is not launchable, and says so', () => {
     // Recorded from ~/.t3/caches/opencode.json on 2026-08-07.
     writeCache('opencode', {

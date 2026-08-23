@@ -66,7 +66,36 @@ export const providerCacheSchema = z.object({
   version: z.string().nullable().optional(),
   auth: z.object({ status: z.string() }).loose().optional(),
   message: z.string().optional(),
-  models: z.array(z.object({ slug: z.string() }).loose()).default([]),
+  models: z
+    .array(
+      z
+        .object({
+          slug: z.string(),
+          capabilities: z
+            .object({
+              // Only 'select' descriptors matter here: the effort scale is one.
+              // Boolean ones (fastMode) carry no options array, so they are
+              // dropped rather than failing the parse.
+              optionDescriptors: z
+                .array(
+                  z
+                    .object({
+                      id: z.string(),
+                      type: z.string(),
+                      options: z
+                        .array(z.object({ id: z.string() }).loose())
+                        .default([]),
+                    })
+                    .loose(),
+                )
+                .default([]),
+            })
+            .loose()
+            .optional(),
+        })
+        .loose(),
+    )
+    .default([]),
 });
 export type ProviderCache = z.infer<typeof providerCacheSchema>;
 

@@ -16,12 +16,30 @@ import { providerCacheSchema, safeParseT3 } from './schemas.ts';
  * sentence the operator can act on.
  */
 
+/** One 'select' knob a model exposes, e.g. codex's reasoningEffort. */
+export interface ModelOptionDescriptor {
+  id: string;
+  values: string[];
+}
+
 export interface InstanceReadiness {
   instanceId: string;
   ready: boolean;
   /** Present when ready is false — a sentence fit to show on a card. */
   reason: string | null;
   models: string[];
+  /**
+   * The select knobs each model slug advertises. Every provider names its
+   * reasoning scale differently — claudeAgent calls it 'effort', codex
+   * 'reasoningEffort', opencode 'variant' — so the id cannot be assumed, and
+   * a guess is silently discarded by T3 rather than rejected. Carrying the
+   * instance's own descriptors is what lets a spawn send the id it uses.
+   *
+   * Optional: a caller that cannot supply them (a test double, an older
+   * cache) falls back to the historical 'effort' id rather than losing the
+   * launch.
+   */
+  options?: Record<string, ModelOptionDescriptor[]>;
 }
 
 /** Instance ids are slugs in T3; anything else cannot name a cache file. */
@@ -33,6 +51,7 @@ export function readInstanceReadiness(instanceId: string): InstanceReadiness {
     ready: false,
     reason,
     models: [],
+    options: {},
   });
 
   // config.yaml is hand-edited, so a typo must not become a read of an
@@ -58,6 +77,15 @@ export function readInstanceReadiness(instanceId: string): InstanceReadiness {
 
   const name = cache.displayName || instanceId;
   const models = cache.models.map((m) => m.slug);
+  const options: Record<string, ModelOptionDescriptor[]> = {};
+  for (const model of cache.models) {
+    options[model.slug] = (model.capabilities?.optionDescriptors ?? [])
+      .filter((descriptor) => descriptor.type === 'select')
+      .map((descriptor) => ({
+        id: descriptor.id,
+        values: descriptor.options.map((option) => option.id),
+      }));
+  }
 
   if (!cache.enabled) return notReady(`${name} is disabled in T3.`);
   if (!cache.installed) {
@@ -67,5 +95,5 @@ export function readInstanceReadiness(instanceId: string): InstanceReadiness {
     return notReady(cache.message ?? `${name} reports status '${cache.status}'.`);
   }
 
-  return { instanceId, ready: true, reason: null, models };
+  return { instanceId, ready: true, reason: null, models, options };
 }

@@ -110,6 +110,86 @@ describe('resolveT3Launch', () => {
     expect(result.modes).toEqual({ runtimeMode: 'full-access', interactionMode: 'plan' });
   });
 
+  // Every provider names the reasoning scale differently, and T3 ignores an
+  // option id its driver does not know rather than rejecting it — so sending
+  // claudeAgent's 'effort' to codex ran every launch at the model's default.
+  test("sends the effort under the id the instance's own descriptors use", () => {
+    const result = resolveT3Launch({
+      agent: 'codex',
+      profile: codex,
+      phase: plan,
+      model: 'gpt-5.6-sol',
+      effort: 'xhigh',
+      readiness: () => ({
+        instanceId: 'codex',
+        ready: true,
+        reason: null,
+        models: ['gpt-5.6-sol'],
+        options: {
+          'gpt-5.6-sol': [
+            { id: 'reasoningEffort', values: ['low', 'medium', 'high', 'xhigh', 'max'] },
+            { id: 'serviceTier', values: ['default', 'priority'] },
+          ],
+        },
+      }),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected success');
+    expect(result.modelSelection.options).toEqual([{ id: 'reasoningEffort', value: 'xhigh' }]);
+  });
+
+  test('refuses an effort the model does not offer, listing the ones it does', () => {
+    const result = resolveT3Launch({
+      agent: 'codex',
+      profile: codex,
+      phase: plan,
+      model: 'gpt-5.6-sol',
+      effort: 'ultra',
+      readiness: () => ({
+        instanceId: 'codex',
+        ready: true,
+        reason: null,
+        models: ['gpt-5.6-sol'],
+        options: {
+          'gpt-5.6-sol': [
+            { id: 'reasoningEffort', values: ['low', 'medium', 'high', 'xhigh', 'max'] },
+          ],
+        },
+      }),
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected failure');
+    expect(result.error).toContain('ultra');
+    expect(result.error).toContain('low, medium, high, xhigh, max');
+  });
+
+  // The descriptors belong to the slug T3 will run, not to the alias the
+  // agent's config named, so they are looked up after the alias is resolved.
+  test('reads the descriptors of the resolved slug, not the alias', () => {
+    const result = resolveT3Launch({
+      agent: 'claude',
+      profile: { ...codex, t3Instance: 'claudeAgent' },
+      phase: plan,
+      model: 'opus',
+      effort: 'ultrathink',
+      readiness: () => ({
+        instanceId: 'claudeAgent',
+        ready: true,
+        reason: null,
+        models: ['claude-opus-5', 'claude-opus-4-8'],
+        options: {
+          'claude-opus-5': [{ id: 'effort', values: ['low', 'high', 'ultrathink'] }],
+        },
+      }),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected success');
+    expect(result.modelSelection).toMatchObject({
+      model: 'claude-opus-5',
+      options: [{ id: 'effort', value: 'ultrathink' }],
+    });
+  });
+
   // The copilot agent's models list is written for the copilot CLI, but its
   // t3Instance is OpenCode, whose adapter rejects anything that is not
   // 'provider/model'. Sending the bare name failed inside T3 with

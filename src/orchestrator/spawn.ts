@@ -28,6 +28,7 @@ import {
   buildProjectCreateCommand,
   buildThreadCreateCommand,
   buildTurnStartCommand,
+  offeredEfforts,
   resolveInstanceModel,
   type ModelSelection,
 } from './t3/commands.ts';
@@ -345,11 +346,8 @@ export function resolveT3Launch(input: {
     };
   }
 
-  const modelSelection = buildModelSelection(input.profile, {
-    model: input.model,
-    effort: input.effort,
-  });
-  if (!modelSelection) {
+  const named = buildModelSelection(input.profile, { model: input.model });
+  if (!named) {
     return {
       ok: false,
       error: `T3 needs a specific model for '${input.agent}', but the resolved choice was '${input.model ?? 'none'}'. Pick a model in the drawer, or set one on the agent in config.yaml.`,
@@ -359,7 +357,7 @@ export function resolveT3Launch(input: {
   // The readiness check above already read the instance's model slugs; using
   // them here is what stops a name from the agent's CLI vocabulary reaching
   // T3 as a dispatch it can only reject.
-  const resolved = resolveInstanceModel(modelSelection.model, instance.models);
+  const resolved = resolveInstanceModel(named.model, instance.models);
   if (!resolved.ok) {
     return {
       ok: false,
@@ -367,9 +365,34 @@ export function resolveT3Launch(input: {
     };
   }
 
+  // Effort is resolved against the *resolved* slug, because the option ids and
+  // the levels on offer belong to the model T3 will actually run, not to the
+  // name the agent's config uses for it.
+  const descriptors = instance.options?.[resolved.model];
+  const modelSelection = buildModelSelection(input.profile, {
+    model: resolved.model,
+    effort: input.effort,
+    descriptors,
+  });
+  if (!modelSelection) {
+    return {
+      ok: false,
+      error: `T3 needs a specific model for '${input.agent}', but the resolved choice was '${input.model ?? 'none'}'. Pick a model in the drawer, or set one on the agent in config.yaml.`,
+    };
+  }
+  if (input.effort && !modelSelection.options) {
+    const offered = offeredEfforts(descriptors);
+    return {
+      ok: false,
+      error: `T3's '${resolved.model}' does not offer effort '${input.effort}'.${
+        offered.length ? ` It offers: ${offered.join(', ')}.` : ''
+      } Pick a different effort in the drawer, or fix the agent's efforts list in config.yaml.`,
+    };
+  }
+
   return {
     ok: true,
-    modelSelection: { ...modelSelection, model: resolved.model },
+    modelSelection,
     modes: t3ModesForPhase(input.phase),
   };
 }
