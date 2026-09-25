@@ -99,9 +99,14 @@ wins:
 3. **Per-phase default** — the **Agents** panel (top bar), or the chip on each
    lane header.
 
-Model and effort choices are dropdowns driven by each agent's capabilities. Edit
-the `models:` / `efforts:` lists under an agent in `config.yaml` if the CLI's
-options change.
+Model and effort choices are dropdowns driven by each agent's capabilities. The
+model list is whatever the agent's account offers right now, read from T3's
+provider caches (`~/.t3/caches`; Copilot's comes from OpenCode's
+`github-copilot/` models), so a model an org admin withdraws disappears from the
+picker on its own. Without T3 a built-in list is used. A `models:` list under an
+agent in `config.yaml` pins the picker by hand; `efforts:` works the same way.
+A saved default naming a model that is no longer offered is skipped rather than
+sent to the CLI.
 
 Codex runs in its interactive TUI with a workspace-write sandbox and on-request
 approvals. Mission Control also grants the task's own directory with `--add-dir`

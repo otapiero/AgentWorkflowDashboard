@@ -67,7 +67,10 @@ t3:
 agents:
   # Verified against claude 2.1.x: prompt is positional, standing rules go
   # through --append-system-prompt, and --effort sets reasoning effort.
-  # models/efforts populate the pickers; edit them if the CLI's options change.
+  # The model pickers list what each account offers right now, read from T3's
+  # provider caches (~/.t3/caches), with a built-in list as the fallback. Add a
+  # `models: [...]` line to an agent only to pin its picker by hand.
+  # efforts populate the effort pickers; edit them if the CLI's options change.
   claude:
     launch: 'claude'
     promptMode: positional
@@ -76,12 +79,11 @@ agents:
     instructionMode: flag
     instructionFlag: '--append-system-prompt'
     model: default
-    models: [default, opus, sonnet, haiku]
     efforts: [low, medium, high, xhigh, max]
     # T3 provider instance that runs this agent on the 't3' launcher. It
     # advertises released slugs rather than the CLI's aliases, so the launcher
     # reads each alias above as that family's newest release
-    # (opus -> claude-opus-5).
+    # (opus -> claude-opus-5-5).
     t3Instance: 'claudeAgent'
 
   # Verified against copilot 1.0.73: -i starts an interactive session with the
@@ -95,9 +97,6 @@ agents:
     effortFlag: '--effort'
     instructionMode: inline
     model: default
-    # Edit this list to match the models your copilot CLI actually offers
-    # (run /model in an interactive `copilot` session to see them).
-    models: [auto, claude-sonnet-5, gpt-5.6-luna, gpt-5.6-sol, gpt-5.6-terra]
     efforts: [none, minimal, low, medium, high, xhigh, max]
     # T3 has no GitHub Copilot CLI driver. The 't3' launcher therefore routes
     # copilot through OpenCode, which GitHub supports against a Copilot
@@ -106,7 +105,7 @@ agents:
     # using Copilot's models, not the Copilot CLI harness the 'wt' launcher
     # drives. Requires the `opencode` CLI installed and authenticated.
     # OpenCode names models 'provider/model', so the 't3' launcher qualifies
-    # the bare names above against the slugs the instance advertises
+    # its bare model names against the slugs the instance advertises
     # (claude-sonnet-5 -> github-copilot/claude-sonnet-5). 'auto' is a Copilot
     # CLI concept with no OpenCode equivalent, so it works only on 'wt'.
     t3Instance: 'opencode'
@@ -124,7 +123,6 @@ agents:
     effortValueTemplate: 'model_reasoning_effort="{{effort}}"'
     instructionMode: inline
     model: default
-    models: [default, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna]
     efforts: [low, medium, high, xhigh, max, ultra]
     extraArgs: ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request', '--add-dir', '{{taskDir}}']
     t3Instance: 'codex'

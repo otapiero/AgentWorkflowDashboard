@@ -50,6 +50,6 @@ describe('shared agent resolution', () => {
   test('turns the resolved values into a capability-safe picker selection', () => {
     expect(selectionForPhase(config, task, 'implement')).toEqual({ agent: 'codex', model: 'gpt-5.6-sol', effort: 'medium' });
     expect(selectionForPhase(config, { ...task, overrides: { agent: 'codex', model: 'opus', effort: 'low' } }, 'implement'))
-      .toEqual({ agent: 'codex', model: '', effort: '' });
+      .toEqual({ agent: 'codex', model: 'gpt-5.6-sol', effort: '' });
   });
 });

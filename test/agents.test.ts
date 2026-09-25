@@ -123,9 +123,17 @@ describe('resolveAgent — effort', () => {
 
   test('agent, model and effort can all be pinned together', () => {
     const r = resolveAgent(config, task(), 'plan', {
-      plan: { agent: 'copilot', model: 'gpt-5.4', effort: 'high' },
+      plan: { agent: 'copilot', model: 'gpt-6-sol', effort: 'high' },
     });
-    expect(r).toEqual({ agent: 'copilot', model: 'gpt-5.4', effort: 'high' });
+    expect(r).toEqual({ agent: 'copilot', model: 'gpt-6-sol', effort: 'high' });
+  });
+
+  test('a saved model the agent no longer offers falls back to the CLI default', () => {
+    // An org admin withdrew it, or it was mistyped: sending it fails the launch.
+    const r = resolveAgent(config, task(), 'plan', {
+      plan: { agent: 'copilot', model: 'luna-5.6', effort: 'max' },
+    });
+    expect(r).toEqual({ agent: 'copilot', model: null, effort: 'max' });
   });
 });
 
@@ -139,13 +147,10 @@ describe('agentCapabilities', () => {
 
   test("agentCapabilities > uses Copilot's dotted model identifiers", () => {
     const caps = agentCapabilities('copilot', config.agents.copilot as AgentProfile);
-    expect(caps.models).toEqual([
-      'auto',
-      'claude-sonnet-5',
-      'gpt-5.6-luna',
-      'gpt-5.6-sol',
-      'gpt-5.6-terra',
-    ]);
+    expect(caps.models[0]).toBe('auto');
+    expect(caps.models).toContain('claude-opus-5.5');
+    expect(caps.models).toContain('gpt-6-sol');
+    expect(caps.models).not.toContain('gpt-5.6-terra');
   });
 
   test("copilot's built-in effort list includes its extra levels", () => {

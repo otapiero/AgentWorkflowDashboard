@@ -38,7 +38,12 @@ export function resolveAgentValues(
   if (!agent) return { agent: null, model: null, effort: null };
 
   const defaults = config.agents.find((candidate) => candidate.name === agent)!;
-  const rawModel = oneTime.model ?? task.overrides?.model ?? phaseDefault?.model ?? defaults.defaultModel;
+  // A saved model the agent no longer offers (withdrawn by an org admin, or a
+  // typo) would fail the whole launch, so it yields to the next choice down.
+  const offered = (model: string | undefined) =>
+    !!model && (defaults.models.length === 0 || defaults.models.includes(model));
+  const rawModel = [oneTime.model, task.overrides?.model, phaseDefault?.model, defaults.defaultModel]
+    .find(offered);
   const rawEffort = oneTime.effort ?? task.overrides?.effort ?? phaseDefault?.effort ?? defaults.defaultEffort;
   return {
     agent,

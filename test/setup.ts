@@ -16,6 +16,9 @@ import { join } from 'node:path';
  */
 const root = mkdtempSync(join(tmpdir(), 'mc-test-root-'));
 process.env.MC_ROOT = root;
+// Likewise T3's home: model discovery reads its provider caches, and the
+// operator's real ones would make the built-in model lists untestable.
+process.env.T3_HOME ??= join(root, 't3');
 
 process.on('exit', () => {
   rmSync(root, { recursive: true, force: true });
