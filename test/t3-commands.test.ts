@@ -170,6 +170,10 @@ describe('buildTurnStartCommand', () => {
     expect(command.message.attachments).toEqual([]);
   });
 
+  test('rejects oversized input before dispatch without truncating user instructions', () => {
+    expect(() => buildTurnStartCommand({ ...input, prompt: 'x'.repeat(120001) })).toThrow(/120,000/);
+  });
+
   test('never asks T3 to bootstrap anything', () => {
     // The thread already exists by the time this is sent, and prepareWorktree
     // hard-codes path: null and picks its own directory, which would make the

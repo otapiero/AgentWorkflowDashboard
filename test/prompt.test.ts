@@ -189,6 +189,16 @@ describe('buildPrompt', () => {
 });
 
 describe('renderArtifactList', () => {
+  test('uses the manifest for a large collection instead of overflowing provider input', () => {
+    const refs = Array.from({ length: 7000 }, (_, n) => ({
+      name: `source-${n}.ts`, storedPath: `artifacts/source-${n}.ts`,
+      origin: 'repo' as const, originalPath: `src/source-${n}.ts`,
+    }));
+    const out = renderArtifactList(refs, 4088);
+    expect(out.length).toBeLessThan(10000);
+    expect(out).toContain('artifacts.json');
+    expect(out).toContain('7000');
+  });
   test('renders one line per artifact, pointing at the stored copy', () => {
     const out = renderArtifactList(
       [

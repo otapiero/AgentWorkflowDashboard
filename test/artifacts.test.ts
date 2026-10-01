@@ -19,6 +19,9 @@ import { taskDir, planPath, worktreePath, markerPath } from '../src/orchestrator
 import type { Config } from '../src/shared/types.ts';
 
 describe('parsePorcelainPaths', () => {
+  it('ignores deleted files even if a checkout recreates them before collection', () => {
+    expect(parsePorcelainPaths(' D src/app.ts\nD  src/old.ts\n?? docs/design.md\n')).toEqual(['docs/design.md']);
+  });
   it('extracts paths and resolves renames to their new name', () => {
     const out = ' M docs/spec.md\n?? docs/new.md\nR  a.md -> b.md\n';
     expect(parsePorcelainPaths(out)).toEqual(['docs/spec.md', 'docs/new.md', 'b.md']);
@@ -221,5 +224,11 @@ describe('snapshot + collectArtifacts', () => {
     writeFileSync(join(taskDir(ISSUE), 'research.md'), 'x');
     await collectArtifacts(config, ISSUE, 'custom');
     expect(snapshotAgeMs(ISSUE, 'custom')).toBeNull();
+  });
+
+  it('does not mark an unsuccessful plan complete when collecting its leftovers', async () => {
+    writeRunSnapshot(config, ISSUE, 'plan');
+    await collectArtifacts(config, ISSUE, 'plan');
+    expect(existsSync(markerPath(ISSUE, 'plan.done'))).toBe(false);
   });
 });

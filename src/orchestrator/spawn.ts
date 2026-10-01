@@ -7,6 +7,7 @@ import {
   markerPath,
   mcHome,
   promptPath,
+  runSnapshotPath,
   runPhaseScript,
   taskDir,
   worktreePath,
@@ -30,6 +31,7 @@ import {
   buildTurnStartCommand,
   offeredEfforts,
   resolveInstanceModel,
+  validateT3Prompt,
   type ModelSelection,
 } from './t3/commands.ts';
 import { readInstanceReadiness, type InstanceReadiness } from './t3/instances.ts';
@@ -424,6 +426,17 @@ export async function spawnPhase(
   );
   writePromptFile(task.issue, promptText);
 
+  const launcher = getSettings().launcher ?? config.launcher ?? 'wt';
+  const t3Plan = launcher === 't3'
+    ? resolveT3Launch({ agent, profile, phase, model, effort })
+    : undefined;
+  if (t3Plan && !t3Plan.ok) throw new Error(t3Plan.error);
+  if (launcher === 't3') validateT3Prompt(promptText);
+  // Never snapshot a checkout while git is still populating it.
+  if (launcher === 't3' || launcher === 'vscode') {
+    await ensureWorktree(config, task.issue, task.branch);
+  }
+
   // Snapshot the "before" picture for the runs whose output we capture. A
   // custom run counts: research and specs are exactly what should reach the
   // doc rail. Implement and the review fixers are not — their output is code.
@@ -454,15 +467,18 @@ export async function spawnPhase(
   };
   const specFile = writeSpec(spec);
 
-  const launcher = getSettings().launcher ?? config.launcher ?? 'wt';
-
   let command: string;
   let threadId: string | undefined;
 
   if (launcher === 't3') {
-    const plan = resolveT3Launch({ agent, profile, phase, model, effort });
-    if (!plan.ok) throw new Error(plan.error);
-    const launched = await launchT3(config, task, phase, { ...plan, prompt: promptText });
+    if (!t3Plan?.ok) throw new Error('T3 launch was not resolved.');
+    let launched;
+    try {
+      launched = await launchT3(config, task, phase, { ...t3Plan, prompt: promptText });
+    } catch (error) {
+      rmSync(runSnapshotPath(task.issue, phase.id), { force: true });
+      throw error;
+    }
     command = launched.command;
     threadId = launched.threadId;
   } else if (launcher === 'vscode') {

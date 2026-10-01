@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { ArtifactRef } from '../shared/types.ts';
 import {
   claudeCommandPath,
+  artifactsManifestPath,
   claudeCommandsDir,
   markerPath,
   planPath,
@@ -62,9 +63,12 @@ export function renderArtifactList(
   issue: number,
 ): string {
   if (refs.length === 0) return '(none)';
-  return refs
+  const list = refs
     .map((ref) => `- ${ref.name} — ${join(taskDir(issue), ref.storedPath)}`)
     .join('\n');
+  return list.length <= 10_000
+    ? list
+    : `${refs.length} collected files are indexed in ${artifactsManifestPath(issue)}. Read that manifest and select only documents relevant to this issue. Resolve storedPath relative to ${taskDir(issue)}. The collection may include repository files; do not read every entry.`;
 }
 
 export interface PromptTask {

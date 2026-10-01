@@ -274,6 +274,7 @@ export interface TurnStartInput {
  * does not mean "inherit", it means "no restrictions".
  */
 export function buildTurnStartCommand(input: TurnStartInput): unknown {
+  validateT3Prompt(input.prompt);
   return {
     type: 'thread.turn.start',
     commandId: input.commandId,
@@ -289,6 +290,13 @@ export function buildTurnStartCommand(input: TurnStartInput): unknown {
     interactionMode: input.modes.interactionMode,
     createdAt: input.createdAt,
   };
+}
+
+/** T3 validates provider input asynchronously, after accepting dispatch. */
+export function validateT3Prompt(prompt: string): void {
+  if (prompt.length > 120_000) {
+    throw new Error(`T3 prompt has ${prompt.length.toLocaleString('en-US')} characters; its limit is 120,000. Shorten the instructions or use an artifact manifest reference.`);
+  }
 }
 
 /**

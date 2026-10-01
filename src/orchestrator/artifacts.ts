@@ -16,6 +16,7 @@ import {
   artifactsDir,
   artifactsManifestPath,
   markerPath,
+  planPath,
   runSnapshotPath,
   taskDir,
   worktreePath,
@@ -38,7 +39,7 @@ import type { ArtifactRef, Config, PlanSnapshot, RunKind } from '../shared/types
 export function parsePorcelainPaths(stdout: string): string[] {
   return stdout
     .split(/\r?\n/)
-    .filter((line) => line.trim() !== '')
+    .filter((line) => line.trim() !== '' && !line.slice(0, 2).includes('D'))
     .map((line) => {
       const rest = line.slice(3); // strip the two status chars + separator
       const arrow = rest.indexOf(' -> ');
@@ -283,7 +284,10 @@ export async function collectArtifacts(
   );
   // Each run signs off with its own marker. Writing 'plan.done' from a custom
   // run would satisfy the Plan gate and move the card to Implement.
-  writeMarker(issue, `${kind}.done`); // mkdirs the markers dir as needed
+  // Capturing leftovers does not prove a failed planning run produced a plan.
+  if (kind !== 'plan' || existsSync(planPath(issue))) {
+    writeMarker(issue, `${kind}.done`);
+  }
   // Consume the sentinel: this run is now collected.
   rmSync(runSnapshotPath(issue, kind), { force: true });
   return refs;
