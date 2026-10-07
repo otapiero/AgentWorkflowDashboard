@@ -1120,6 +1120,8 @@ select.field {
 .scrim {
   position: fixed;
   inset: 0;
+  /* Above board controls and popovers, below the task drawer. */
+  z-index: 90;
   background: var(--scrim);
   backdrop-filter: blur(1.5px);
   border: 0;
@@ -1129,6 +1131,8 @@ select.field {
 
 .drawer {
   position: fixed;
+  /* Full-window viewers inherit this layer and must cover sticky board UI. */
+  z-index: 100;
   top: 0;
   right: 0;
   bottom: 0;
