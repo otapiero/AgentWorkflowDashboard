@@ -3,7 +3,24 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="dark light" />
+    <!-- Apply the stored theme before first paint; theme.ts owns it after mount. -->
+    <script>
+      (function () {
+        var c = 'system';
+        try { c = localStorage.getItem('mc-theme') || 'system'; } catch (e) {}
+        if (c === 'system') c = matchMedia('(prefers-color-scheme: light)').matches ? 'daylight' : 'graphite';
+        if (c !== 'graphite' && c !== 'midnight' && c !== 'daylight') c = 'graphite';
+        document.documentElement.dataset.theme = c;
+      })();
+    </script>
+    <!-- Geist; offline it falls back to Segoe UI / Cascadia Mono. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap"
+    />
     <!--
       Favicon as an inline data URI: three board lanes in the status colours
       (needs you / live / ready). Inlined rather than shipped as a file so the
