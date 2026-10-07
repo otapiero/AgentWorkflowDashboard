@@ -11,8 +11,20 @@ export function NotesList({ controller, scope, query, repoUrl, onEdit, onOpenTas
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reopened, setReopened] = useState<Note | null>(null);
+  const [now, setNow] = useState(Date.now);
   const list = useRef<HTMLDivElement>(null);
   const { active, settled } = selectNotes(controller.notes, controller.tasks, scope, query);
+  useEffect(() => {
+    const updateAge = () => setNow(Date.now());
+    const timer = window.setInterval(updateAge, 60_000);
+    window.addEventListener('focus', updateAge);
+    document.addEventListener('visibilitychange', updateAge);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', updateAge);
+      document.removeEventListener('visibilitychange', updateAge);
+    };
+  }, []);
   useEffect(() => {
     setReopened(null);
     if (revealed?.status === 'settled') setExpanded(true);
@@ -29,7 +41,7 @@ export function NotesList({ controller, scope, query, repoUrl, onEdit, onOpenTas
     catch (error) { setError(error instanceof Error ? error.message : String(error)); void controller.refresh(); }
     finally { setBusy(null); }
   }
-  const card = (note: Note) => <NoteCard key={note.id} note={note} tasks={controller.tasks} repoUrl={repoUrl} onOpen={onEdit} onOpenTask={onOpenTask} onStatus={note => void changeStatus(note)} busy={busy === note.id} disabled={!controller.available || !controller.connected} revealed={(reopened ?? revealed)?.id === note.id} />;
+  const card = (note: Note) => <NoteCard key={note.id} note={note} tasks={controller.tasks} repoUrl={repoUrl} onOpen={onEdit} onOpenTask={onOpenTask} onStatus={note => void changeStatus(note)} busy={busy === note.id} disabled={!controller.available || !controller.connected} revealed={(reopened ?? revealed)?.id === note.id} now={now} />;
   return <div className="notes-list" ref={list} aria-busy={controller.loading}>
     {!controller.connected && !controller.loading && <p className="notes-notice" role="status">Offline. Showing the last received notes. Drafts stay on this browser.</p>}
     {controller.error && <div className="notes-notice is-error" role="alert"><strong>{!controller.available ? 'Notes storage is unavailable.' : 'Could not load notes.'}</strong> {controller.error} <button className="btn is-sm" onClick={() => void controller.refresh()}>Retry</button></div>}

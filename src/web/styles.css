@@ -1424,7 +1424,12 @@ select.field {
 .notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 16px; align-items: stretch; }
 .notes-card { display: flex; flex-direction: column; min-width: 0; padding: 19px 20px 15px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
 .notes-card h3 { margin: 0 0 10px; color: var(--ink-strong); font: 600 17px/1.4 var(--notes-prose); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.notes-association { min-height: 25px; font-size: 12px; color: var(--dim); margin-bottom: 9px; }
+.notes-association { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; min-height: 25px; font-size: 12px; color: var(--dim); margin-bottom: 9px; }
+.notes-association-label { min-width: 0; overflow-wrap: anywhere; }
+.notes-age { display: inline-flex; flex-shrink: 0; align-items: center; gap: 3px; padding-top: 3px; }
+.notes-age.is-warning { color: var(--attention); }
+.notes-age.is-overdue { color: var(--fault); }
+.notes-age-icon { display: block; }
 .notes-task-badge { display: inline-flex; flex-wrap: wrap; gap: 4px 6px; max-width: 100%; color: var(--ink); padding: 3px 6px; margin-left: -6px; text-decoration: none; border-radius: 4px; text-align: left; font-size: 12px; line-height: 1.45; }
 .notes-task-badge:hover { background: var(--card-hi); text-decoration: underline; }
 .notes-task-badge > span:not(.notes-issue) { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
