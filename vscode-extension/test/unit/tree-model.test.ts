@@ -63,13 +63,14 @@ describe('tree model', () => {
     expect(buildChildren(snapshot(tasks), undefined, 'phase:ci', 'ci').map((node) => node.id)).toEqual(['task:all:ci:2']);
   });
 
-  test('rests tasks in the inbox and done lanes the pipeline does not configure', () => {
+  test('rests tasks in inbox, merged and done even when the pipeline does not configure them', () => {
     // config.yaml holds only the pipeline; the board brackets it with inbox and done,
     // and a task must be reachable while resting in either.
-    const tasks = [task({ issue: 1, phase: 'inbox' }), task({ issue: 2, phase: 'implement' }), task({ issue: 3, phase: 'done' })];
-    expect(buildChildren(snapshot(tasks), undefined, 'section:all').map((node) => node.id)).toEqual(['phase:inbox', 'phase:implement', 'phase:done']);
+    const tasks = [task({ issue: 1, phase: 'inbox' }), task({ issue: 2, phase: 'implement' }), task({ issue: 3, phase: 'done' }), task({ issue: 4, phase: 'merged' })];
+    expect(buildChildren(snapshot(tasks), undefined, 'section:all').map((node) => node.id)).toEqual(['phase:inbox', 'phase:implement', 'phase:merged', 'phase:done']);
     expect(buildChildren(snapshot(tasks), undefined, 'phase:inbox').map((node) => node.id)).toEqual(['task:all:inbox:1']);
     expect(buildChildren(snapshot(tasks), undefined, 'phase:done').map((node) => node.id)).toEqual(['task:all:done:3']);
+    expect(buildChildren(snapshot(tasks), undefined, 'phase:merged').map((node) => node.id)).toEqual(['task:all:merged:4']);
   });
 
   test('gives one task a unique element id in each visible placement', () => {

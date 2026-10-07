@@ -13,9 +13,10 @@ export function reconcile(
   manualPhase: Phase | null = null,
 ): DerivedState {
   const gates = computeGates(facts);
+  gates.done = manualPhase === 'done';
   const derivedPhase = derivePhase(facts);
   const badges = computeBadges(facts);
-  const { needsYou, needsYouReason } = computeNeedsYou(facts, derivedPhase);
+  const { needsYou, needsYouReason } = computeNeedsYou(facts, manualPhase === 'done' ? 'done' : derivedPhase);
 
   return {
     issue: facts.issue,
@@ -63,7 +64,7 @@ function isLive(facts: Facts): boolean {
 function derivePhase(facts: Facts): Phase {
   const { pr, review, checks } = facts;
 
-  if (pr.state === 'MERGED') return 'done';
+  if (pr.state === 'MERGED') return 'merged';
 
   if (pr.exists) {
     if (review.decision === 'APPROVED' && review.unresolvedThreads === 0) {
@@ -105,7 +106,8 @@ function computeGates(facts: Facts): Record<Phase, boolean> {
       facts.review.unresolvedThreads === 0,
     // Merging is always a deliberate human act; never auto-satisfied.
     merge: false,
-    done: facts.pr.state === 'MERGED',
+    merged: facts.pr.state === 'MERGED',
+    done: false,
   };
   // Guard against a phase being added to PHASES without a gate rule here.
   for (const phase of PHASES) {
@@ -219,6 +221,9 @@ function computeNeedsYou(
   // Something is actively working the task; wait for it.
   if (isLive(facts)) return no;
   if (derivedPhase === 'done') return no;
+  if (derivedPhase === 'merged') {
+    return { needsYou: true, needsYouReason: 'Merged, ready to mark Done and remove the worktree' };
+  }
 
   // Precedence mirrors derivePhase, so the reason always describes the lane the
   // card is resting in: review feedback outranks a red CI, because a PR with

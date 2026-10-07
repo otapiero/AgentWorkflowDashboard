@@ -39,7 +39,7 @@ export function task(options: {
       issue,
       derivedPhase: phase,
       displayPhase: phase,
-      gates: { inbox: true, plan: false, implement: false, publish: false, ci: checks === 'success', copilot_review: false, dev_review: false, merge: false, done: false },
+      gates: { inbox: true, plan: false, implement: false, publish: false, ci: checks === 'success', copilot_review: false, dev_review: false, merge: false, merged: false, done: false },
       badges: [],
       artifacts: [],
       needsYou: options.needsYou ?? false,

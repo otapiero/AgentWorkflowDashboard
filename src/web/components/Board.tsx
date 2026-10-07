@@ -14,7 +14,7 @@ interface Props {
 /**
  * Lanes are phases; a card sits in the lane of its displayPhase.
  *
- * Inbox and Done bracket the configured pipeline: they are states rather than
+ * Inbox, Merged and Done bracket the configured pipeline: they are states rather than
  * steps, so they are not in config.yaml, but a task must be able to rest in
  * either of them.
  */
@@ -22,6 +22,7 @@ export function Board({ config, tasks, selectedIssue, onOpen, onEditDefault }: P
   const lanes: PhaseConfig[] = [
     { id: 'inbox', label: 'Inbox', actor: 'you', gate: { type: 'manual' } },
     ...config.pipeline,
+    { id: 'merged', label: 'Merged', actor: 'you', gate: { type: 'manual' } },
     { id: 'done', label: 'Done', actor: 'none', gate: { type: 'manual' } },
   ];
 

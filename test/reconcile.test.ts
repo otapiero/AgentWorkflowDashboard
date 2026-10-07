@@ -42,7 +42,7 @@ function openPr(overrides: Partial<Facts> = {}): Facts {
 }
 
 describe('derivedPhase — pipeline order, first match wins', () => {
-  test('a merged PR is done, regardless of anything else', () => {
+  test('a merged PR waits in merged, regardless of anything else', () => {
     const d = reconcile(
       openPr({
         pr: { exists: true, number: 3119, url: 'u', state: 'MERGED' },
@@ -50,7 +50,18 @@ describe('derivedPhase — pipeline order, first match wins', () => {
         review: { decision: 'NONE', unresolvedThreads: 5, copilotUnresolved: 5 },
       }),
     );
-    expect(d.derivedPhase).toBe('done');
+    expect(d.derivedPhase).toBe('merged');
+    expect(d.displayPhase).toBe('merged');
+    expect(d.gates.merged).toBe(true);
+    expect(d.gates.done).toBe(false);
+  });
+
+  test('only a manual completion puts a merged task in done', () => {
+    const d = reconcile(openPr({ pr: { exists: true, number: 3119, url: 'u', state: 'MERGED' } }), 'done');
+    expect(d.derivedPhase).toBe('merged');
+    expect(d.displayPhase).toBe('done');
+    expect(d.gates.done).toBe(true);
+    expect(d.needsYou).toBe(false);
   });
 
   test('approved with no unresolved threads is ready to merge', () => {
@@ -418,12 +429,12 @@ describe('needsYou', () => {
     expect(d.needsYouReason).toMatch(/merge/i);
   });
 
-  test('a merged task never needs you', () => {
+  test('a merged task needs manual completion', () => {
     const d = reconcile(
       openPr({ pr: { exists: true, number: 3119, url: 'u', state: 'MERGED' } }),
     );
-    expect(d.needsYou).toBe(false);
-    expect(d.needsYouReason).toBeNull();
+    expect(d.needsYou).toBe(true);
+    expect(d.needsYouReason).toMatch(/mark done/i);
   });
 
   test('an untouched inbox issue does not need you', () => {

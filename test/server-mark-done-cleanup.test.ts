@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { createHealthResponse } from '../src/server/health.ts';
 import { registerRoutes } from '../src/server/routes.ts';
 import { Broadcaster } from '../src/server/sse.ts';
-import { saveState } from '../src/orchestrator/state.ts';
+import { getTask, saveState } from '../src/orchestrator/state.ts';
 import { worktreePath } from '../src/orchestrator/paths.ts';
 import type { CleanupResult } from '../src/orchestrator/cleanup.ts';
 import type { Config, TaskRecord } from '../src/shared/types.ts';
@@ -97,7 +97,7 @@ describe('POST /api/tasks/:issue/move', () => {
     await instance.inject({
       method: 'POST',
       url: `/api/tasks/${ISSUE}/move`,
-      payload: { phase: 'merge' },
+      payload: { phase: 'merged' },
     });
 
     expect(calls).toEqual([]);
@@ -146,9 +146,7 @@ describe('POST /api/tasks/:issue/move', () => {
     await instance.close();
   });
 
-  test('a cleanup that throws still records the placement', async () => {
-    // The operator asked to move the card. A checkout that will not go is
-    // untidy, not a reason to reject that.
+  test('failed cleanup reports the error and leaves completion available to retry', async () => {
     seedWorktree();
     const instance = Fastify();
     registerRoutes(instance, {
@@ -167,7 +165,9 @@ describe('POST /api/tasks/:issue/move', () => {
       payload: { phase: 'done' },
     });
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(500);
+    expect(res.json().error).toContain('worktree is held open');
+    expect(getTask(ISSUE)?.manualPhase).toBeNull();
     await instance.close();
   });
 });

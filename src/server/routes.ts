@@ -294,7 +294,6 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
       if (phase !== null && !isPhase(phase)) {
         return reply.code(400).send({ error: 'phase must be a valid phase or null' });
       }
-      upsertTask({ ...task, manualPhase: phase ?? null });
 
       // Marking a task done is the operator saying the work is finished, so
       // this is where its checkout is retired. Derivation is deliberately not
@@ -311,12 +310,14 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
             `[mc] #${task.issue} marked done - removed its worktree${extras.length ? ` (${extras.join(', ')})` : ''}`,
           );
         } catch (e) {
-          // The placement is already saved; a checkout that will not go is
-          // untidy, not a reason to reject the operator's action.
           console.error(`[mc] worktree cleanup failed for #${task.issue}:`, e);
+          return reply.code(500).send({
+            error: `Could not mark Done: ${e instanceof Error ? e.message : String(e)}. Retry after closing anything using the worktree.`,
+          });
         }
       }
 
+      upsertTask({ ...getTask(task.issue)!, manualPhase: phase ?? null });
       return refreshAndBroadcast();
     },
   );

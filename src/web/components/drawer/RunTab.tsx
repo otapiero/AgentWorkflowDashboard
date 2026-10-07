@@ -65,6 +65,15 @@ export function RunTab({ task, config, busy, run }: TabProps) {
       <section className="section">
         <div className="section-label">Mark progress</div>
         <div className="actions">
+          {task.derived.derivedPhase === 'merged' && (
+            <button
+              className="btn is-sm"
+              disabled={busy !== null}
+              onClick={() => run('complete', () => api.move(task.issue, task.manualPhase === 'done' ? null : 'done'))}
+            >
+              {busy === 'complete' ? 'Saving…' : task.manualPhase === 'done' ? 'Return to Merged' : 'Mark Done'}
+            </button>
+          )}
           {config.pipeline
             .filter((p) => p.gate.type === 'manual' && p.id !== 'merge')
             .map((p) => {
@@ -85,6 +94,9 @@ export function RunTab({ task, config, busy, run }: TabProps) {
               );
             })}
         </div>
+        {task.derived.derivedPhase === 'merged' && task.manualPhase !== 'done' && (
+          <p className="hint">Mark Done removes this issue's worktree and saves uncommitted files in its task folder.</p>
+        )}
       </section>
     </>
   );

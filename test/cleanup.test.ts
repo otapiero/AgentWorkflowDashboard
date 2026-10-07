@@ -2,12 +2,15 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { execa } from 'execa';
 
 import {
   parseRescuePaths,
+  cleanupDoneTask,
   rescueDir,
   shouldCleanupOnDone,
 } from '../src/orchestrator/cleanup.ts';
+import { worktreePath } from '../src/orchestrator/paths.ts';
 import type { Config } from '../src/shared/types.ts';
 
 let home: string;
@@ -100,6 +103,60 @@ describe('shouldCleanupOnDone', () => {
 });
 
 describe('rescuing files off a worktree', () => {
+  test('manual completion rescues nested untracked files and removes the git worktree', async () => {
+    const repo = join(home, 'repo');
+    mkdirSync(repo);
+    const git = (args: string[]) => execa('git', args, { cwd: repo });
+    await git(['init']);
+    await git(['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--allow-empty', '-m', 'initial']);
+    const worktree = worktreePath(3259);
+    await git(['worktree', 'add', '-b', 'issue-3259', worktree]);
+    mkdirSync(join(worktree, 'notes'));
+    writeFileSync(join(worktree, 'notes', 'research.md'), 'keep this research');
+    writeFileSync(join(worktree, '.gitignore'), '.env\nnode_modules/\n');
+    writeFileSync(join(worktree, '.env'), 'LOCAL_SETTING=keep');
+    const cfg = config({ deleteBranch: false });
+    cfg.repo.path = repo;
+
+    await cleanupDoneTask(cfg, 3259, 'issue-3259');
+
+    expect(existsSync(worktree)).toBe(false);
+    expect((await git(['worktree', 'list', '--porcelain'])).stdout).not.toContain('issue-3259');
+    expect(readFileSync(join(rescueDir(3259), 'research.md'), 'utf8')).toBe('keep this research');
+    expect(readFileSync(join(rescueDir(3259), '.env'), 'utf8')).toBe('LOCAL_SETTING=keep');
+  });
+
+  test('NUL status preserves arrows and whitespace and skips rename source records', () => {
+    expect(parseRescuePaths('?? notes -> final.md\0??  spaced.md\0R  renamed.md\0old.md\0'))
+      .toEqual(['notes -> final.md', ' spaced.md', 'renamed.md']);
+  });
+
+  test('retries removal of a deregistered folder only after a recorded rescue', async () => {
+    const worktree = worktreePath(3259);
+    mkdirSync(worktree, { recursive: true });
+    mkdirSync(rescueDir(3259), { recursive: true });
+    writeFileSync(join(rescueDir(3259), 'notes.md'), 'rescued before removal');
+    writeFileSync(join(worktree, '.git'), 'gitdir: missing-registration');
+    writeFileSync(join(worktree, 'notes.md'), 'saved after failed cleanup');
+    writeFileSync(join(worktree, 'scratch.md'), 'new research');
+    writeFileSync(join(home, 'tasks', '3259', 'worktree-cleanup.json'), JSON.stringify({
+      worktree, branch: 'issue-3259', rescued: ['notes.md'],
+    }));
+    await cleanupDoneTask(config({ deleteBranch: false }), 3259, 'issue-3259');
+    expect(existsSync(worktree)).toBe(false);
+    expect(readFileSync(join(rescueDir(3259), 'notes.md'), 'utf8')).toBe('rescued before removal');
+    expect(readFileSync(join(rescueDir(3259), 'notes-2.md'), 'utf8')).toBe('saved after failed cleanup');
+    expect(readFileSync(join(rescueDir(3259), 'scratch.md'), 'utf8')).toBe('new research');
+  });
+
+  test('an unreadable git status keeps the worktree for retry', async () => {
+    const worktree = worktreePath(3259);
+    mkdirSync(worktree, { recursive: true });
+    writeFileSync(join(worktree, 'notes.md'), 'keep');
+    await expect(cleanupDoneTask(config(), 3259, 'issue-3259')).rejects.toThrow(/inspect/i);
+    expect(readFileSync(join(worktree, 'notes.md'), 'utf8')).toBe('keep');
+  });
+
   test('copies each reported file into the task directory, flattened', async () => {
     const { rescueFiles } = await import('../src/orchestrator/cleanup.ts');
     const worktree = join(home, 'wt');

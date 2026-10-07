@@ -1,4 +1,5 @@
 import { existsSync, rmSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { execa } from 'execa';
 
 import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
@@ -164,7 +165,10 @@ export async function removeWorktree(
   config: Config,
   issue: number,
 ): Promise<void> {
-  const path = worktreePath(issue);
+  const path = resolve(worktreePath(issue));
+  if (!Number.isSafeInteger(issue) || issue <= 0 || dirname(path) !== resolve(worktreesDir())) {
+    throw new Error('Refusing to remove a path outside the task worktrees directory');
+  }
   await git(['worktree', 'remove', path, '--force'], config.repo.path);
   await git(['worktree', 'prune'], config.repo.path);
 

@@ -87,6 +87,13 @@ because state is re-derived from git/GitHub and the workspace on the next start.
 Agent terminals opened by a spawn run independently and keep going after the app
 closes.
 
+Merged PRs rest in the **Merged** column until you click **Mark Done** in the
+task's Run tab. Mark Done moves the card to Done and removes its worktree,
+saving uncommitted and ignored files in the task's `rescued-from-worktree` folder
+first. Disposable `node_modules` directories are excluded from the backup.
+If cleanup fails, the card stays in Merged and the drawer shows an error so
+you can retry. Tasks you previously pinned to Done stay there.
+
 ## Choosing agent, model and effort
 
 Every spawn resolves an agent, a model and a reasoning-effort level, strongest

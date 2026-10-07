@@ -17,6 +17,7 @@ export const PHASES = [
   'copilot_review',
   'dev_review',
   'merge',
+  'merged',
   'done',
 ] as const;
 
@@ -427,7 +428,7 @@ export interface Config {
    * before this existed should still get the behaviour.
    */
   cleanup?: {
-    /** Remove the task's worktree once its PR is merged. Default true. */
+    /** Remove the task's worktree when manually marked Done. Default true. */
     onDone?: boolean;
     /** Also drop the local branch. Default true. */
     deleteBranch?: boolean;

@@ -38,8 +38,8 @@ launcher: wt
 # git still reports as uncommitted -- scratch notes, exported fixtures,
 # research an agent wrote beside the code -- is copied into the task's own
 # directory, so an automatic cleanup can never destroy work that was never
-# committed. Gitignored files are not touched, so build output and
-# node_modules are left where they belong.
+# committed. Ignored local files are rescued too; disposable node_modules
+# directories are excluded from the backup and removed with the checkout.
 #
 # deleteBranch force-deletes: these repositories squash-merge, so the branch's
 # own commits never land in the base branch and `git branch -d` would refuse

@@ -78,13 +78,14 @@ function currentWorktreeNodes(snapshot: TaskStoreSnapshot, task: TaskWithDerived
 
 /**
  * config.yaml configures only the pipeline, but a task can rest before it in inbox
- * or after it in done. The board brackets its lanes the same way; grouping on the
+ * or after it in merged or done. The board brackets its lanes the same way; grouping on the
  * pipeline alone would make every resting task unreachable in the tree.
  */
 function laneOrder(config: BoardConfig): readonly { id: Phase; label: string }[] {
   return [
     { id: 'inbox', label: 'Inbox' },
     ...config.pipeline.map((phase) => ({ id: phase.id, label: phase.label })),
+    { id: 'merged', label: 'Merged' },
     { id: 'done', label: 'Done' },
   ];
 }

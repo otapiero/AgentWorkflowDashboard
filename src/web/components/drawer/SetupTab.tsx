@@ -72,7 +72,7 @@ export function SetupTab({ task, config, busy, run, onClose }: TabProps) {
           }
         >
           <option value="">Follow real status</option>
-          {['inbox', ...config.pipeline.map((p) => p.id), 'done'].map((id) => (
+          {['inbox', ...config.pipeline.map((p) => p.id), 'merged', 'done'].map((id) => (
             <option key={id} value={id}>
               Pin to {id}
             </option>
