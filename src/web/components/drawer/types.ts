@@ -12,4 +12,4 @@ export interface TabProps {
   onChanged: () => void;
 }
 
-export type DrawerTab = 'run' | 'plan' | 'history' | 'setup';
+export type DrawerTab = 'run' | 'plan' | 'notes' | 'history' | 'setup';

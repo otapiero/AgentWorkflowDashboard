@@ -10,6 +10,13 @@ import { ImportDrawer } from './components/ImportDrawer.tsx';
 import { Settings } from './components/Settings.tsx';
 import { BrandMark } from './components/bits.tsx';
 import type { TaskWithDerived } from '../shared/types.ts';
+import type { Note } from '../shared/notes.ts';
+import { useNotes } from './use-notes.ts';
+import { noteCounts, notesProjectId } from './notes-model.ts';
+import type { NotesScope } from './notes-model.ts';
+import { NotesPage } from './components/notes/NotesPage.tsx';
+import { NoteEditor } from './components/notes/NoteEditor.tsx';
+import type { DrawerTab } from './components/drawer/types.ts';
 
 /** Compact "Ns ago" / "Nm ago" for the last-checked heartbeat. */
 function ago(from: string, nowMs: number): string {
@@ -25,6 +32,24 @@ export function App() {
   const [tasks, setTasks] = useState<TaskWithDerived[]>([]);
   const [connected, setConnected] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
+  const [view, setView] = useState<'board' | 'notes'>('board');
+  const [initialTab, setInitialTab] = useState<DrawerTab>('run');
+  const [notesScope, setNotesScope] = useState<NotesScope>({ kind: 'all' });
+  const [notesQuery, setNotesQuery] = useState('');
+  const [editor, setEditor] = useState<{ note: Note | null; taskIssue: number | null } | null>(null);
+  const [revealedNote, setRevealedNote] = useState<Note | null>(null);
+  const projectId = config ? notesProjectId(config.repo.owner, config.repo.name) : '';
+  const notes = useNotes(projectId);
+  const openTask = (issue: number) => { setInitialTab('run'); setSelected(issue); };
+  const openTaskNotes = (issue: number) => { setInitialTab('notes'); setSelected(issue); };
+  const newNote = (taskIssue: number | null) => setEditor({ note: null, taskIssue });
+  const editNote = (note: Note) => setEditor({ note, taskIssue: note.taskIssue });
+  const viewTaskNotes = (issue: number) => { setSelected(null); setView('notes'); setNotesScope({ kind: 'task', issue }); setNotesQuery(''); };
+  function savedNote(note: Note) {
+    setEditor(null); setRevealedNote(note); setNotesQuery('');
+    setNotesScope(note.taskIssue === null ? { kind: 'general' } : { kind: 'task', issue: note.taskIssue });
+    if (selected !== note.taskIssue || selected === null) { setSelected(null); setView('notes'); }
+  }
   const [importing, setImporting] = useState(false);
   const [settingsPhase, setSettingsPhase] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -75,9 +100,10 @@ export function App() {
   // The board never polls; it renders whatever the last push contained. `poll`
   // is the every-cycle heartbeat carrying freshness and the API budget.
   useEffect(
-    () => subscribe({ onTasks: handleTasks, onPoll: setPollMeta, onStatus: setConnected }),
-    [handleTasks],
+    () => subscribe({ onTasks: handleTasks, onPoll: setPollMeta, onStatus: online => { setConnected(online); notes.onConnection(online); }, onOpen: notes.onOpen, onNotes: notes.onNotes, onNotesStatus: notes.onNotesStatus }),
+    [handleTasks, notes.onConnection, notes.onOpen, notes.onNotes, notes.onNotesStatus],
   );
+  useEffect(() => { void notes.refreshTasks(); }, [tasks, notes.refreshTasks]);
 
   // A local clock so "checked Ns ago" advances between pushes.
   useEffect(() => {
@@ -143,12 +169,16 @@ export function App() {
           </span>
         </div>
 
+        <nav className="notes-main-nav" aria-label="Repository views">
+          <button aria-current={view === 'board' ? 'page' : undefined} onClick={() => setView('board')}>Board</button>
+          <button aria-current={view === 'notes' ? 'page' : undefined} onClick={() => setView('notes')}>Notes <span className="notes-count">{noteCounts(notes.notes).all}</span></button>
+        </nav>
         <span className="topbar-spacer" />
 
         <div className="topbar-actions">
-          <button className="btn is-sm is-primary" onClick={() => setImporting(true)}>
+          {view === 'board' && <button className="btn is-sm is-primary" onClick={() => setImporting(true)}>
             + New from issue
-          </button>
+          </button>}
           <button
             className="btn is-sm"
             onClick={() => {
@@ -201,20 +231,20 @@ export function App() {
         </div>
       )}
 
-      <AttentionRail
+      {view === 'board' ? <><AttentionRail
         tasks={visible}
         config={config}
         selectedIssue={selected}
-        onOpen={setSelected}
+        onOpen={openTask}
       />
 
       <Board
         config={config}
         tasks={visible}
         selectedIssue={selected}
-        onOpen={setSelected}
+        onOpen={openTask}
         onEditDefault={editDefault}
-      />
+      /></> : <NotesPage controller={notes} scope={notesScope} onScope={scope => { setNotesScope(scope); setRevealedNote(null); }} query={notesQuery} onQuery={query => { setNotesQuery(query); setRevealedNote(null); }} repoUrl={`https://github.com/${config.repo.owner}/${config.repo.name}`} onNew={newNote} onEdit={editNote} onOpenTask={openTaskNotes} revealed={revealedNote} />}
 
       {importing && (
         <ImportDrawer
@@ -239,8 +269,16 @@ export function App() {
           config={config}
           onClose={() => setSelected(null)}
           onChanged={refresh}
+          initialTab={initialTab}
+          notes={notes}
+          onNewNote={newNote}
+          onEditNote={editNote}
+          onOpenTaskNotes={openTaskNotes}
+          onViewTaskNotes={viewTaskNotes}
+          revealedNote={revealedNote}
         />
       )}
+      {editor && <NoteEditor controller={notes} note={editor.note} taskIssue={editor.taskIssue} onClose={() => setEditor(null)} onSaved={savedNote} />}
     </div>
   );
 }

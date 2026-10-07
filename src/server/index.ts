@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import Fastify from 'fastify';
@@ -10,6 +10,9 @@ import { startPoller } from '../orchestrator/poller.ts';
 import { registerRoutes } from './routes.ts';
 import { Broadcaster } from './sse.ts';
 import { createHealthResponse } from './health.ts';
+import { mcHome, projectSlug } from '../orchestrator/paths.ts';
+import { loadState } from '../orchestrator/state.ts';
+import { NotesService } from '../orchestrator/notes.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const distWeb = join(here, '..', '..', 'dist', 'web');
@@ -20,6 +23,8 @@ const packageJson = JSON.parse(
 async function main(): Promise<void> {
   let config;
   try {
+    // A project switch applies to the next process, never this server's paths.
+    process.env.MC_HOME = resolve(mcHome());
     config = loadConfig();
   } catch (err) {
     console.error(err instanceof Error ? err.message : String(err));
@@ -29,6 +34,15 @@ async function main(): Promise<void> {
   const app = Fastify({ logger: false });
   const broadcaster = new Broadcaster();
   const health = createHealthResponse(packageJson.version);
+  const notes = new NotesService({
+    home: process.env.MC_HOME!,
+    projectId: projectSlug(config.repo.owner, config.repo.name),
+    tasks: () => loadState().tasks.map(({ issue, title }) => ({ issue, title })),
+    onSnapshot: snapshot => broadcaster.send('notes', snapshot),
+    onStatus: status => broadcaster.send('notes-status', status),
+  });
+  await notes.start();
+  app.addHook('onClose', async () => notes.close());
 
   // Reconciles once immediately, then on the configured interval. The startup
   // pass is what recovers state after the app was closed or crashed. `tasks`
@@ -39,7 +53,7 @@ async function main(): Promise<void> {
     hasClients: () => broadcaster.size > 0,
   });
 
-  registerRoutes(app, { config, broadcaster, refresh: poller.runNow, health });
+  registerRoutes(app, { config, broadcaster, refresh: poller.runNow, health, notes });
 
   if (existsSync(distWeb)) {
     await app.register(fastifyStatic, { root: distWeb });

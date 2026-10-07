@@ -69,6 +69,7 @@ export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
           <h2 className="drawer-title">Agents &amp; launch</h2>
         </header>
 
+        <div className="drawer-body">
         {error && (
           <div className="section">
             <p className="error">{error}</p>
@@ -159,6 +160,7 @@ export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
             ))}
           </div>
         </section>
+        </div>
       </aside>
     </>
   );

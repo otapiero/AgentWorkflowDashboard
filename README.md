@@ -239,11 +239,158 @@ context, and passes the result to the agent verbatim — the delivery path that
 does work. If your project has its own PR-publishing skill or command,
 `mc-publish` will use it by name.
 
+## Repository notes and agent tools
+
+Open **Notes** beside Board to capture a general note or link one to a task.
+Task drawers also have a Notes tab. Notes contain plain text and an optional
+title. Settle moves a note to the collapsed Settled section; Reopen returns it
+to active notes. Completing or forgetting a task never deletes its notes.
+
+The authoritative file is
+`%USERPROFILE%\.mission-control\projects\<owner>__<repo>\notes.json`, separate
+from board state and worktrees. `MC_ROOT` relocates the install, `MC_PROJECT`
+selects a project, and `MC_HOME` overrides its home. The running server pins
+that project until restart. An invalid store disables notes while the board
+remains usable, and preserves the original file.
+
+If notes report `NOTES_ALREADY_OPEN`, use the server already running for that
+project. If ownership metadata is damaged, stop every server for the project
+and back up `notes.json` before repairing the lock directories. Only after
+confirming those processes have stopped, remove the damaged `notes.json.lock`
+directory and its sibling `notes.json.lock.recovery` if present, then restart.
+Never delete `notes.json` to clear a lock. For `NOTES_STORE_INVALID`, restore a
+known good backup or repair the file while the server is stopped.
+
+### Connect a local agent
+
+Mission Control's HTTP server must be running for all MCP reads and writes.
+Closing the browser is fine. Stopping the server produces `MC_UNAVAILABLE`;
+the adapter never writes the data file itself. Its URL must be a loopback HTTP
+origin, such as `http://127.0.0.1:4317`. It follows no redirects and checks the
+repository on every request.
+
+Run this preparation in PowerShell. Replace the installation path with your
+stable Mission Control checkout, where you have run `npm install`. Use a
+stable path rather than a task worktree that will later be removed.
+
+```powershell
+$mcInstall = (Resolve-Path 'C:\Tools\MissionControl').Path
+$mcNode = (Get-Command node).Source
+$mcTsx = Join-Path $mcInstall 'node_modules\tsx\dist\cli.mjs'
+$mcCli = Join-Path $mcInstall 'src\orchestrator\cli.ts'
+
+# Find the repository slug, for example acme__widgets.
+& $mcNode $mcTsx $mcCli project list
+$mcProject = 'acme__widgets'
+$mcServerUrl = 'http://127.0.0.1:4317'
+```
+
+Start Mission Control for that repository in another terminal, or keep its
+existing server running. The header should show the intended repository.
+For a new server, select its project before launch:
+
+```powershell
+$env:MC_PROJECT = 'acme__widgets'
+npm start
+```
+
+Run `npm start` from the Mission Control installation. If you already set
+`MC_HOME`, that explicit home takes precedence over project selection.
+
+Choose the registration command for your client. These add a user-scoped
+entry with absolute Node, tsx, and CLI paths; no settings go into the managed
+repository. Use a distinct server name and URL for each repository you serve.
+
+```powershell
+# Codex CLI, user configuration in ~/.codex/config.toml
+codex mcp add mission-control-notes -- $mcNode $mcTsx $mcCli mcp --project $mcProject --server-url $mcServerUrl
+codex mcp get mission-control-notes
+
+# Claude Code, explicitly user-scoped
+claude mcp add -s user --transport stdio mission-control-notes -- $mcNode $mcTsx $mcCli mcp --project $mcProject --server-url $mcServerUrl
+claude mcp list
+
+# Native GitHub Copilot CLI, user configuration in ~/.copilot/mcp-config.json
+copilot mcp add mission-control-notes -- $mcNode $mcTsx $mcCli mcp --project $mcProject --server-url $mcServerUrl
+copilot mcp list
+```
+
+The registration syntax follows the current official guides for
+[Codex](https://learn.chatgpt.com/docs/extend/mcp?surface=cli),
+[Claude Code](https://code.claude.com/docs/en/mcp), and
+[Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers).
+Keep your client's normal tool approval settings. Read tools declare that
+they are read-only; write approval remains the host's decision.
+
+| Tool | Inputs and behavior |
+| --- | --- |
+| `tasks_list` | Optional `search`; lists current board issue numbers and titles |
+| `notes_list` | `scope`: `all`, `general`, or `task`; task scope requires `taskIssue`. `status`: `active`, `settled`, or `all`, active by default. Optional `search` |
+| `notes_get` | `id`; returns full text and the latest revision |
+| `notes_create` | Required `body`; optional `title`, `taskIssue`, and UUID `clientRequestId`. Omitted or null task means General |
+| `notes_update` | `id`, `expectedRevision`, and changed `title`, `body`, or `taskIssue`. Null title or task clears it |
+| `notes_set_status` | `id`, `expectedRevision`, and `status`: `active` to reopen or `settled` |
+
+Task numbers are GitHub issue numbers. An unknown supplied number returns
+`TASK_NOT_FOUND`; use `tasks_list` to resolve a task named in prose. Titles
+are capped at 240 characters and bodies at 64 KiB in UTF-8, with whitespace
+preserved. Tool results include structured data and readable text.
+
+Creation retries use the same UUID. If a creation response is uncertain, its
+error includes `clientRequestId`. Retry with that ID and the exact original
+body, title, and task association; generating another ID may create a second
+note. For revision conflicts, read `currentNote` or call `notes_get` before
+deciding on another edit. Uncertain updates are not retried automatically.
+
+Example requests to your agent:
+
+- "Save this as a general note: check the release timing."
+- "Create a note for task 42: confirm the deployment order."
+- "List the settled notes for task 42, then reopen the deployment note."
+
+### T3 and OpenCode
+
+Native Copilot registration does not configure T3's Copilot provider. That
+provider uses OpenCode and needs its own MCP entry in the configuration loaded
+by that OpenCode process. Codex and Claude providers may also use different
+configuration roots; check the provider's environment before assuming they
+share native CLI settings.
+
+For standalone OpenCode, merge the following `mcp` entry into its user config,
+`~/.config/opencode/opencode.json`, preserving any existing settings. Replace
+all three paths and the project slug with your values. A custom file outside
+the repository can instead be selected with `OPENCODE_CONFIG`.
+
+```json
+{
+  "mcp": {
+    "mission-control-notes": {
+      "type": "local",
+      "command": [
+        "C:/Program Files/nodejs/node.exe",
+        "C:/Tools/MissionControl/node_modules/tsx/dist/cli.mjs",
+        "C:/Tools/MissionControl/src/orchestrator/cli.ts",
+        "mcp", "--project", "acme__widgets",
+        "--server-url", "http://127.0.0.1:4317"
+      ],
+      "enabled": true
+    }
+  }
+}
+```
+
+Check connection with `opencode mcp list`. See OpenCode's official
+[MCP](https://opencode.ai/docs/mcp-servers/) and
+[configuration](https://opencode.ai/docs/config/) guides. Standalone OpenCode
+connection has been smoke-tested with disposable settings. T3 provider
+loading and model-driven note calls in each host have not been verified.
+
 ## Layout
 
 ```
 src/
   shared/types.ts          vocabulary shared by every layer
+  shared/notes.ts          note input and response contracts
   orchestrator/            deterministic core (no server required)
     reconcile.ts           PURE: Facts -> phase, gates, badges, needsYou
     facts.ts               gathers git + gh + markers into Facts
@@ -255,6 +402,7 @@ src/
     init.ts migrate.ts     first-run setup and the legacy move
     cli.ts                 headless harness
   server/                  Fastify REST + SSE, static hosting
+  mcp/                     stdio tools calling the loopback notes API
   web/                     React board (instrument panel)
 assets/
   claude/commands/mc-*.md  shared prompt sources, installed to ~/.claude/commands
@@ -265,7 +413,7 @@ scripts/install.ps1
 
 Runtime state lives entirely under `%USERPROFILE%\.mission-control\`: shared
 `scripts/` and the T3 credential at the root, and one directory per repository
-under `projects/<owner>__<name>/` holding `config.yaml`, `state.json`,
+under `projects/<owner>__<name>/` holding `config.yaml`, `state.json`, `notes.json`,
 `tasks/<issue>/` and `worktrees/issue-<n>/`.
 
 ## Testing
