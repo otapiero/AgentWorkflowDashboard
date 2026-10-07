@@ -17,6 +17,8 @@ interface Props {
   /** The agent used when this field inherits, so the picker can offer its models. */
   inheritedAgent?: string | null;
   inheritAgentLabel?: string;
+  /** Settings layout: a caption over each field and plain option text. */
+  labelled?: boolean;
 }
 
 export function AgentPicker({
@@ -25,6 +27,7 @@ export function AgentPicker({
   onChange,
   inheritedAgent,
   inheritAgentLabel = 'Inherit',
+  labelled = false,
 }: Props) {
   const effectiveAgentName = value.agent || inheritedAgent || agents[0]?.name;
   const agent = agents.find((a) => a.name === effectiveAgentName);
@@ -35,6 +38,56 @@ export function AgentPicker({
 
   function changeAgent(nextAgentName: string) {
     onChange(selectionForAgent(value, agents, nextAgentName, inheritedAgent));
+  }
+
+  if (labelled) {
+    return (
+      <div className="picker is-labelled">
+        <label className="picker-field">
+          <span className="picker-caption">Agent</span>
+          <span className="select">
+            <select value={value.agent} onChange={(e) => changeAgent(e.target.value)}>
+              <option value="">{inheritAgentLabel}</option>
+              {agents.map((a) => (
+                <option key={a.name} value={a.name}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </span>
+        </label>
+        <label className="picker-field">
+          <span className="picker-caption">Model</span>
+          <span className="select">
+            <select value={value.model} onChange={(e) => onChange({ ...value, model: e.target.value })}>
+              <option value="">Default</option>
+              {models.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </span>
+        </label>
+        <label className="picker-field">
+          <span className="picker-caption">Effort</span>
+          {agent?.hasEffort ? (
+            <span className="select">
+              <select value={value.effort} onChange={(e) => onChange({ ...value, effort: e.target.value })}>
+                <option value="">Default</option>
+                {efforts.map((ef) => (
+                  <option key={ef} value={ef}>
+                    {ef}
+                  </option>
+                ))}
+              </select>
+            </span>
+          ) : (
+            <span className="select is-disabled">Not supported</span>
+          )}
+        </label>
+      </div>
+    );
   }
 
   return (

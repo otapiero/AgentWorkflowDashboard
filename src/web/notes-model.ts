@@ -78,3 +78,9 @@ export function acceptStatus(state: NotesState, status: NotesStatus, generation:
   if (!belongs(state, status, generation)) return state;
   return { ...state, serverSessionId: status.serverSessionId, available: status.available, loading: status.available ? state.loading : false, error: status.available ? null : status.error ?? 'Notes storage is unavailable.' };
 }
+/** Whole days since the note was written; the warning age the note cards show. */
+export function noteAgeDays(note: Note, now: number): number { return Math.floor((now - Date.parse(note.createdAt)) / 86_400_000); }
+/** Active notes old enough to warn about (two days and up), oldest first. */
+export function staleNotes(notes: Note[], now: number): Note[] {
+  return notes.filter(n => n.status === 'active' && noteAgeDays(n, now) >= 2).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+}

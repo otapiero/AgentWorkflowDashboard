@@ -1,80 +1,132 @@
 import { Card } from './Card.tsx';
+import { AgentChip, IconCheck, IconPullRequest } from './bits.tsx';
 import type { BoardConfig } from '../api.ts';
 import type { PhaseConfig, TaskWithDerived } from '../../shared/types.ts';
+
+/** Done keeps its history short on the board: the rest is in the Done view. */
+const DONE_PREVIEW = 8;
+
+export function laneDomId(phaseId: string): string {
+  return `lane-${phaseId}`;
+}
+
+/** Finished tasks as one-line rows, with the PR they shipped in. */
+export function DoneList({
+  tasks,
+  selectedIssue,
+  onOpen,
+  limit,
+  onShowAll,
+}: {
+  tasks: TaskWithDerived[];
+  selectedIssue: number | null;
+  onOpen: (issue: number) => void;
+  limit?: number;
+  onShowAll?: () => void;
+}) {
+  const shown = limit === undefined ? tasks : tasks.slice(0, limit);
+  return (
+    <div className="done-list">
+      {shown.map((task) => {
+        const pr = task.derived.badges.find((b) => b.kind === 'pr');
+        return (
+          <button
+            key={task.issue}
+            type="button"
+            className={`done-item${task.issue === selectedIssue ? ' is-selected' : ''}`}
+            onClick={() => onOpen(task.issue)}
+          >
+            <IconCheck />
+            <span className="card-issue">#{task.issue}</span>
+            <span className="done-title" dir="auto">
+              {task.title}
+            </span>
+            {pr && (
+              <span className="done-pr" title={`Pull request ${pr.label}`}>
+                <IconPullRequest />
+              </span>
+            )}
+          </button>
+        );
+      })}
+      {shown.length < tasks.length && onShowAll && (
+        <button type="button" className="done-more" onClick={onShowAll}>
+          Show {tasks.length - shown.length} more
+        </button>
+      )}
+    </div>
+  );
+}
 
 interface Props {
   phase: PhaseConfig;
   tasks: TaskWithDerived[];
   config: BoardConfig;
-  collapsed: boolean;
-  grow: number;
   selectedIssue: number | null;
+  noteCounts: Record<number, number>;
   onOpen: (issue: number) => void;
+  onOpenNotes: (issue: number) => void;
   onEditDefault: (phaseId: string) => void;
+  onShowDone: () => void;
 }
 
 export function Lane({
   phase,
   tasks,
   config,
-  collapsed,
-  grow,
   selectedIssue,
+  noteCounts,
   onOpen,
+  onOpenNotes,
   onEditDefault,
+  onShowDone,
 }: Props) {
   const needsAttention = tasks.some((t) => t.derived.needsYou);
   const isAgentPhase = config.agents.some((agent) => agent.name === phase.actor);
   const override = config.phaseDefaults[phase.id];
   const defaultAgent = override?.agent ?? (isAgentPhase ? phase.actor : null);
-
-  // An empty lane is a labelled rail: it keeps its place in the pipeline
-  // without holding open a share of the width it has nothing to put in.
-  if (collapsed) {
-    return (
-      <section className="lane is-collapsed" aria-label={`${phase.label}, empty`}>
-        <button
-          className="lane-rail"
-          onClick={() => isAgentPhase && onEditDefault(phase.id)}
-          title={
-            isAgentPhase ? 'Set the default agent and model for this phase' : phase.label
-          }
-        >
-          {phase.label}
-        </button>
-      </section>
-    );
-  }
+  const isDone = phase.id === 'done';
 
   return (
     <section
-      className={`lane${needsAttention ? ' has-attention' : ''}`}
-      style={{ flexGrow: grow }}
+      id={laneDomId(phase.id)}
+      className={`lane${needsAttention ? ' has-attention' : ''}${isAgentPhase ? ' is-agent' : ''}${
+        isDone ? ' is-done' : ''
+      }`}
+      aria-label={`${phase.label}, ${tasks.length} ${tasks.length === 1 ? 'task' : 'tasks'}`}
     >
       <header className="lane-head">
+        <span className="lane-dot" aria-hidden />
         <span className="lane-name">{phase.label}</span>
-        <span className="lane-count">{tasks.length || ''}</span>
-        {isAgentPhase && (
+        <span className="lane-count">{tasks.length}</span>
+        {isAgentPhase && defaultAgent && (
           <button
             className="lane-default"
             onClick={() => onEditDefault(phase.id)}
             title="Set the default agent and model for this phase"
           >
-            {defaultAgent}
-            {override?.model ? ` · ${override.model}` : ''}
+            <AgentChip agent={defaultAgent} model={override?.model} showAgent />
           </button>
         )}
       </header>
       <div className="lane-body">
-        {tasks.length === 0 ? (
-          <p className="lane-empty">·</p>
+        {isDone ? (
+          <DoneList
+            tasks={tasks}
+            selectedIssue={selectedIssue}
+            onOpen={onOpen}
+            limit={DONE_PREVIEW}
+            onShowAll={onShowDone}
+          />
         ) : (
           tasks.map((task) => (
             <Card
               key={task.issue}
               task={task}
               selected={task.issue === selectedIssue}
+              noteCount={noteCounts[task.issue] ?? 0}
               onOpen={onOpen}
+              onOpenNotes={onOpenNotes}
             />
           ))
         )}

@@ -116,9 +116,9 @@ export function ImportDrawer({ onBoard, onImported, onClose }: Props) {
 
         <section className="section stack">
           {canAddDirect && (
-            <button className="card" onClick={() => void add(typedNumber)}>
+            <button className="issue-row" onClick={() => void add(typedNumber)}>
               <div className="card-issue">Add directly</div>
-              <div className="card-title" style={{ marginBottom: 0 }}>
+              <div className="card-title">
                 Import #{typedNumber}
               </div>
             </button>
@@ -139,7 +139,7 @@ export function ImportDrawer({ onBoard, onImported, onClose }: Props) {
             return (
               <button
                 key={issue.number}
-                className="card"
+                className="issue-row"
                 disabled={already || busy !== null}
                 onClick={() => void add(issue.number)}
               >
@@ -150,7 +150,7 @@ export function ImportDrawer({ onBoard, onImported, onClose }: Props) {
                     ? ` · ${issue.assignees.join(', ')}`
                     : ''}
                 </div>
-                <div className="card-title" style={{ marginBottom: 0 }}>
+                <div className="card-title">
                   {busy === issue.number ? 'Adding…' : issue.title}
                 </div>
               </button>
