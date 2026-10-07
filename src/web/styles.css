@@ -2211,6 +2211,8 @@ select.field {
 }
 
 .notes-panel .notes-task-options {
+  left: auto;
+  right: 0;
   width: 320px;
   max-width: calc(100vw - 32px);
 }
