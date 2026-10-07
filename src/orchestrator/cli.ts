@@ -128,12 +128,27 @@ function printDerived(task: TaskRecord, derived: ReturnType<typeof reconcile>): 
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   if (!command || command === 'help') {
-    console.log('commands: init | migrate | project [list|use <slug>] | doctor | issues | import <issue> | forget <issue> | facts <issue> | reconcile <issue> | list | spawn <issue> <phase> | collect <issue>');
+    console.log('commands: init | migrate | project [list|use <slug>] | mcp --project <slug> --server-url <loopback-url> | doctor | issues | import <issue> | forget <issue> | facts <issue> | reconcile <issue> | list | spawn <issue> <phase> | collect <issue>');
     return;
   }
 
   // Commands that run *before* a config exists must be handled here — the
   // loadConfig() below is exactly what they are there to make possible.
+  if (command === 'mcp') {
+    const options: Record<string, string> = {};
+    for (let index = 0; index < rest.length; index += 2) {
+      const flag = rest[index]; const value = rest[index + 1];
+      if (!flag || !['--project', '--server-url'].includes(flag) || !value || value.startsWith('--') || flag in options) {
+        die('usage: mcp --project <slug> --server-url <loopback-url>');
+      }
+      options[flag] = value;
+    }
+    if (!options['--project'] || !options['--server-url']) die('usage: mcp --project <slug> --server-url <loopback-url>');
+    const { runNotesMcp } = await import('../mcp/server.ts');
+    runNotesMcp({ projectId: options['--project'], serverUrl: options['--server-url'] });
+    return;
+  }
+
   if (command === 'init') {
     const repo = await detectRepo(process.cwd());
     const { slug, configPath } = initProject(repo, { force: rest.includes('--force') });

@@ -10,17 +10,29 @@ import { HistoryTab } from './drawer/HistoryTab.tsx';
 import { SetupTab } from './drawer/SetupTab.tsx';
 import type { DrawerTab, TabProps } from './drawer/types.ts';
 import type { TaskWithDerived } from '../../shared/types.ts';
+import type { Note } from '../../shared/notes.ts';
+import type { NotesController } from '../use-notes.ts';
+import { noteCounts } from '../notes-model.ts';
+import { NotesTab } from './drawer/NotesTab.tsx';
 
 interface Props {
   task: TaskWithDerived;
   config: BoardConfig;
   onClose: () => void;
   onChanged: () => void;
+  initialTab?: DrawerTab;
+  notes: NotesController;
+  onNewNote: (issue: number) => void;
+  onEditNote: (note: Note) => void;
+  onOpenTaskNotes: (issue: number) => void;
+  onViewTaskNotes: (issue: number) => void;
+  revealedNote: Note | null;
 }
 
 const TABS: { id: DrawerTab; label: string }[] = [
   { id: 'run', label: 'Run' },
   { id: 'plan', label: 'Plan' },
+  { id: 'notes', label: 'Notes' },
   { id: 'history', label: 'History' },
   { id: 'setup', label: 'Setup' },
 ];
@@ -41,8 +53,8 @@ function clampWidth(px: number): number {
  * is "launch something", and remembering you were last on History is not a
  * service.
  */
-export function Drawer({ task, config, onClose, onChanged }: Props) {
-  const [tab, setTab] = useState<DrawerTab>('run');
+export function Drawer({ task, config, onClose, onChanged, initialTab = 'run', notes, onNewNote, onEditNote, onOpenTaskNotes, onViewTaskNotes, revealedNote }: Props) {
+  const [tab, setTab] = useState<DrawerTab>(initialTab);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -70,17 +82,17 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
   }, []);
 
   useEffect(() => {
-    setTab('run');
+    setTab(initialTab);
     setError(null);
     closeRef.current?.focus();
-  }, [task.issue]);
+  }, [task.issue, initialTab]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       // An overlay (document workbench, prompt preview, full-window compose)
       // owns Escape while it is up.
-      if (document.querySelector('.plan-editor-scrim, .doc-scrim')) return;
+      if (document.querySelector('.plan-editor-scrim, .doc-scrim, .notes-editor-scrim')) return;
       onClose();
     };
     window.addEventListener('keydown', onKey);
@@ -188,6 +200,7 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
               onClick={() => setTab(t.id)}
             >
               {t.label}
+              {t.id === 'notes' && <span className="drawer-tab-n">{noteCounts(notes.notes).tasks[task.issue] ?? 0}</span>}
               {t.id === 'history' && task.spawnHistory.length > 0 && (
                 <span className="drawer-tab-n">{task.spawnHistory.length}</span>
               )}
@@ -204,6 +217,7 @@ export function Drawer({ task, config, onClose, onChanged }: Props) {
         <div className="drawer-body">
           {tab === 'run' && <RunTab {...tabProps} />}
           {tab === 'plan' && <PlanTab {...tabProps} />}
+          {tab === 'notes' && <NotesTab key={task.issue} issue={task.issue} controller={notes} repoUrl={`https://github.com/${config.repo.owner}/${config.repo.name}`} onNew={onNewNote} onEdit={onEditNote} onOpenTask={onOpenTaskNotes} onViewAll={onViewTaskNotes} revealed={revealedNote} />}
           {tab === 'history' && <HistoryTab {...tabProps} />}
           {tab === 'setup' && <SetupTab {...tabProps} />}
         </div>

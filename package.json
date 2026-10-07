@@ -45,15 +45,19 @@
   },
   "dependencies": {
     "@fastify/static": "^8.2.0",
+    "@modelcontextprotocol/server": "2.3.1",
     "execa": "^9.6.0",
     "fastify": "^5.4.0",
     "js-yaml": "^4.1.0",
     "marked": "^18.0.7",
+    "proper-lockfile": "4.1.2",
     "zod": "^4.0.5"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.0.10",
+    "@types/proper-lockfile": "4.1.4",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",

@@ -36,12 +36,15 @@ import type {
   TaskWithDerived,
 } from '../shared/types.ts';
 import type { Broadcaster } from './sse.ts';
+import type { NotesService } from '../orchestrator/notes.ts';
+import { registerNotesRoutes } from './notes-routes.ts';
 
 interface Deps {
   config: Config;
   broadcaster: Broadcaster;
   refresh: () => Promise<TaskWithDerived[]>;
   health: HealthResponse;
+  notes?: NotesService;
   /** Injected so the move route can be tested without shelling out to git. */
   cleanup?: typeof cleanupDoneTask;
 }
@@ -66,6 +69,7 @@ const DOCUMENT_FAILURE: Record<DocumentError, { status: number; error: string }>
 
 export function registerRoutes(app: FastifyInstance, deps: Deps): void {
   const { config, broadcaster, refresh, health } = deps;
+  if (deps.notes) registerNotesRoutes(app, { service: deps.notes });
   const cleanupTask = deps.cleanup ?? cleanupDoneTask;
 
   /** Re-derive and push to every connected board. A forced run broadcasts. */

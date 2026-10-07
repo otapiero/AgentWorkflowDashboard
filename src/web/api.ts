@@ -11,6 +11,11 @@ import type {
 
 export type { AgentInfo, BoardConfig, PollMeta, RateLimit } from '../shared/types.ts';
 export type { MissionUsage, SessionUsage, TokenTotals } from '../orchestrator/usage.ts';
+import type { Note, NoteCreateInput, NoteUpdateInput, NoteResult, NotesSnapshot, NotesStatus, NoteTask } from '../shared/notes.ts';
+
+export class ApiError extends Error {
+  constructor(message: string, public status: number, public code?: string, public currentNote?: Note) { super(message); this.name = 'ApiError'; }
+}
 
 export interface OpenIssue {
   number: number;
@@ -26,8 +31,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `${res.status} ${res.statusText}`);
+    const body = (await res.json().catch(() => null)) as { error?: string; code?: string; currentNote?: Note } | null;
+    throw new ApiError(body?.error ?? `${res.status} ${res.statusText}`, res.status, body?.code, body?.currentNote);
   }
   return res.json() as Promise<T>;
 }
@@ -50,6 +55,10 @@ export interface DocumentPayload {
 }
 
 export const api = {
+  notes: (projectId: string) => request<NotesSnapshot>(`/api/notes?projectId=${encodeURIComponent(projectId)}`),
+  noteTasks: (projectId: string) => request<{ projectId: string; tasks: NoteTask[] }>(`/api/notes/tasks?projectId=${encodeURIComponent(projectId)}`),
+  createNote: (input: NoteCreateInput) => post<NoteResult>('/api/notes', input),
+  updateNote: (id: string, input: NoteUpdateInput) => request<NoteResult>(`/api/notes/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) }),
   config: () => request<BoardConfig>('/api/config'),
   tasks: () => request<TaskWithDerived[]>('/api/tasks'),
   issues: (scope: IssueScope = 'mine') =>
@@ -126,6 +135,9 @@ export function subscribe(
     onTasks: (tasks: TaskWithDerived[]) => void;
     onPoll: (meta: PollMeta) => void;
     onStatus: (connected: boolean) => void;
+    onOpen?: () => void;
+    onNotes?: (snapshot: NotesSnapshot) => void;
+    onNotesStatus?: (status: NotesStatus) => void;
   },
 ): () => void {
   const source = new EventSource('/api/events');
@@ -135,7 +147,9 @@ export function subscribe(
   source.addEventListener('poll', (event) => {
     handlers.onPoll(JSON.parse((event as MessageEvent<string>).data) as PollMeta);
   });
-  source.addEventListener('open', () => handlers.onStatus(true));
+  source.addEventListener('notes', event => handlers.onNotes?.(JSON.parse((event as MessageEvent<string>).data) as NotesSnapshot));
+  source.addEventListener('notes-status', event => handlers.onNotesStatus?.(JSON.parse((event as MessageEvent<string>).data) as NotesStatus));
+  source.addEventListener('open', () => { handlers.onOpen?.(); handlers.onStatus(true); });
   source.addEventListener('error', () => handlers.onStatus(false));
   return () => source.close();
 }
