@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 
 import { fetchIssueTitle, listOpenIssues } from '../orchestrator/github.ts';
+import { createReviewRequestsReader } from '../orchestrator/review-requests.ts';
 import {
   readArtifactDocument,
   writeArtifactDocument,
@@ -71,6 +72,7 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
   const { config, broadcaster, refresh, health } = deps;
   if (deps.notes) registerNotesRoutes(app, { service: deps.notes });
   const cleanupTask = deps.cleanup ?? cleanupDoneTask;
+  const readReviewRequests = createReviewRequestsReader(config);
 
   /** Re-derive and push to every connected board. A forced run broadcasts. */
   async function refreshAndBroadcast(): Promise<TaskWithDerived[]> {
@@ -88,6 +90,11 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
     );
 
   app.get('/api/health', async () => health);
+
+  app.get<{ Querystring: { refresh?: string } }>('/api/review-requests', async (req, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return readReviewRequests(req.query.refresh === 'true');
+  });
 
   app.get('/api/config', async () => ({
     repo: config.repo,

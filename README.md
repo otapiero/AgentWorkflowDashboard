@@ -87,6 +87,13 @@ because state is re-derived from git/GitHub and the workspace on the next start.
 Agent terminals opened by a spawn run independently and keep going after the app
 closes.
 
+The pull request icon in the top bar counts open PRs waiting for your review in
+the active repository, including requests to your teams. Click it for a compact
+list of titles, authors and GitHub links. It updates every minute while the tab
+is visible; opening the list or clicking Refresh checks again. Draft PRs are
+excluded. If GitHub is unavailable, the last successful list stays visible with
+a retry message.
+
 Merged PRs rest in the **Merged** column until you click **Mark Done** in the
 task's Run tab. Mark Done moves the card to Done and removes its worktree,
 saving uncommitted and ignored files in the task's `rescued-from-worktree` folder

@@ -279,6 +279,30 @@ button {
   position: relative;
 }
 
+/* Review requests float over the board without taking workspace space. */
+.review-trigger { gap: 6px; }
+.review-count { min-width: 17px; padding: 1px 4px; border-radius: 4px; color: var(--dim); background: var(--bg-soft); font: 11px/1.4 var(--mono); text-align: center; }
+.review-count.has-reviews { color: var(--attention); background: var(--attention-soft); }
+.review-trigger.is-stale .review-count { outline: 1px solid var(--attention); }
+.review-popover { position: fixed; z-index: 45; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); box-shadow: var(--shadow-lg); overflow: hidden; }
+.review-popover-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 14px 12px; border-bottom: 1px solid var(--line-soft); flex-shrink: 0; }
+.review-popover-head h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--ink-strong); }
+.review-popover-head p { margin: 4px 0 0; color: var(--dim); font-size: 12px; overflow-wrap: anywhere; }
+.review-popover-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.review-list { list-style: none; padding: 4px 0; margin: 0; }
+.review-list li + li { border-top: 1px solid var(--line-soft); }
+.review-list a { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; color: var(--ink); text-decoration: none; }
+.review-list a:hover, .review-list a:focus-visible { background: var(--hover); }
+.review-list a > .icon { margin-top: 3px; color: var(--attention); }
+.review-item-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.review-item-title { font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+.review-item-meta { color: var(--dim); font-size: 11.5px; overflow-wrap: anywhere; }
+.review-empty { margin: 0; padding: 28px 16px; color: var(--dim); text-align: center; }
+.review-notice { padding: 10px 12px; margin: 10px; color: var(--attention); background: var(--attention-soft); border-radius: var(--radius-sm); font-size: 12px; }
+.review-popover-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-top: 1px solid var(--line-soft); flex-shrink: 0; }
+.review-popover-footer a { color: var(--dim); font-size: 12px; text-decoration: none; }
+.review-popover-footer a:hover { color: var(--ink); text-decoration: underline; }
+
 .theme-menu {
   position: absolute;
   right: 0;

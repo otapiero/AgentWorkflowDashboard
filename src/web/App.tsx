@@ -11,6 +11,7 @@ import { Drawer } from './components/Drawer.tsx';
 import { ImportDrawer } from './components/ImportDrawer.tsx';
 import { DoneList } from './components/Lane.tsx';
 import { Settings } from './components/Settings.tsx';
+import { ReviewRequests } from './components/ReviewRequests.tsx';
 import {
   BrandMark,
   IconBell,
@@ -79,6 +80,8 @@ export function App() {
   const [view, setView] = useState<'board' | 'done'>('board');
   const [notesOpen, setNotesOpenState] = useState(() => readFlag('mc-notes-panel', true));
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [reviewsOpen, setReviewsOpen] = useState(false);
+  const [reviewsRefresh, setReviewsRefresh] = useState(0);
   const [initialTab, setInitialTab] = useState<DrawerTab>('run');
   const [notesScope, setNotesScope] = useState<NotesScope>({ kind: 'all' });
   const [notesQuery, setNotesQuery] = useState('');
@@ -165,7 +168,10 @@ export function App() {
 
   // Ctrl+K opens the palette from anywhere; N starts a note when no field or
   // dialog has the keyboard.
-  const overlayOpen = Boolean(editor || importing || settingsOpen || paletteOpen);
+  const overlayOpen = Boolean(editor || importing || settingsOpen || paletteOpen || reviewsOpen);
+  useEffect(() => {
+    if (editor || importing || settingsOpen || paletteOpen || selected !== null) setReviewsOpen(false);
+  }, [editor, importing, settingsOpen, paletteOpen, selected]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
@@ -197,6 +203,7 @@ export function App() {
   }, [notifyOn]);
 
   const refresh = useCallback(() => {
+    setReviewsRefresh(value => value + 1);
     api.reconcile().then(setTasks).catch((e: Error) => setError(e.message));
     api.config().then(setConfig).catch(() => {});
   }, []);
@@ -270,6 +277,7 @@ export function App() {
         </button>
 
         <div className="topbar-actions">
+          <ReviewRequests repo={config.repo} open={reviewsOpen} onOpenChange={setReviewsOpen} refreshKey={String(reviewsRefresh)} />
           <button
             type="button"
             className={`btn is-sm${notesOpen ? ' is-on' : ''}`}

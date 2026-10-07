@@ -12,6 +12,7 @@ import type {
 export type { AgentInfo, BoardConfig, PollMeta, RateLimit } from '../shared/types.ts';
 export type { MissionUsage, SessionUsage, TokenTotals } from '../orchestrator/usage.ts';
 import type { Note, NoteCreateInput, NoteUpdateInput, NoteResult, NotesSnapshot, NotesStatus, NoteTask } from '../shared/notes.ts';
+import type { ReviewRequestsSnapshot } from '../shared/review-requests.ts';
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public code?: string, public currentNote?: Note) { super(message); this.name = 'ApiError'; }
@@ -55,6 +56,7 @@ export interface DocumentPayload {
 }
 
 export const api = {
+  reviewRequests: (refresh = false) => request<ReviewRequestsSnapshot>(`/api/review-requests${refresh ? '?refresh=true' : ''}`),
   notes: (projectId: string) => request<NotesSnapshot>(`/api/notes?projectId=${encodeURIComponent(projectId)}`),
   noteTasks: (projectId: string) => request<{ projectId: string; tasks: NoteTask[] }>(`/api/notes/tasks?projectId=${encodeURIComponent(projectId)}`),
   createNote: (input: NoteCreateInput) => post<NoteResult>('/api/notes', input),

@@ -1,6 +1,8 @@
 import { execa } from 'execa';
+import { z } from 'zod';
 
 import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
+import { REVIEW_REQUEST_LIMIT, type ReviewRequest } from '../shared/review-requests.ts';
 import type {
   ChecksState,
   Config,
@@ -260,6 +262,26 @@ async function gh(args: string[], cwd: string): Promise<string> {
     timeout: SUBPROCESS_TIMEOUT_MS,
   });
   return stdout;
+}
+
+const reviewRequestsSchema = z.array(z.object({
+  number: z.number().int().positive(),
+  title: z.string(),
+  url: z.url({ protocol: /^https$/ }),
+  author: z.object({ login: z.string() }).nullable(),
+  updatedAt: z.iso.datetime(),
+}));
+
+/** Outstanding personal and team requests, independent of tasks on the board. */
+export async function fetchReviewRequests(config: Config): Promise<ReviewRequest[]> {
+  const out = await gh([
+    'pr', 'list', '--repo', `${config.repo.owner}/${config.repo.name}`,
+    '--state', 'open', '--search', 'review-requested:@me draft:false sort:updated-desc',
+    '--limit', String(REVIEW_REQUEST_LIMIT), '--json', 'number,title,url,author,updatedAt',
+  ], config.repo.path);
+  return reviewRequestsSchema.parse(JSON.parse(out)).map(pr => ({
+    ...pr, author: pr.author?.login || 'ghost',
+  }));
 }
 
 /** Returns null when the issue does not exist or gh fails. */
