@@ -38,7 +38,13 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: vscode-extension/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            vscode-extension/package-lock.json
+
+      # The extension imports the app's shared types, and those reach into
+      # server modules typed against the app's own dependencies (fastify).
+      - run: npm ci
 
       - run: npm run extension:install-deps
 
