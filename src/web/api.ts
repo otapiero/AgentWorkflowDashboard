@@ -2,8 +2,6 @@ import type {
   BoardConfig,
   LauncherKind,
   Phase,
-  PhaseConfig,
-  PhaseDefaults,
   PollMeta,
   RunKind,
   TaskWithDerived,
