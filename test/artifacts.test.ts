@@ -93,22 +93,33 @@ describe('snapshot + collectArtifacts', () => {
   let repo: string;
   const ISSUE = 4242;
   const config = { repo: { path: '' } } as unknown as Config;
+  let template: string;
+
+  // The plan run works in the task's worktree: a real git repo with a
+  // committed base, so only later additions are attributed to the run. Built
+  // once and copied, because three git processes per test dominated this
+  // file's runtime.
+  beforeAll(() => {
+    template = mkdtempSync(join(tmpdir(), 'mc-repo-'));
+    execaSync('git', ['init', '-q'], { cwd: template });
+    writeFileSync(join(template, 'README.md'), 'base\n');
+    execaSync('git', ['add', '.'], { cwd: template });
+    execaSync(
+      'git',
+      ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base'],
+      { cwd: template },
+    );
+  });
+
+  afterAll(() => {
+    rmSync(template, { recursive: true, force: true });
+  });
 
   beforeEach(() => {
     home = mkdtempSync(join(tmpdir(), 'mc-home-'));
     process.env.MC_HOME = home;
-    // The plan run works in the task's worktree; make it a real git repo with a
-    // committed base so only later additions are attributed to the run.
     repo = worktreePath(ISSUE);
-    mkdirSync(repo, { recursive: true });
-    execaSync('git', ['init', '-q'], { cwd: repo });
-    writeFileSync(join(repo, 'README.md'), 'base\n');
-    execaSync('git', ['add', '.'], { cwd: repo });
-    execaSync(
-      'git',
-      ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base'],
-      { cwd: repo },
-    );
+    cpSync(template, repo, { recursive: true });
     mkdirSync(taskDir(ISSUE), { recursive: true });
   });
 
