@@ -401,7 +401,7 @@ src/
     facts.ts               gathers git + gh + markers into Facts
     worktree.ts github.ts  git and gh access
     markers.ts             durable phase signals with PID liveness
-    spawn.ts               builds + launches the detached wt tab
+    spawn/                 builds + launches the detached wt/vscode/T3 run
     poller.ts              interval reconcile + SSE broadcast
     paths.ts               install root vs per-project home
     init.ts                first-run setup

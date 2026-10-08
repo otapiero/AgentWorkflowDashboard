@@ -19,7 +19,7 @@ import { gatherFacts } from './facts.ts';
 import { reconcile } from './reconcile.ts';
 import { getTask, listTasks, newTask, removeTask, upsertTask } from './state.ts';
 import { fetchBranchPrs, fetchIssueTitle, listOpenIssues } from './github.ts';
-import { spawnPhase } from './spawn.ts';
+import { spawnPhase } from './spawn/phase.ts';
 import { collectArtifacts } from './artifacts.ts';
 import { listBranches, resolveBranch } from './worktree.ts';
 import {
