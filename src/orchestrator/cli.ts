@@ -11,7 +11,6 @@
  *   npm run mc -- list
  *   npm run mc -- spawn 3060 plan
  */
-import { join } from 'node:path';
 
 import { execa } from 'execa';
 
@@ -32,7 +31,6 @@ import {
   setActiveProject,
 } from './paths.ts';
 import { detectRepo, initProject } from './init.ts';
-import { migrateLegacyHome } from './migrate.ts';
 import { T3Client } from './t3/client.ts';
 import { readInstanceReadiness } from './t3/instances.ts';
 import { formatT3Doctor } from './t3/doctor.ts';
@@ -128,7 +126,7 @@ function printDerived(task: TaskRecord, derived: ReturnType<typeof reconcile>): 
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   if (!command || command === 'help') {
-    console.log('commands: init | migrate | project [list|use <slug>] | mcp --project <slug> --server-url <loopback-url> | doctor | issues | import <issue> | forget <issue> | facts <issue> | reconcile <issue> | list | spawn <issue> <phase> | collect <issue>');
+    console.log('commands: init | project [list|use <slug>] | mcp --project <slug> --server-url <loopback-url> | doctor | issues | import <issue> | forget <issue> | facts <issue> | reconcile <issue> | list | spawn <issue> <phase> | collect <issue>');
     return;
   }
 
@@ -159,30 +157,6 @@ async function main(): Promise<void> {
     console.log(`config   ${configPath}`);
     console.log('');
     console.log('Review the config, then run: npm start');
-    return;
-  }
-
-  if (command === 'migrate') {
-    const result = migrateLegacyHome();
-    console.log(`migrated ${result.from}`);
-    console.log(`      -> ${result.to}  (project ${result.slug}, now active)`);
-    if (result.sharedFiles.length) {
-      console.log(`shared   ${result.sharedFiles.join(', ')} moved to ${mcRoot()}`);
-    }
-    if (result.displaced.length) {
-      console.log(`kept     ${result.displaced.join(', ')} already at the root, renamed *.replaced-*`);
-    }
-    if (result.repairedWorktrees.length) {
-      console.log(`git      repaired ${result.repairedWorktrees.length} worktree registration(s)`);
-    }
-    if (result.skippedWorktrees.length) {
-      console.log('');
-      console.log(`Left behind in ${result.from} (something is holding them open):`);
-      for (const name of result.skippedWorktrees) console.log(`  ${name}`);
-      console.log('Close whatever has them open, then move them into');
-      console.log(`  ${join(result.to, 'worktrees')}`);
-      console.log("and run: git -C <repo> worktree repair <path>");
-    }
     return;
   }
 

@@ -65,15 +65,6 @@ npm run mc -- project use acme__widgets
 The active project is read at server start, so switching means restarting the
 server. The board's top bar always shows which repository you are looking at.
 
-### Upgrading from a pre-0.2 install
-
-```powershell
-npm run mc -- migrate
-```
-
-Moves `%USERPROFILE%\.mc\` into the new layout, keeping every task
-directory, plan, artifact, worktree and the cached T3 token.
-
 ## Running
 
 ```powershell
@@ -413,7 +404,7 @@ src/
     spawn.ts               builds + launches the detached wt tab
     poller.ts              interval reconcile + SSE broadcast
     paths.ts               install root vs per-project home
-    init.ts migrate.ts     first-run setup and the legacy move
+    init.ts                first-run setup
     cli.ts                 headless harness
   server/                  Fastify REST + SSE, static hosting
   mcp/                     stdio tools calling the loopback notes API

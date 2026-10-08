@@ -91,10 +91,7 @@ export function activeProjectSlug(): string {
   if (projects.length === 1) return projects[0]!;
   if (projects.length === 0) {
     throw new Error(
-      `No project is set up yet. Run 'npm run mc -- init' from inside the repository you want to drive` +
-        (existsSync(join(homedir(), '.mc'))
-          ? `, or 'npm run mc -- migrate' to bring your existing ~/.mc install across.`
-          : `.`),
+      `No project is set up yet. Run 'npm run mc -- init' from inside the repository you want to drive.`,
     );
   }
   throw new Error(

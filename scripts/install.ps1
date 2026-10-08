@@ -17,7 +17,6 @@ $assets = Join-Path $repoRoot 'assets'
 
 $mcRoot = if ($env:MC_ROOT) { $env:MC_ROOT } else { Join-Path $env:USERPROFILE '.mission-control' }
 $claudeCommands = Join-Path $env:USERPROFILE '.claude\commands'
-$legacyHome = Join-Path $env:USERPROFILE '.mc'
 
 Write-Host ""
 Write-Host "Mission Control installer" -ForegroundColor Green
@@ -87,11 +86,7 @@ else {
 }
 
 Write-Host ""
-if (Test-Path (Join-Path $legacyHome 'config.yaml')) {
-    Write-Host "An older install was found at $legacyHome." -ForegroundColor Yellow
-    Write-Host "Bring it across with:  npm run mc -- migrate" -ForegroundColor Yellow
-}
-elseif (-not (Get-ChildItem (Join-Path $mcRoot 'projects') -Directory -ErrorAction SilentlyContinue)) {
+if (-not (Get-ChildItem (Join-Path $mcRoot 'projects') -Directory -ErrorAction SilentlyContinue)) {
     Write-Host "Next: cd into the repository you want to drive, then run:" -ForegroundColor Green
     Write-Host "  npm run mc -- init" -ForegroundColor Green
 }
