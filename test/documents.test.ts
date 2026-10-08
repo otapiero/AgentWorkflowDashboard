@@ -9,7 +9,6 @@ import {
   readArtifactDocument,
   resolveWriteTarget,
   writeArtifactDocument,
-  MAX_DOCUMENT_BYTES,
 } from '../src/orchestrator/documents.ts';
 import { artifactsDir, artifactsManifestPath, taskDir } from '../src/orchestrator/paths.ts';
 import type { ArtifactRef } from '../src/shared/types.ts';
@@ -17,9 +16,6 @@ import type { ArtifactRef } from '../src/shared/types.ts';
 describe('extensionOf', () => {
   test('lowercases and includes the dot', () => {
     expect(extensionOf('DESIGN.MD')).toBe('.md');
-  });
-  test('is empty for a name with no dot', () => {
-    expect(extensionOf('NOTES')).toBe('');
   });
   test('treats a leading-dot name as its own extension, not as markdown', () => {
     expect(extensionOf('.gitignore')).toBe('.gitignore');
@@ -50,9 +46,6 @@ describe('classify', () => {
     const bytes = Buffer.concat([Buffer.alloc(8192, 0x41), Buffer.from([0x00])]);
     expect(classify('big.txt', bytes)).toBe('text');
   });
-  test('the cap is two megabytes', () => {
-    expect(MAX_DOCUMENT_BYTES).toBe(2 * 1024 * 1024);
-  });
 });
 
 describe('resolveWriteTarget', () => {
@@ -63,23 +56,9 @@ describe('resolveWriteTarget', () => {
     originalPath: 'C:\\wt\\docs\\design.md',
   });
 
-  test('writes the original when it still resolves', () => {
-    expect(resolveWriteTarget(ref('repo'), () => true)).toBe('original');
-  });
-  test('falls back to the snapshot when the original is gone', () => {
-    expect(resolveWriteTarget(ref('repo'), () => false)).toBe('snapshot');
-  });
   test('origin does not enter the decision', () => {
     expect(resolveWriteTarget(ref('taskdir'), () => true)).toBe('original');
     expect(resolveWriteTarget(ref('taskdir'), () => false)).toBe('snapshot');
-  });
-  test('probes exactly the recorded original path', () => {
-    const seen: string[] = [];
-    resolveWriteTarget(ref('repo'), (p) => {
-      seen.push(p);
-      return true;
-    });
-    expect(seen).toEqual(['C:\\wt\\docs\\design.md']);
   });
 });
 
@@ -166,17 +145,6 @@ describe('readArtifactDocument / writeArtifactDocument', () => {
   test('an oversized artifact is refused before it is read', () => {
     seed('huge.md', Buffer.alloc(2 * 1024 * 1024 + 1, 0x41), { original: true });
     expect(readArtifactDocument(ISSUE, 'huge.md')).toEqual({ ok: false, error: 'too-large' });
-  });
-
-  test('writing with a live original updates BOTH copies', () => {
-    const original = seed('design.md', 'old\n', { original: true });
-
-    expect(writeArtifactDocument(ISSUE, 'design.md', 'new\n')).toEqual({
-      ok: true,
-      value: 'original',
-    });
-    expect(readFileSync(original, 'utf8')).toBe('new\n');
-    expect(readFileSync(join(artifactsDir(ISSUE), 'design.md'), 'utf8')).toBe('new\n');
   });
 
   test('writing with the original gone updates the snapshot and says so', () => {

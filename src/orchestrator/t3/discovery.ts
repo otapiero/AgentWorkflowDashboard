@@ -5,7 +5,6 @@ import {
   environmentDescriptorSchema,
   safeParseT3,
   serverRuntimeSchema,
-  type ServerRuntime,
 } from './schemas.ts';
 
 /**
@@ -36,15 +35,6 @@ export type T3Discovery =
       capabilities: Record<string, unknown>;
     }
   | ({ ok: false } & T3Unavailable);
-
-export function readServerRuntime(): ServerRuntime | undefined {
-  try {
-    return safeParseT3(serverRuntimeSchema, JSON.parse(readFileSync(t3ServerRuntimePath(), 'utf8')));
-  } catch {
-    // Missing, truncated, or unreadable — all mean the same thing to a caller.
-    return undefined;
-  }
-}
 
 function isProcessAlive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;

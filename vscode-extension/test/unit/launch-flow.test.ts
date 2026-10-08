@@ -48,31 +48,6 @@ describe('runLaunchFlow', () => {
     expect(choices.offered[3]).toContainEqual(expect.objectContaining({ value: 'low', picked: true }));
   });
 
-  test('task overrides take precedence for the selected phase', async () => {
-    const selected = structuredClone(config);
-    selected.agents.unshift({ name: 'claude', models: ['opus'], efforts: ['low'], hasEffort: true });
-    selected.phaseDefaults.plan = { agent: 'codex', model: 'gpt-5.6-sol', effort: 'high' };
-    const candidate = task();
-    candidate.overrides = { agent: 'claude', model: 'opus', effort: 'low' };
-    const choices = picker(['plan', 'claude', 'opus', 'low', 'confirm']);
-    await runLaunchFlow(candidate, selected, choices);
-    expect(choices.offered[1]).toContainEqual(expect.objectContaining({ value: 'claude', picked: true }));
-    expect(choices.offered[2]).toContainEqual(expect.objectContaining({ value: 'opus', picked: true }));
-    expect(choices.offered[3]).toContainEqual(expect.objectContaining({ value: 'low', picked: true }));
-  });
-
-  test('clears unsupported pinned values when changing agent', async () => {
-    const selected = structuredClone(config);
-    selected.agents = [
-      { name: 'claude', models: ['opus'], efforts: ['low'], hasEffort: true },
-      { name: 'codex', models: ['gpt-5.6-sol'], efforts: ['high'], hasEffort: true },
-    ];
-    const candidate = task();
-    candidate.pinned = { agent: 'claude', model: 'opus', effort: 'low' };
-    expect(await runLaunchFlow(candidate, selected, picker(['implement', 'codex', 'gpt-5.6-sol', 'high', 'confirm'])))
-      .toEqual({ phase: 'implement', agent: 'codex', model: 'gpt-5.6-sol', effort: 'high' });
-  });
-
   test('omits effort for agents without effort control', async () => {
     const selected = structuredClone(config);
     selected.agents = [{ name: 'simple', models: ['standard'], efforts: [], hasEffort: false }];

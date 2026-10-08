@@ -41,10 +41,6 @@ export class DeliveryLedger {
     return false;
   }
 
-  async entriesForTests(): Promise<readonly string[]> {
-    return await this.readEntries() ?? [];
-  }
-
   private async readEntries(): Promise<readonly string[] | null> {
     try {
       const parsed: unknown = JSON.parse(await readFile(join(this.storagePath, 'notifications.json'), 'utf8'));

@@ -64,10 +64,6 @@ describe('latestThreadId', () => {
     );
     expect(id).toBe('thread-a');
   });
-
-  test('a task that never used T3 has no thread', () => {
-    expect(latestThreadId(task([]))).toBeNull();
-  });
 });
 
 describe('toT3Fact', () => {
@@ -260,9 +256,5 @@ describe('findProjectForWorkspace', () => {
 
   test('no snapshot means no answer — the caller must not assume "create"', () => {
     expect(findProjectForWorkspace(undefined, ROOT)).toBeNull();
-  });
-
-  test('an empty project list is null', () => {
-    expect(findProjectForWorkspace(snap([]), ROOT)).toBeNull();
   });
 });

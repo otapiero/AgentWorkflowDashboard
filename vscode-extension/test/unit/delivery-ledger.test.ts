@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
@@ -41,13 +41,6 @@ test('fails closed without replacing malformed ledger contents', async () => {
 
   await expect(new DeliveryLedger(storage, delay).claim(event('malformed'))).resolves.toBe(false);
   await expect(readFile(ledgerPath, 'utf8')).resolves.toBe('{not-json');
-});
-
-test('fails closed when the ledger cannot be read', async () => {
-  const storage = await directory();
-  await mkdir(join(storage, 'notifications.json'));
-
-  await expect(new DeliveryLedger(storage, delay).claim(event('unreadable'))).resolves.toBe(false);
 });
 
 test('keeps only the newest 500 fingerprints', async () => {

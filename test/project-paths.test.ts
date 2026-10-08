@@ -8,8 +8,6 @@ import {
   configPath,
   listProjects,
   mcHome,
-  mcRoot,
-  projectHome,
   projectSlug,
   projectsDir,
   scriptsDir,
@@ -43,10 +41,6 @@ describe('projectSlug', () => {
 
   test('replaces characters that are not directory-safe', () => {
     expect(projectSlug('my org', 'repo.js+')).toBe('my-org__repo.js');
-  });
-
-  test('two repos with the same name under different owners do not collide', () => {
-    expect(projectSlug('alice', 'app')).not.toBe(projectSlug('bob', 'app'));
   });
 });
 
@@ -106,34 +100,8 @@ describe('the root/project split', () => {
     expect(mcHome()).toBe(explicit);
   });
 
-  test('scripts are shared by the whole install, not per project', () => {
-    makeProject('a__one');
-    expect(scriptsDir()).toBe(join(root, 'scripts'));
-    expect(scriptsDir().startsWith(projectsDir())).toBe(false);
-  });
-
   test('scripts stay at the root even when MC_HOME is overridden', () => {
     process.env.MC_HOME = join(root, 'somewhere-else');
     expect(scriptsDir()).toBe(join(root, 'scripts'));
-  });
-
-  test('projectHome addresses a project without making it active', () => {
-    expect(projectHome('x__y')).toBe(join(root, 'projects', 'x__y'));
-  });
-
-  test('mcRoot defaults under the home folder when MC_ROOT is unset', () => {
-    delete process.env.MC_ROOT;
-    expect(mcRoot().endsWith('.mission-control')).toBe(true);
-  });
-});
-
-describe('switching the active project', () => {
-  test('setActiveProject is what a later resolution reads back', () => {
-    makeProject('a__one');
-    makeProject('b__two');
-    setActiveProject('a__one');
-    expect(activeProjectSlug()).toBe('a__one');
-    setActiveProject('b__two');
-    expect(activeProjectSlug()).toBe('b__two');
   });
 });

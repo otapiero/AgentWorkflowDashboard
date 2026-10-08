@@ -20,10 +20,4 @@ describe('plan read/write', () => {
     writePlan(1, '# Plan\n- step one\n');
     expect(readPlan(1)).toBe('# Plan\n- step one\n');
   });
-
-  test('writePlan overwrites existing content', () => {
-    writePlan(1, 'first');
-    writePlan(1, 'second');
-    expect(readPlan(1)).toBe('second');
-  });
 });

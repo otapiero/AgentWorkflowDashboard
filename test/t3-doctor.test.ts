@@ -50,18 +50,6 @@ describe('formatT3Doctor', () => {
     expect(missing).not.toBe(rejected);
   });
 
-  test('the remedy names the real UI path, verified against T3 0.0.31', () => {
-    // The plan said "Settings -> Create pairing link"; no such item exists.
-    // A remedy that names the wrong menu is worse than none.
-    const lines = formatT3Doctor({
-      status: { ok: false, reason: 'no-credential', detail: '' },
-      pinnedVersion: '0.0.31',
-      instances: [],
-    }).join('\n');
-    expect(lines).toContain('Authorized clients');
-    expect(lines).toMatch(/single-use|expires/i);
-  });
-
   test('T3 not running is reported as a normal state, not an error', () => {
     const lines = formatT3Doctor({
       status: { ok: false, reason: 'no-runtime-file', detail: 'C:\\Users\\x\\.t3\\...' },

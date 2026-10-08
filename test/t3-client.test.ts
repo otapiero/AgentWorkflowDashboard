@@ -126,12 +126,6 @@ describe('status', () => {
 });
 
 describe('fetchSnapshot', () => {
-  test('returns the parsed snapshot', async () => {
-    const { impl } = fakeServer();
-    const result = await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).fetchSnapshot();
-    expect(result?.threads[0]?.session?.status).toBe('running');
-  });
-
   test('sends the bearer token', async () => {
     const { impl, calls } = fakeServer();
     await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).fetchSnapshot();

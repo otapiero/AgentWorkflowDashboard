@@ -24,7 +24,6 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
     private readonly store: TaskStore,
     private readonly currentWorkspaceUri: () => { scheme: string; fsPath: string } | undefined,
     private readonly api: VscodeAdapter,
-    private readonly onDispatchForTests?: () => void,
   ) {
     this.emitter = new this.api.EventEmitter<TreeNode | undefined>();
     this.onDidChangeTreeData = this.emitter.event;
@@ -64,7 +63,7 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
   applyStoreChange(change: StoreChange): void {
     if (change.kind === 'full') {
       this.cached.clear();
-      this.emitter.fire(undefined); this.onDispatchForTests?.();
+      this.emitter.fire(undefined);
       return;
     }
     const snapshot = this.store.snapshot();
@@ -91,7 +90,7 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
       if (node) toRefresh.set(id, node);
       else this.cached.delete(id);
     }
-    for (const node of toRefresh.values()) { this.cached.set(node.id, node); this.emitter.fire(node); this.onDispatchForTests?.(); }
+    for (const node of toRefresh.values()) { this.cached.set(node.id, node); this.emitter.fire(node); }
   }
 
   setFilter(value: string): void {
@@ -99,7 +98,7 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
     if (this.filter === next) return;
     this.filter = next;
     this.cached.clear();
-    this.emitter.fire(undefined); this.onDispatchForTests?.();
+    this.emitter.fire(undefined);
   }
 
   private rebuildTaskPlacement(snapshot: ReturnType<TaskStore['snapshot']>, node: Extract<TreeNode, { kind: 'task' }>): Extract<TreeNode, { kind: 'task' }> | undefined {

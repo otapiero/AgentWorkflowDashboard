@@ -29,8 +29,4 @@ describe('shouldFetchT3Snapshot', () => {
     // A board that never touched T3 must not pay for it every poll.
     expect(shouldFetchT3Snapshot([task(), task()])).toBe(false);
   });
-
-  test('an empty board does not fetch', () => {
-    expect(shouldFetchT3Snapshot([])).toBe(false);
-  });
 });

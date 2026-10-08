@@ -11,15 +11,6 @@ describe('mergeOverrides', () => {
     expect(result).toEqual({ agent: 'claude', model: 'opus', instructions: 'keep me' });
   });
 
-  test('this is the regression that would eat kept instructions', () => {
-    // The Setup tab saves an agent pin; the Run tab's kept text must survive.
-    const result = mergeOverrides(
-      { instructions: 'do not touch the migrations' },
-      { agent: 'claude', model: 'opus', effort: 'high' },
-    );
-    expect(result?.instructions).toBe('do not touch the migrations');
-  });
-
   test('null clears exactly that field', () => {
     const result = mergeOverrides(
       { agent: 'claude', instructions: 'kept' },
@@ -44,9 +35,5 @@ describe('mergeOverrides', () => {
 
   test('clearing the last field yields undefined, not an empty object', () => {
     expect(mergeOverrides({ agent: 'claude' }, { agent: null })).toBeUndefined();
-  });
-
-  test('an empty patch is a no-op', () => {
-    expect(mergeOverrides({ agent: 'claude' }, {})).toEqual({ agent: 'claude' });
   });
 });

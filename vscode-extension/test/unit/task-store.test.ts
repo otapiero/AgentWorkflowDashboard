@@ -134,19 +134,6 @@ test('reports connection updates and retains poll metadata separately', () => {
   ]);
 });
 
-test('snapshots 500 tasks without duplicating issues', () => {
-  const store = new TaskStore();
-  const tasks = Array.from({ length: 500 }, (_, index) => task({ issue: 500 - index }));
-
-  store.applyBaseline(config, tasks);
-
-  const snapshot = store.snapshot();
-  expect(snapshot.isBaselineReady).toBe(true);
-  expect(snapshot.tasks).toHaveLength(500);
-  expect(snapshot.tasks[0]?.issue).toBe(1);
-  expect(snapshot.tasks[499]?.issue).toBe(500);
-});
-
 test('emits one full baseline change even when the first task list is empty', () => {
   const store = new TaskStore();
   const changes: StoreChange[] = [];

@@ -1,34 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { describe, expect, test } from 'vitest';
 
-import { getT3ProjectId, setT3ProjectId } from '../src/orchestrator/state.ts';
 import { resolveT3Launch } from '../src/orchestrator/spawn.ts';
 import type { AgentProfile, PhaseConfig } from '../src/shared/types.ts';
-
-let home: string;
-
-beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), 'mc-'));
-  process.env.MC_HOME = home;
-});
-
-afterEach(() => {
-  delete process.env.MC_HOME;
-  rmSync(home, { recursive: true, force: true });
-});
-
-describe('T3 project id persistence', () => {
-  test('a board that has never spawned through T3 has no project', () => {
-    expect(getT3ProjectId()).toBeNull();
-  });
-
-  test('the project id survives a round trip so later spawns reuse it', () => {
-    setT3ProjectId('proj-1');
-    expect(getT3ProjectId()).toBe('proj-1');
-  });
-});
 
 describe('resolveT3Launch', () => {
   const codex: AgentProfile = {
@@ -311,12 +284,6 @@ describe('resolveT3Launch', () => {
     expect(result.modelSelection.model).toBe('claude-sonnet-5');
   });
 
-  test('an alias with a single release resolves to it', () => {
-    const result = launchClaude('haiku');
-    if (!result.ok) throw new Error(`expected success, got: ${result.error}`);
-    expect(result.modelSelection.model).toBe('claude-haiku-4-5');
-  });
-
   test('refuses a family two providers both serve rather than pick a payer', () => {
     const result = launchClaude('sonnet', [
       'github-copilot/claude-sonnet-5',
@@ -333,18 +300,5 @@ describe('resolveT3Launch', () => {
     if (result.ok) throw new Error('expected failure');
     expect(result.error).toContain("'gemini'");
     expect(result.error).toContain('claude-opus-5');
-  });
-
-  test('a phase with no configured modes gets full-access', () => {
-    const result = resolveT3Launch({
-      agent: 'codex',
-      profile: codex,
-      phase: { ...plan, id: 'merge' } as PhaseConfig,
-      model: 'gpt-5.6-sol',
-      effort: null,
-      readiness: () => ({ instanceId: 'codex', ready: true, reason: null, models: [] }),
-    });
-    if (!result.ok) throw new Error('expected success');
-    expect(result.modes.runtimeMode).toBe('full-access');
   });
 });

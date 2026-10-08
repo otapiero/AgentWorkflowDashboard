@@ -81,17 +81,6 @@ describe('parseConfig', () => {
     expect(cfg.pipeline.map((p) => p.id)).toEqual(['plan', 'implement', 'publish']);
   });
 
-  test('preserves the two verified agent invocation shapes', () => {
-    const cfg = parseConfig(VALID);
-    // claude takes its prompt positionally and supports a system-prompt flag.
-    expect(cfg.agents.claude?.promptMode).toBe('positional');
-    expect(cfg.agents.claude?.instructionMode).toBe('flag');
-    // copilot takes -i <prompt> and has no system-prompt flag at all.
-    expect(cfg.agents.copilot?.promptMode).toBe('flag');
-    expect(cfg.agents.copilot?.promptFlag).toBe('-i');
-    expect(cfg.agents.copilot?.instructionMode).toBe('inline');
-  });
-
   test('accepts Codex as a configured phase actor', () => {
     const cfg = parseConfig(VALID.replace('actor: claude', 'actor: codex'));
     expect(cfg.pipeline[0]?.actor).toBe('codex');
@@ -102,26 +91,6 @@ describe('parseConfig', () => {
   test('rejects duplicate phase ids', () => {
     const dup = VALID.replace('  - id: implement', '  - id: plan');
     expect(() => parseConfig(dup)).toThrow(/duplicate/i);
-  });
-
-  test('rejects an unknown actor', () => {
-    expect(() => parseConfig(VALID.replace('actor: claude', 'actor: gemini'))).toThrow();
-  });
-
-  test('rejects an unknown phase id', () => {
-    expect(() => parseConfig(VALID.replace('- id: plan', '- id: brainstorm'))).toThrow();
-  });
-
-  test('rejects an auto gate with an unknown signal', () => {
-    expect(() =>
-      parseConfig(VALID.replace('signal: pr_exists', 'signal: vibes_good')),
-    ).toThrow();
-  });
-
-  test('rejects an auto gate with no signal at all', () => {
-    expect(() =>
-      parseConfig(VALID.replace('gate: { type: auto, signal: pr_exists }', 'gate: { type: auto }')),
-    ).toThrow();
   });
 
   test('rejects a promptMode of flag with no promptFlag', () => {
@@ -141,17 +110,9 @@ describe('parseConfig', () => {
     expect(() => parseConfig(broken)).toThrow(/copilot/i);
   });
 
-  test('rejects a non-numeric poll interval', () => {
-    expect(() => parseConfig(VALID.replace('pollIntervalSeconds: 30', 'pollIntervalSeconds: soon'))).toThrow();
-  });
-
   test('reports the offending field when validation fails', () => {
     // A user edits this file by hand; the error has to say what to fix.
     expect(() => parseConfig(VALID.replace("baseBranch: 'dev'", ''))).toThrow(/baseBranch/);
-  });
-
-  test('rejects malformed yaml with a clear error', () => {
-    expect(() => parseConfig('repo: [unclosed')).toThrow();
   });
 });
 

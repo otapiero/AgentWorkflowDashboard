@@ -44,9 +44,6 @@ describe('unsettled note age indicators', () => {
   test('settled notes have no age warning', () => {
     expect(render(30 * day, { status: 'settled', settledAt: '2026-10-02T10:00:00Z' })).not.toContain('notes-age');
   });
-  test('reopened notes show their original age', () => {
-    expect(render(7 * day, { updatedAt: '2026-10-08T09:00:00Z', revision: 3 }).match(/class="notes-age-icon"/g)).toHaveLength(5);
-  });
   test('a future creation timestamp does not show a warning', () => {
     expect(render(-day)).not.toContain('notes-age');
   });

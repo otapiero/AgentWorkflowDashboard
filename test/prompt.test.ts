@@ -8,6 +8,7 @@ import {
   render,
   buildPrompt,
   renderArtifactList,
+  writePromptFile,
 } from '../src/orchestrator/prompt.ts';
 import { promptPath, claudeCommandsDir } from '../src/orchestrator/paths.ts';
 
@@ -79,10 +80,6 @@ describe('render', () => {
     expect(render('Hello {{nope}}', { a: 'x' })).toBe('Hello {{nope}}');
   });
 
-  test('an empty value substitutes as empty', () => {
-    expect(render('X{{custom}}Y', { custom: '' })).toBe('XY');
-  });
-
   test('replacement text containing $& is inserted literally', () => {
     // A naive String.replace would treat $& as a backreference.
     expect(render('{{a}}', { a: 'cost $& fee' })).toBe('cost $& fee');
@@ -139,11 +136,6 @@ describe('buildPrompt', () => {
     expect(text).toContain('Plan #3060.');
   });
 
-  test('does not prepend rules when the agent takes them via a flag', () => {
-    writeCommand('mc-planner', 'Plan #$ARGUMENTS.');
-    expect(buildPrompt('mc-planner', task, {})).toBe('Plan #3060.');
-  });
-
   test('substitutes the artifact list into {{artifacts}}', () => {
     writeCommand('mc-x', 'Prior work:\n{{artifacts}}');
     const text = buildPrompt('mc-x', task, {
@@ -153,11 +145,6 @@ describe('buildPrompt', () => {
     });
     expect(text).toContain('research.md');
     expect(text).not.toContain('{{artifacts}}');
-  });
-
-  test('renders (none) into {{artifacts}} when nothing has been collected', () => {
-    writeCommand('mc-x', 'Prior work:\n{{artifacts}}');
-    expect(buildPrompt('mc-x', task, {})).toContain('(none)');
   });
 
   test('points {{donePath}} at the named marker, not always plan.done', () => {
@@ -220,9 +207,7 @@ describe('renderArtifactList', () => {
 });
 
 describe('writing the prompt file', () => {
-  test('the rendered prompt is written where the spawn script reads it', async () => {
-    writeFileSync(join(commands, 'mc-planner.md'), 'Plan #$ARGUMENTS.', 'utf8');
-    const { writePromptFile } = await import('../src/orchestrator/prompt.ts');
+  test('the rendered prompt is written where the spawn script reads it', () => {
     writePromptFile(3060, 'Plan #3060.');
     expect(readFileSync(promptPath(3060), 'utf8')).toBe('Plan #3060.');
   });

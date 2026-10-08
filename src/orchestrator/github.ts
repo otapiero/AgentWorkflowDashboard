@@ -181,18 +181,6 @@ function foldBranchPrNodes(
   };
 }
 
-export function parseBranchPrResponse(
-  raw: unknown,
-  copilotLogin: string,
-): BranchPrFacts {
-  const nodes = (
-    raw as {
-      data?: { repository?: { pullRequests?: { nodes?: BranchPrNode[] } } };
-    }
-  )?.data?.repository?.pullRequests?.nodes;
-  return foldBranchPrNodes(nodes, copilotLogin);
-}
-
 /** Fold a batched, aliased response into a branch -> facts map. */
 export function parseBranchPrsResponse(
   raw: unknown,

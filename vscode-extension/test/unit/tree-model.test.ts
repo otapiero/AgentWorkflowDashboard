@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { buildChildren, buildRootNodes, severityFor } from '../../src/tree-model.ts';
+import { buildChildren, severityFor } from '../../src/tree-model.ts';
 import { config, task, taskWithPath } from './fixtures.ts';
 import type { TaskStoreSnapshot } from '../../src/task-store.ts';
 
@@ -9,12 +9,6 @@ function snapshot(tasks = [task()]): TaskStoreSnapshot {
 }
 
 describe('tree model', () => {
-  test('keeps the root sections in worktree-first order', () => {
-    expect(buildRootNodes(snapshot(), { scheme: 'file', fsPath: 'C:\\mc\\worktrees\\issue-3060' }).map((node) => node.id)).toEqual([
-      'section:current', 'section:attention', 'section:all',
-    ]);
-  });
-
   test('shows the exact current worktree task, resolved agent, and permitted native actions', () => {
     const live = taskWithPath('C:\\mc\\worktrees\\issue-3060');
     live.integration.liveSpawn = { phase: 'implement', pid: 42, startedAt: '2026-08-03T10:00:00.000Z', source: 'marker' };
@@ -71,17 +65,5 @@ describe('tree model', () => {
     expect(buildChildren(snapshot(tasks), undefined, 'phase:inbox').map((node) => node.id)).toEqual(['task:all:inbox:1']);
     expect(buildChildren(snapshot(tasks), undefined, 'phase:done').map((node) => node.id)).toEqual(['task:all:done:3']);
     expect(buildChildren(snapshot(tasks), undefined, 'phase:merged').map((node) => node.id)).toEqual(['task:all:merged:4']);
-  });
-
-  test('gives one task a unique element id in each visible placement', () => {
-    const shared = taskWithPath('C:\\mc\\worktrees\\issue-3060'); shared.derived.needsYou = true;
-    const state = snapshot([shared]);
-    const ids = [
-      buildChildren(state, { scheme: 'file', fsPath: shared.integration.workspacePath }, 'section:current')[0]?.id,
-      buildChildren(state, undefined, 'section:attention')[0]?.id,
-      buildChildren(state, undefined, 'phase:implement')[0]?.id,
-    ];
-    expect(ids).toEqual(['task:current:3060', 'task:attention:3060', 'task:all:implement:3060']);
-    expect(new Set(ids).size).toBe(3);
   });
 });

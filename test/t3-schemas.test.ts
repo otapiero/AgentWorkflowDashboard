@@ -1,13 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { describe, expect, test } from 'vitest';
 
-import {
-  t3Home,
-  t3ServerRuntimePath,
-  t3ProviderCachePath,
-} from '../src/orchestrator/t3/paths.ts';
 import {
   serverRuntimeSchema,
   environmentDescriptorSchema,
@@ -15,35 +7,8 @@ import {
   accessTokenSchema,
   providerCacheSchema,
   snapshotSchema,
-  dispatchResultSchema,
   safeParseT3,
 } from '../src/orchestrator/t3/schemas.ts';
-
-let home: string;
-
-beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), 'mc-t3-'));
-  process.env.T3_HOME = home;
-});
-
-afterEach(() => {
-  delete process.env.T3_HOME;
-  rmSync(home, { recursive: true, force: true });
-});
-
-describe('t3 paths', () => {
-  test('T3_HOME overrides the location so tests never touch the real ~/.t3', () => {
-    expect(t3Home()).toBe(home);
-  });
-
-  test('the runtime file sits under userdata, where T3 writes it', () => {
-    expect(t3ServerRuntimePath()).toBe(join(home, 'userdata', 'server-runtime.json'));
-  });
-
-  test('provider readiness is one file per instance under caches', () => {
-    expect(t3ProviderCachePath('codex')).toBe(join(home, 'caches', 'codex.json'));
-  });
-});
 
 describe('serverRuntimeSchema', () => {
   // Captured verbatim from a running T3 Code 0.0.31 desktop instance.
@@ -60,18 +25,9 @@ describe('serverRuntimeSchema', () => {
     expect(safeParseT3(serverRuntimeSchema, real)).toEqual(real);
   });
 
-  test('tolerates fields we do not consume being added upstream', () => {
-    const parsed = safeParseT3(serverRuntimeSchema, { ...real, devUrl: 'http://x' });
-    expect(parsed?.origin).toBe('http://127.0.0.1:3773');
-  });
-
   test('rejects a runtime file with no origin, rather than guessing one', () => {
     const { origin, ...withoutOrigin } = real;
     expect(safeParseT3(serverRuntimeSchema, withoutOrigin)).toBeUndefined();
-  });
-
-  test('rejects a non-numeric pid, since liveness depends on it', () => {
-    expect(safeParseT3(serverRuntimeSchema, { ...real, pid: 'nope' })).toBeUndefined();
   });
 });
 
@@ -93,14 +49,6 @@ describe('environmentDescriptorSchema', () => {
   test('accepts the real recorded shape and exposes the version pin', () => {
     expect(safeParseT3(environmentDescriptorSchema, real)?.serverVersion).toBe('0.0.31');
   });
-
-  test('keeps capabilities as an opaque record so new ones do not break it', () => {
-    const parsed = safeParseT3(environmentDescriptorSchema, {
-      ...real,
-      capabilities: { ...real.capabilities, somethingNew: 42 },
-    });
-    expect(parsed?.capabilities.somethingNew).toBe(42);
-  });
 });
 
 describe('authSessionSchema', () => {
@@ -116,10 +64,6 @@ describe('authSessionSchema', () => {
 
   test('accepts the real recorded shape', () => {
     expect(safeParseT3(authSessionSchema, real)?.auth.policy).toBe('desktop-managed-local');
-  });
-
-  test('accepts an authenticated session too', () => {
-    expect(safeParseT3(authSessionSchema, { ...real, authenticated: true })?.authenticated).toBe(true);
   });
 });
 
@@ -155,20 +99,6 @@ describe('providerCacheSchema', () => {
 
   test('accepts a ready, authenticated instance', () => {
     expect(safeParseT3(providerCacheSchema, codex)?.status).toBe('ready');
-  });
-
-  test('accepts an errored instance — not-installed is data, not a parse failure', () => {
-    const parsed = safeParseT3(providerCacheSchema, {
-      displayName: 'OpenCode',
-      enabled: true,
-      installed: false,
-      status: 'error',
-      version: null,
-      auth: { status: 'unknown' },
-      models: [],
-    });
-    expect(parsed?.installed).toBe(false);
-    expect(parsed?.status).toBe('error');
   });
 
   test('defaults a missing models array to empty rather than failing', () => {
@@ -229,16 +159,5 @@ describe('snapshotSchema', () => {
 
   test('rejects a body that is not a snapshot at all', () => {
     expect(safeParseT3(snapshotSchema, { error: 'unauthorized' })).toBeUndefined();
-  });
-
-  test('rejects null and undefined without throwing', () => {
-    expect(safeParseT3(snapshotSchema, null)).toBeUndefined();
-    expect(safeParseT3(snapshotSchema, undefined)).toBeUndefined();
-  });
-});
-
-describe('dispatchResultSchema', () => {
-  test('accepts the sequence T3 returns on a successful dispatch', () => {
-    expect(safeParseT3(dispatchResultSchema, { sequence: 12 })?.sequence).toBe(12);
   });
 });

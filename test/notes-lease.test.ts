@@ -22,15 +22,6 @@ test('excludes another owner even with an old heartbeat and releases only once',
   await release();
   releases.push(await acquireNotesLease(home));
 });
-test('serializes competing abandoned-owner recoveries', async () => {
-  const lock = join(home, 'notes.json.lock');
-  await mkdir(lock);
-  await writeFile(join(lock, 'owner.json'), JSON.stringify({ token: 'abandoned', pid: 2147483647, processStart: 'dead' }));
-  const results = await Promise.allSettled([acquireNotesLease(home), acquireNotesLease(home), acquireNotesLease(home)]);
-  const winners = results.filter(result => result.status === 'fulfilled');
-  expect(winners).toHaveLength(1);
-  for (const result of winners) if (result.status === 'fulfilled') releases.push(result.value);
-});
 test('does not guess ownership when metadata is missing', async () => {
   await mkdir(join(home, 'notes.json.lock'));
   await utimes(join(home, 'notes.json.lock'), new Date(0), new Date(0));

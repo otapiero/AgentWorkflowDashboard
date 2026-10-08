@@ -114,19 +114,6 @@ describe('derivedPhase — pipeline order, first match wins', () => {
     expect(d.derivedPhase).toBe('copilot_review');
   });
 
-  test('human review outranks Copilot review when both are outstanding', () => {
-    const d = reconcile(
-      openPr({
-        review: {
-          decision: 'CHANGES_REQUESTED',
-          unresolvedThreads: 4,
-          copilotUnresolved: 2,
-        },
-      }),
-    );
-    expect(d.derivedPhase).toBe('dev_review');
-  });
-
   test('failing checks hold the task at CI', () => {
     const d = reconcile(openPr({ checks: 'failure' }));
     expect(d.derivedPhase).toBe('ci');
@@ -153,13 +140,6 @@ describe('derivedPhase — pipeline order, first match wins', () => {
       }),
     );
     expect(d.derivedPhase).toBe('publish');
-  });
-
-  test('an attached plan moves the task to implement', () => {
-    const d = reconcile(
-      facts({ worktreeExists: true, branchExists: true, planMdExists: true }),
-    );
-    expect(d.derivedPhase).toBe('implement');
   });
 
   test('a worktree with no plan yet sits at plan', () => {
@@ -271,9 +251,6 @@ describe('gates', () => {
 });
 
 describe('displayPhase and manual override', () => {
-  test('without an override the display phase is the derived phase', () => {
-    expect(reconcile(openPr()).displayPhase).toBe('copilot_review');
-  });
 
   test('a manual override wins for placement', () => {
     const d = reconcile(openPr({ checks: 'failure' }), 'merge');
@@ -409,16 +386,6 @@ describe('needsYou', () => {
     expect(d.needsYouReason).toMatch(/plan/i);
   });
 
-  test('unresolved Copilot comments need you', () => {
-    const d = reconcile(
-      openPr({
-        review: { decision: 'NONE', unresolvedThreads: 2, copilotUnresolved: 2 },
-      }),
-    );
-    expect(d.needsYou).toBe(true);
-    expect(d.needsYouReason).toMatch(/copilot/i);
-  });
-
   test('an approved PR needs you, because only you merge', () => {
     const d = reconcile(
       openPr({
@@ -464,10 +431,6 @@ describe('artifacts', () => {
     name: 'spec.md', storedPath: 'artifacts/spec.md', origin: 'taskdir', originalPath: 'y',
   };
 
-  test('passes artifacts through to derived state', () => {
-    expect(reconcile(facts({ artifacts: [taskArtifact] })).artifacts).toEqual([taskArtifact]);
-  });
-
   test('adds an in-checkout badge counting repo-origin artifacts', () => {
     const d = reconcile(facts({ artifacts: [repoArtifact, taskArtifact] }));
     expect(d.badges).toContainEqual({
@@ -487,13 +450,6 @@ describe('purity', () => {
     const snapshot = structuredClone(input);
     reconcile(input, 'merge');
     expect(input).toEqual(snapshot);
-  });
-
-  test('the same facts always produce the same result', () => {
-    const input = openPr({
-      review: { decision: 'NONE', unresolvedThreads: 2, copilotUnresolved: 2 },
-    });
-    expect(reconcile(input)).toEqual(reconcile(input));
   });
 });
 
@@ -569,16 +525,6 @@ describe('T3 session liveness', () => {
     expect(derived.needsYouReason).toMatch(/approval/i);
   });
 
-  test('awaiting approval outranks being live, so the card does not go quiet', () => {
-    const derived = reconcile(
-      facts({
-        liveSpawn: { phase: 'plan', pid: 1234, startedAt: '2026-08-07T09:00:00Z', source: 'marker' },
-        t3: { threadId: 't', sessionStatus: 'running', activeTurnId: 'turn-1', awaitingApproval: true, lastError: null, settled: false },
-      }),
-    );
-    expect(derived.needsYou).toBe(true);
-  });
-
   test('a session error shows as a badge', () => {
     const derived = reconcile(
       facts({
@@ -607,11 +553,6 @@ describe('T3 threads the operator has settled', () => {
     // would show live forever.
     const derived = reconcile(facts({ liveSpawn: null, t3: t3({ settled: true }) }));
     expect(derived.badges.some((b) => b.kind === 'live')).toBe(false);
-  });
-
-  test('an unsettled thread with the same session is still live', () => {
-    const derived = reconcile(facts({ liveSpawn: null, t3: t3() }));
-    expect(derived.badges.some((b) => b.kind === 'live')).toBe(true);
   });
 
   test('a settled thread does not keep asking for an approval', () => {

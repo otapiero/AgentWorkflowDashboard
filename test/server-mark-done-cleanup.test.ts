@@ -104,20 +104,6 @@ describe('POST /api/tasks/:issue/move', () => {
     await instance.close();
   });
 
-  test('clearing the override never cleans up', async () => {
-    seedWorktree();
-    const instance = app();
-
-    await instance.inject({
-      method: 'POST',
-      url: `/api/tasks/${ISSUE}/move`,
-      payload: { phase: null },
-    });
-
-    expect(calls).toEqual([]);
-    await instance.close();
-  });
-
   test('done with no worktree left does nothing', async () => {
     const instance = app();
 

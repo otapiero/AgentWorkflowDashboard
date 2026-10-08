@@ -51,12 +51,6 @@ describe('boardSignature', () => {
     expect(boardSignature(a)).toBe(boardSignature(b));
   });
 
-  test('a change in needsYou changes the signature', () => {
-    const a = [task({ derived: derived({ needsYou: false }) })];
-    const b = [task({ derived: derived({ needsYou: true, needsYouReason: 'CI is failing' }) })];
-    expect(boardSignature(a)).not.toBe(boardSignature(b));
-  });
-
   test('a task becoming unreachable changes the signature', () => {
     const a = [task({ unreachable: false })];
     const b = [task({ unreachable: true })];

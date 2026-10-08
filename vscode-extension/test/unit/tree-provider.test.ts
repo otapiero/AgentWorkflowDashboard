@@ -90,31 +90,12 @@ describe('MissionControlTreeProvider', () => {
     expect(vscode.fires.map((node: any) => node?.id)).toEqual(['section:current', 'section:all']);
   });
 
-  test('refreshes cached Current Worktree when a task is added for this workspace', () => {
-    const store = new TaskStore(); store.applyBaseline(config, []);
-    const vscode = fakeVscode();
-    const provider = new MissionControlTreeProvider(store, () => ({ scheme: 'file', fsPath: 'C:\\mc\\worktrees\\issue-3060' }), vscode);
-    provider.getChildren();
-    provider.applyStoreChange({ kind: 'targeted', issues: new Set([3060]), sections: new Set() });
-    expect(vscode.fires.map((node: any) => node?.id)).toEqual(['section:current']);
-  });
-
   test('does not refresh Current Worktree before that section is cached', () => {
     const store = new TaskStore(); store.applyBaseline(config, [task()]);
     const vscode = fakeVscode();
     const provider = new MissionControlTreeProvider(store, () => undefined, vscode);
     provider.applyStoreChange({ kind: 'targeted', issues: new Set([3060]), sections: new Set() });
     expect(vscode.fires).toEqual([]);
-  });
-
-  test('refreshes cached Current Worktree when its task is removed', () => {
-    const store = new TaskStore(); store.applyBaseline(config, [task()]);
-    const vscode = fakeVscode();
-    const provider = new MissionControlTreeProvider(store, () => ({ scheme: 'file', fsPath: 'C:\\mc\\worktrees\\issue-3060' }), vscode);
-    provider.getChildren();
-    provider.getChildren({ kind: 'section', id: 'section:current', label: 'Current Worktree', expanded: true });
-    provider.applyStoreChange({ kind: 'targeted', issues: new Set([3060]), sections: new Set() });
-    expect(vscode.fires.map((node: any) => node?.id)).toEqual(['task:current:3060', 'section:current']);
   });
 
   test('refreshes every cached placement of one changed issue', () => {

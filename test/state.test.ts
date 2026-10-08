@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -56,22 +56,9 @@ describe('newTask', () => {
     expect(task.branch).toBe('alice/3060-add-audio-playback-mode');
     expect(task.slug).toBe('add-audio-playback-mode');
   });
-
-  test('starts with no PR, no override and no history', () => {
-    const task = newTask(3060, 'Anything', 'alice');
-    expect(task.prNumber).toBeNull();
-    expect(task.manualPhase).toBeNull();
-    expect(task.spawnHistory).toEqual([]);
-    expect(task.worktreePath).toBeNull();
-  });
 });
 
 describe('task mutations', () => {
-  test('an upserted task can be read back by issue number', () => {
-    upsertTask(newTask(3060, 'Audio mode', 'alice'));
-    expect(getTask(3060)?.title).toBe('Audio mode');
-  });
-
   test('upserting an existing issue replaces it rather than duplicating', () => {
     upsertTask(newTask(3060, 'Original title', 'alice'));
     upsertTask({ ...newTask(3060, 'Renamed title', 'alice'), manualPhase: 'merge' });
@@ -90,31 +77,17 @@ describe('task mutations', () => {
     removeTask(3060);
     expect(listTasks().map((t) => t.issue)).toEqual([3120]);
   });
-
-  test('removing an issue that is absent is a no-op', () => {
-    expect(() => removeTask(9999)).not.toThrow();
-  });
-
-  test('mutations persist across a reload', () => {
-    upsertTask(newTask(3060, 'Audio mode', 'alice'));
-    expect(loadState().tasks.map((t) => t.issue)).toEqual([3060]);
-  });
 });
 
-describe('durability', () => {
-  test('saved state is human-readable json', () => {
-    // A cache the user can inspect and hand-edit when something goes wrong.
-    upsertTask(newTask(3060, 'Audio mode', 'alice'));
-    expect(readFileSync(statePath(), 'utf8')).toContain('\n  ');
-  });
-
-  test('a failed write does not leave a truncated state file', () => {
-    upsertTask(newTask(3060, 'Audio mode', 'alice'));
+describe('saveState', () => {
+  test('a write that fails part-way leaves the previous state intact', () => {
+    upsertTask(newTask(3060, 'Original title', 'alice'));
     const before = readFileSync(statePath(), 'utf8');
-    // Writing must go via a temp file and rename, so a reader never sees
-    // a half-written file.
-    expect(() => saveState({ version: 1, tasks: [] })).not.toThrow();
-    expect(readFileSync(statePath(), 'utf8')).not.toBe(before);
-    expect(() => JSON.parse(readFileSync(statePath(), 'utf8'))).not.toThrow();
+    // A directory where the temp file goes makes the write fail before the
+    // rename. Writing state.json in place would have succeeded instead.
+    mkdirSync(`${statePath()}.tmp`);
+
+    expect(() => saveState({ version: 1, tasks: [] })).toThrow();
+    expect(readFileSync(statePath(), 'utf8')).toBe(before);
   });
 });

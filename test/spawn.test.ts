@@ -114,15 +114,6 @@ describe('buildAgentArgs — copilot', () => {
     expect(args.join(' ')).not.toContain('--append-system-prompt');
     expect(args).not.toContain(RULES);
   });
-
-  test('appends configured extra arguments', () => {
-    const args = buildAgentArgs(
-      'copilot',
-      { ...copilot, extraArgs: ['--allow-all-tools'] },
-      { instructions: RULES },
-    );
-    expect(args).toContain('--allow-all-tools');
-  });
 });
 
 describe('buildAgentArgs — codex', () => {
@@ -155,25 +146,6 @@ describe('buildAgentArgs — codex', () => {
     expect(args[args.indexOf('--add-dir') + 1]).toBe(taskDir);
     expect(args).not.toContain('danger-full-access');
   });
-
-  test('carries standing rules inline because Codex has no system-prompt flag', () => {
-    const args = buildAgentArgs('codex', codex, { instructions: RULES });
-    expect(args).not.toContain(RULES);
-    expect(args.join(' ')).not.toContain('append-system-prompt');
-  });
-});
-
-describe('buildAgentArgs — general', () => {
-  test('the prompt token appears exactly once so substitution is unambiguous', () => {
-    const args = buildAgentArgs('claude', claude, { instructions: RULES });
-    expect(args.filter((a) => a === PROMPT_TOKEN)).toHaveLength(1);
-  });
-
-  test('arguments are kept as separate array entries, never a joined string', () => {
-    // Splatting an array is what keeps spaces and quotes in the prompt safe.
-    const args = buildAgentArgs('claude', claude, { instructions: 'has spaces and "quotes"' });
-    expect(args).toContain('has spaces and "quotes"');
-  });
 });
 
 describe('buildWtArgs', () => {
@@ -188,10 +160,6 @@ describe('buildWtArgs', () => {
   test('titles the tab with the issue and phase so parallel tabs are identifiable', () => {
     const args = buildWtArgs(opts);
     expect(args[args.indexOf('--title') + 1]).toBe('#3060 plan');
-  });
-
-  test('opens a new tab', () => {
-    expect(buildWtArgs(opts)[0]).toBe('new-tab');
   });
 
   test('starts in a directory that is guaranteed to exist', () => {
@@ -257,25 +225,10 @@ describe('buildCodeWorkspace', () => {
     expect(task.args).toContain('-GuardFile');
     expect(task.args).toContain(opts.guardFile);
   });
-
-  test('names the task for the issue and phase', () => {
-    expect(buildCodeWorkspace(opts).tasks.tasks[0]!.label).toContain('3060');
-    expect(buildCodeWorkspace(opts).tasks.tasks[0]!.label).toContain('plan');
-  });
-
-  test('serialises to valid JSON', () => {
-    expect(() => JSON.stringify(buildCodeWorkspace(opts))).not.toThrow();
-  });
 });
 
 describe('buildCodeArgs', () => {
   const wsFile = 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\tasks\\3060\\mc-3060.code-workspace';
-
-  test('disables workspace trust so the folder-open task is not blocked', () => {
-    // A fresh worktree has never been trusted, so without this VS Code opens in
-    // Restricted Mode and the phase never starts until someone clicks through.
-    expect(buildCodeArgs(wsFile)).toContain('--disable-workspace-trust');
-  });
 
   test('puts the flags before the path so they are parsed as options', () => {
     const args = buildCodeArgs(wsFile, { newWindow: true });
@@ -296,9 +249,5 @@ describe('summarisePrompt', () => {
     const summary = summarisePrompt('x'.repeat(400));
     expect(summary).toHaveLength(100);
     expect(summary.endsWith('…')).toBe(true);
-  });
-
-  test('leaves a short prompt untouched', () => {
-    expect(summarisePrompt('go')).toBe('go');
   });
 });

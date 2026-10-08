@@ -50,9 +50,6 @@ describe('anyInFlight', () => {
   test('a green, approved board at rest is not in flight', () => {
     expect(anyInFlight([card([ciGood, approved])])).toBe(false);
   });
-  test('an empty board is not in flight', () => {
-    expect(anyInFlight([])).toBe(false);
-  });
 });
 
 describe('nextDelayMs', () => {

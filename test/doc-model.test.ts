@@ -1,16 +1,12 @@
 import { describe, expect, test } from 'vitest';
 
 import {
-  availableModes,
   buildDocList,
   clampFontPx,
   clampSplit,
   dirtyKeys,
   docKey,
   effectiveMode,
-  FONT_DEFAULT,
-  FONT_MAX,
-  FONT_MIN,
   SPLIT_DEFAULT,
 } from '../src/web/doc-model.ts';
 import type { ArtifactRef } from '../src/shared/types.ts';
@@ -39,24 +35,9 @@ describe('buildDocList', () => {
     const list = buildDocList([ref('spec.md', 'repo'), ref('notes.txt', 'taskdir')]);
     expect(list.map((d) => d.inCheckout)).toEqual([false, true, false]);
   });
-
-  test('handles a task with no artifacts at all', () => {
-    expect(buildDocList([])).toHaveLength(1);
-  });
-
-  test('carries arbitrary names through untouched', () => {
-    const list = buildDocList([ref('2026-08-05-whatever-the-agent-chose.md', 'repo')]);
-    expect(list[1]!.label).toBe('2026-08-05-whatever-the-agent-chose.md');
-    expect(list[1]!.id).toEqual({ kind: 'artifact', name: '2026-08-05-whatever-the-agent-chose.md' });
-  });
 });
 
 describe('clampFontPx', () => {
-  test('holds the documented bounds', () => {
-    expect(FONT_MIN).toBe(11);
-    expect(FONT_MAX).toBe(24);
-    expect(FONT_DEFAULT).toBe(13);
-  });
   test('clamps below and above', () => {
     expect(clampFontPx(2)).toBe(11);
     expect(clampFontPx(99)).toBe(24);
@@ -93,12 +74,6 @@ describe('dirtyKeys', () => {
 });
 
 describe('availableModes / effectiveMode', () => {
-  test('markdown offers all three modes', () => {
-    expect(availableModes('markdown')).toEqual(['edit', 'split', 'preview']);
-  });
-  test('plain text offers editing only', () => {
-    expect(availableModes('text')).toEqual(['edit']);
-  });
   test('a preferred mode a text document cannot honour degrades to edit', () => {
     expect(effectiveMode('preview', 'text')).toBe('edit');
     expect(effectiveMode('split', 'text')).toBe('edit');

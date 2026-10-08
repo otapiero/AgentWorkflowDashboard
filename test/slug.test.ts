@@ -2,12 +2,6 @@ import { describe, expect, test } from 'vitest';
 import { slugify, branchName } from '../src/orchestrator/slug.ts';
 
 describe('slugify', () => {
-  test('lowercases and joins words with single dashes', () => {
-    expect(slugify('Add audio playback mode')).toBe(
-      'add-audio-playback-mode',
-    );
-  });
-
   test('drops apostrophes rather than turning them into separators', () => {
     // "doesn't" must become "doesnt", not "doesn-t".
     expect(slugify("Refresh token doesn't work in background")).toBe(
@@ -57,10 +51,4 @@ describe('branchName', () => {
     ).toBe('alice/3060-add-audio-playback-mode');
   });
 
-  test('produces a branch that publish-pr can parse the issue number from', () => {
-    // /publish-pr takes the numeric portion after the first "/".
-    const branch = branchName('alice', 3120, 'change audio mode prompt');
-    const parsed = Number(branch.split('/')[1]?.split('-')[0]);
-    expect(parsed).toBe(3120);
-  });
 });

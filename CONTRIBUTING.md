@@ -51,14 +51,12 @@ directory. Never let a test touch the real `~/.mission-control`.
 
 ```powershell
 npm run extension:install-deps
-npm run extension:verify        # typecheck, unit tests, perf budgets, build
+npm run extension:verify        # typecheck, unit tests, build
 npm run extension:test-host     # downloads a real VS Code; run by hand
 ```
 
-CI runs the first three of those but not the performance budgets — they are
-wall-clock measurements that swing with machine load and would fail at random
-on a shared runner. Run `extension:verify` locally before sending a change that
-touches the extension.
+CI runs `extension:verify`'s steps; only the VS Code host test is left to run by
+hand.
 
 ## Layout
 

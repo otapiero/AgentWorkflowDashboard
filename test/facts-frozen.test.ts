@@ -73,18 +73,6 @@ describe('gatherFacts — active task', () => {
     });
   });
 
-  test('reads PR facts from the batch, not the network', async () => {
-    const facts = await gatherFacts(
-      config,
-      task({ prState: 'OPEN', mergedAt: null }),
-      new Set(['b']),
-      batch({ byBranch: new Map([['b', openPr]]) }),
-    );
-    expect(gatherGitFacts).toHaveBeenCalledOnce();
-    expect(facts.pr.state).toBe('OPEN');
-    expect(facts.checks).toBe('success');
-  });
-
   test('a failed batch throws so the poller can hold last-good', async () => {
     await expect(
       gatherFacts(
@@ -119,6 +107,7 @@ describe('gatherFacts — active task', () => {
         unavailable: new Set(['some-other-branch']),
       }),
     );
+    expect(gatherGitFacts).toHaveBeenCalledOnce();
     expect(facts.pr.state).toBe('OPEN');
     expect(facts.checks).toBe('success');
   });

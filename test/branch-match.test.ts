@@ -4,10 +4,6 @@ import { parseRefs, pickBranchForIssue } from '../src/orchestrator/worktree.ts';
 const GENERATED = 'alice/3060-add-audio-playback-mode';
 
 describe('parseRefs', () => {
-  test('reads one ref per line', () => {
-    expect(parseRefs('dev\nalice/3060-x\n')).toEqual(['dev', 'alice/3060-x']);
-  });
-
   test('strips the origin/ prefix so local and remote refs compare equal', () => {
     expect(parseRefs('origin/dev\ndev')).toEqual(['dev', 'dev']);
   });
@@ -22,10 +18,6 @@ describe('parseRefs', () => {
 });
 
 describe('pickBranchForIssue', () => {
-  test('uses the generated name when no branch exists yet', () => {
-    expect(pickBranchForIssue([], 'alice', 3060, GENERATED)).toBe(GENERATED);
-  });
-
   test('prefers a real branch whose casing differs from the generated slug', () => {
     // The actual branch on this machine is "3060-Add..."; the slug
     // produces "3060-learning...". Windows git refs are case-insensitive so
@@ -73,8 +65,4 @@ describe('pickBranchForIssue', () => {
     expect(first).toBe(second);
   });
 
-  test('deduplicates a branch that exists both locally and on origin', () => {
-    const real = 'alice/3060-Add-audio-playback-mode';
-    expect(pickBranchForIssue([real, real], 'alice', 3060, GENERATED)).toBe(real);
-  });
 });

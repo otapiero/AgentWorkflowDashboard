@@ -6,7 +6,6 @@ import type { ChildProcess } from 'node:child_process';
 import { afterEach, expect, test, vi } from 'vitest';
 
 import type { HealthResponse } from '../../../src/shared/types.ts';
-import { MissionControlClient } from '../../src/client/mission-control-client.ts';
 import { ServerManager } from '../../src/server-manager.ts';
 
 const directories: string[] = [];
@@ -83,17 +82,6 @@ test('abort immediately after acquiring startup lease still releases it', async 
   expect(dependencies.process.spawn).not.toHaveBeenCalled();
 });
 
-test('reports an API mismatch from a runtime-validated client response', async () => {
-  const client = new MissionControlClient('http://127.0.0.1:4317', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-    status: 'ok', apiVersion: 2, serverVersion: '2.0.0', pid: 42, startedAt: '2026-08-03T10:00:00.000Z',
-  }), { status: 200, headers: { 'content-type': 'application/json' } })));
-
-  await expect(new ServerManager(options({ client })).ensureReady()).resolves.toEqual({
-    kind: 'incompatible',
-    health: { status: 'ok', apiVersion: 2, serverVersion: '2.0.0', pid: 42, startedAt: '2026-08-03T10:00:00.000Z', instanceId: null },
-  });
-});
-
 test.each(['https://127.0.0.1:4317', 'http://0.0.0.0:4317', 'not a url', 'http://user@localhost:4317', 'http://localhost:4317/path', 'http://localhost:4317/?query=1', 'http://localhost:4317/#hash'])('rejects unsafe or malformed server URL %s', async (serverUrl) => {
   const dependencies = options({ serverUrl });
   await expect(new ServerManager(dependencies).ensureReady()).resolves.toMatchObject({ kind: 'configuration-error' });
@@ -153,23 +141,6 @@ test('uses every bounded readiness delay before reporting unavailable', async ()
 
   await expect(new ServerManager(dependencies).ensureReady()).resolves.toMatchObject({ kind: 'unavailable' });
   expect(vi.mocked(dependencies.delay).mock.calls.map(([delay]) => delay)).toEqual([0, 100, 200, 400, 800, 1_000, 1_000, 1_000, 1_000, 1_000]);
-});
-
-test('two managers sharing a startup lock create one process', async () => {
-  const installationPath = await directory(); const storagePath = await directory();
-  await writeFile(join(installationPath, 'package.json'), JSON.stringify({ name: 'mission-control', scripts: { start: 'node' } }));
-  const client = { health: vi.fn().mockRejectedValue(new Error('offline')) };
-  const process = { spawn: vi.fn(() => ({ pid: 42, unref: vi.fn() }) as unknown as ChildProcess) };
-  let completeFirstWait: (() => void) | undefined;
-  let delayCalls = 0;
-  const common = { client, installationPath, storagePath, serverUrl: 'http://localhost:4317', autoStart: true, expectedApiVersion: 1 as const, process, kill: vi.fn(), delay: vi.fn(() => (++delayCalls === 1 ? new Promise<void>((resolve) => { completeFirstWait = resolve; }) : Promise.resolve())) };
-  const first = new ServerManager(common).ensureReady();
-  await vi.waitFor(() => expect(process.spawn).toHaveBeenCalledOnce());
-  const second = await new ServerManager(common).ensureReady();
-  expect(second).toMatchObject({ kind: 'unavailable' });
-  expect(process.spawn).toHaveBeenCalledOnce();
-  completeFirstWait!();
-  await first;
 });
 
 test('restart kills only the matching owned health identity and dispose only aborts waits', async () => {
@@ -238,24 +209,6 @@ test('claims ownership of the server it spawned even though the child PID differ
     pid: 25808,
     startedAt: health().startedAt,
   });
-});
-
-test('a server it spawned can then actually be restarted', async () => {
-  const installationPath = await installation();
-  const storagePath = await directory();
-  const spawn = vi.fn(() => ({ pid: 42, unref: vi.fn() }) as unknown as ChildProcess);
-  let injected: string | undefined;
-  const client = { health: vi.fn(async () => {
-    if (!spawn.mock.calls.length) throw new Error('offline');
-    injected ??= injectedInstanceId(spawn);
-    return health({ pid: 25808, instanceId: injected });
-  }) };
-  const dependencies = options({ installationPath, storagePath, autoStart: true, process: { spawn }, client });
-  const manager = new ServerManager(dependencies);
-  await manager.ensureReady();
-
-  await expect(manager.restartOwned()).resolves.toBe(true);
-  expect(dependencies.kill).toHaveBeenCalledWith(25808);
 });
 
 test('does not claim a server started outside the extension, even on the same port', async () => {

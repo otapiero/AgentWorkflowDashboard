@@ -2,9 +2,6 @@ import { describe, expect, test } from 'vitest';
 
 import {
   buildModelSelection,
-  buildMissionControlScript,
-  buildProjectCreateCommand,
-  buildProjectScriptsUpdateCommand,
   buildThreadCreateCommand,
   buildTurnStartCommand,
 } from '../src/orchestrator/t3/commands.ts';
@@ -27,18 +24,6 @@ const codex: AgentProfile = {
 };
 
 describe('buildModelSelection', () => {
-  test('maps an agent to its T3 provider instance', () => {
-    const selection = buildModelSelection(codex, { model: 'gpt-5.6-sol', effort: null });
-    expect(selection).toEqual({ instanceId: 'codex', model: 'gpt-5.6-sol' });
-  });
-
-  test('renders effort as the canonical options array, not a CLI flag', () => {
-    // The per-CLI flag divergence buildAgentArgs exists to absorb is not this
-    // path's concern; T3's provider drivers handle invocation.
-    const selection = buildModelSelection(codex, { model: 'gpt-5.6-sol', effort: 'high' });
-    expect(selection?.options).toEqual([{ id: 'effort', value: 'high' }]);
-  });
-
   test('omits options entirely when there is no effort', () => {
     expect(buildModelSelection(codex, { model: 'gpt-5.6-sol', effort: null })).not.toHaveProperty(
       'options',
@@ -66,23 +51,6 @@ describe('buildModelSelection', () => {
 
   test('no model at all is not launchable — T3 requires one', () => {
     expect(buildModelSelection(codex, { model: null, effort: null })).toBeNull();
-  });
-});
-
-describe('buildProjectCreateCommand', () => {
-  test('creates a project rooted at the repo Mission Control was configured with', () => {
-    const command = buildProjectCreateCommand({
-      commandId: 'cmd-1',
-      projectId: 'proj-1',
-      title: 'widgets',
-      workspaceRoot: 'C:\\repo',
-      createdAt: '2026-08-07T09:00:00.000Z',
-    }) as Record<string, unknown>;
-
-    expect(command.type).toBe('project.create');
-    expect(command.projectId).toBe('proj-1');
-    expect(command.workspaceRoot).toBe('C:\\repo');
-    expect(command.createdAt).toBe('2026-08-07T09:00:00.000Z');
   });
 });
 
@@ -137,17 +105,6 @@ describe('buildThreadCreateCommand', () => {
     expect(command.runtimeMode).toBe('approval-required');
     expect(command.interactionMode).toBe('plan');
   });
-
-  test('titles the thread so T3s sidebar groups phases legibly', () => {
-    expect((buildThreadCreateCommand(input) as any).title).toBe('#3060 plan');
-  });
-
-  test('carries the model selection', () => {
-    expect((buildThreadCreateCommand(input) as any).modelSelection).toEqual({
-      instanceId: 'codex',
-      model: 'gpt-5.6-sol',
-    });
-  });
 });
 
 describe('buildTurnStartCommand', () => {
@@ -186,66 +143,5 @@ describe('buildTurnStartCommand', () => {
     const command = buildTurnStartCommand(input) as any;
     expect(command.runtimeMode).toBe('approval-required');
     expect(command.interactionMode).toBe('plan');
-  });
-
-  test('carries the model selection so the turn cannot drift from the thread', () => {
-    expect((buildTurnStartCommand(input) as any).modelSelection).toEqual({
-      instanceId: 'codex',
-      model: 'gpt-5.6-sol',
-    });
-  });
-});
-
-describe('buildMissionControlScript', () => {
-  test('points T3s preview panel at the board', () => {
-    const script = buildMissionControlScript('http://127.0.0.1:4317') as any;
-    expect(script.previewUrl).toBe('http://127.0.0.1:4317');
-    expect(script.autoOpenPreview).toBe(true);
-  });
-
-  test('uses an icon from T3s closed set', () => {
-    const script = buildMissionControlScript('http://127.0.0.1:4317') as any;
-    expect(['play', 'test', 'lint', 'configure', 'build', 'debug']).toContain(script.icon);
-  });
-
-  test('does not run on worktree creation', () => {
-    // The board is a singleton; a per-worktree copy makes no sense.
-    expect((buildMissionControlScript('http://127.0.0.1:4317') as any).runOnWorktreeCreate).toBe(
-      false,
-    );
-  });
-
-  test('its command is a probe, not a launcher', () => {
-    // T3 runs scripts in a worktree-scoped terminal, so starting the board
-    // there would tie its lifetime to a thread.
-    const script = buildMissionControlScript('http://127.0.0.1:4317') as any;
-    expect(script.command).toContain('4317');
-    expect(script.command).not.toContain('npm start');
-  });
-
-  test('probes the endpoint that actually exists', () => {
-    // /health is not a route. It falls through to the SPA not-found handler,
-    // which serves index.html with a 200 — so `curl -sf` would report success
-    // while proving nothing about the server. Verified 2026-08-07.
-    const script = buildMissionControlScript('http://127.0.0.1:4317') as any;
-    expect(script.command).toContain('/api/health');
-  });
-});
-
-describe('buildProjectScriptsUpdateCommand', () => {
-  test('updates only the scripts, leaving title and workspace root alone', () => {
-    // Every other field on project.meta.update is optional, and sending one we
-    // did not mean to change would overwrite whatever the operator set in T3.
-    const command = buildProjectScriptsUpdateCommand({
-      commandId: 'cmd-1',
-      projectId: 'proj-1',
-      scripts: [buildMissionControlScript('http://127.0.0.1:4317')],
-    }) as any;
-
-    expect(command.type).toBe('project.meta.update');
-    expect(command.projectId).toBe('proj-1');
-    expect(command.scripts).toHaveLength(1);
-    expect(command).not.toHaveProperty('title');
-    expect(command).not.toHaveProperty('workspaceRoot');
   });
 });

@@ -54,11 +54,5 @@ jobs:
 
       - run: npm --prefix vscode-extension run build
 
-      # Deliberately not `extension:verify`. That also runs test:performance,
-      # whose wall-clock budgets swing with machine load - the same SSE
-      # dispatch check measured 7 ms, 95 ms and 111 ms against a 100 ms limit
-      # on one developer machine within a few minutes. A shared runner would
-      # fail it at random. Run `npm run extension:verify` locally instead.
-      #
-      # The VS Code integration test is also left out: it downloads a full
+      # The VS Code integration test is left out: it downloads a full
       # editor. Run `npm run extension:test-host` by hand.

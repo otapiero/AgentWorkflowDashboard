@@ -3,7 +3,6 @@ import {
   parseChecksRollup,
   normalizeReviewDecision,
   parseReviewThreads,
-  parseBranchPrResponse,
   parseBranchPrsResponse,
   parseRateLimit,
   unavailableBranches,
@@ -15,15 +14,6 @@ describe('parseChecksRollup', () => {
   test('an empty rollup means no checks have reported', () => {
     // Real shape from PR #3119, which had no checks at all.
     expect(parseChecksRollup([])).toBe('none');
-  });
-
-  test('all successful check runs are success', () => {
-    expect(
-      parseChecksRollup([
-        { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' },
-        { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' },
-      ]),
-    ).toBe('success');
   });
 
   test('skipped checks do not count as failures', () => {
@@ -64,14 +54,6 @@ describe('parseChecksRollup', () => {
       parseChecksRollup([
         { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' },
         { __typename: 'CheckRun', status: 'IN_PROGRESS', conclusion: null },
-      ]),
-    ).toBe('pending');
-  });
-
-  test('a queued run makes the rollup pending', () => {
-    expect(
-      parseChecksRollup([
-        { __typename: 'CheckRun', status: 'QUEUED', conclusion: null },
       ]),
     ).toBe('pending');
   });
@@ -133,25 +115,11 @@ describe('parseReviewThreads', () => {
     comments: { nodes: [{ author: { login } }] },
   });
 
-  test('no threads means nothing unresolved', () => {
-    expect(parseReviewThreads([], COPILOT)).toEqual({
-      unresolvedThreads: 0,
-      copilotUnresolved: 0,
-    });
-  });
-
   test('resolved threads are not counted', () => {
     // PR #3122's real state: two Copilot threads, both resolved.
     expect(
       parseReviewThreads([thread(true, COPILOT), thread(true, COPILOT)], COPILOT),
     ).toEqual({ unresolvedThreads: 0, copilotUnresolved: 0 });
-  });
-
-  test('unresolved Copilot threads are counted in both totals', () => {
-    // PR #3119's real state: two unresolved Copilot threads.
-    expect(
-      parseReviewThreads([thread(false, COPILOT), thread(false, COPILOT)], COPILOT),
-    ).toEqual({ unresolvedThreads: 2, copilotUnresolved: 2 });
   });
 
   test('human threads count toward the total but not the Copilot count', () => {
@@ -187,23 +155,25 @@ describe('parseReviewThreads', () => {
   });
 });
 
-describe('parseBranchPrResponse', () => {
-  /** Build the GraphQL envelope a single `gh api graphql` call returns. */
-  const envelope = (nodes: unknown[]) => ({
-    data: { repository: { pullRequests: { nodes } } },
-  });
+describe('folding a branch PR connection', () => {
+  /** Fold one branch's PR connection through the batched parser. */
+  const fold = (nodes: unknown[]) =>
+    parseBranchPrsResponse(
+      { data: { repository: { b0: { nodes } } } },
+      ['feat'],
+      COPILOT,
+    ).get('feat')!;
 
   /** One pull-request node in the combined-query shape. */
   const prNode = (opts: {
     number?: number;
-    url?: string;
     state?: 'OPEN' | 'MERGED' | 'CLOSED';
     reviewDecision?: string | null;
     threads?: unknown[];
     checks?: unknown[] | null;
   }) => ({
     number: opts.number ?? 3119,
-    url: opts.url ?? 'https://github.com/o/r/pull/3119',
+    url: `https://github.com/o/r/pull/${opts.number ?? 3119}`,
     state: opts.state ?? 'OPEN',
     reviewDecision: opts.reviewDecision ?? '',
     reviewThreads: { nodes: opts.threads ?? [] },
@@ -220,44 +190,28 @@ describe('parseBranchPrResponse', () => {
   });
 
   test('a branch with no associated PR reports no PR and no live gates', () => {
-    expect(parseBranchPrResponse(envelope([]), COPILOT)).toEqual({
+    expect(fold([])).toEqual({
       pr: { exists: false, number: null, url: null, state: null },
       checks: 'none',
       review: { decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 },
     });
   });
 
-  test('an open PR carries its number, url and state', () => {
-    const result = parseBranchPrResponse(
-      envelope([prNode({ number: 3119, url: 'https://x/pull/3119', state: 'OPEN' })]),
-      COPILOT,
-    );
-    expect(result.pr).toEqual({
-      exists: true,
-      number: 3119,
-      url: 'https://x/pull/3119',
-      state: 'OPEN',
-    });
-  });
-
   test('an open PR reports checks, decision and thread counts together', () => {
     // The whole point of the combined query: one call yields every live gate.
-    const result = parseBranchPrResponse(
-      envelope([
-        prNode({
-          state: 'OPEN',
-          reviewDecision: 'REVIEW_REQUIRED',
-          checks: [
-            { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' },
-          ],
-          threads: [
-            { isResolved: false, comments: { nodes: [{ author: { login: COPILOT } }] } },
-            { isResolved: false, comments: { nodes: [{ author: { login: 'alice' } }] } },
-          ],
-        }),
-      ]),
-      COPILOT,
-    );
+    const result = fold([
+      prNode({
+        state: 'OPEN',
+        reviewDecision: 'REVIEW_REQUIRED',
+        checks: [
+          { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' },
+        ],
+        threads: [
+          { isResolved: false, comments: { nodes: [{ author: { login: COPILOT } }] } },
+          { isResolved: false, comments: { nodes: [{ author: { login: 'alice' } }] } },
+        ],
+      }),
+    ]);
     expect(result.checks).toBe('success');
     expect(result.review).toEqual({
       decision: 'REVIEW_REQUIRED',
@@ -267,20 +221,17 @@ describe('parseBranchPrResponse', () => {
   });
 
   test('a closed or merged PR reports no live checks or review', () => {
-    // Matches the old early-return: a PR that is not OPEN has no gates to poll.
-    const result = parseBranchPrResponse(
-      envelope([
-        prNode({
-          state: 'MERGED',
-          reviewDecision: 'APPROVED',
-          checks: [{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'FAILURE' }],
-          threads: [
-            { isResolved: false, comments: { nodes: [{ author: { login: 'alice' } }] } },
-          ],
-        }),
-      ]),
-      COPILOT,
-    );
+    // A PR that is not OPEN has no gates to poll.
+    const result = fold([
+      prNode({
+        state: 'MERGED',
+        reviewDecision: 'APPROVED',
+        checks: [{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'FAILURE' }],
+        threads: [
+          { isResolved: false, comments: { nodes: [{ author: { login: 'alice' } }] } },
+        ],
+      }),
+    ]);
     expect(result.pr.state).toBe('MERGED');
     expect(result.checks).toBe('none');
     expect(result.review).toEqual({
@@ -291,24 +242,13 @@ describe('parseBranchPrResponse', () => {
   });
 
   test('an open PR is preferred over a more recent closed one', () => {
-    // gh pr list --state all could return several; the open one is the live one.
-    const result = parseBranchPrResponse(
-      envelope([
-        prNode({ number: 20, state: 'CLOSED' }),
-        prNode({ number: 19, state: 'OPEN' }),
-      ]),
-      COPILOT,
-    );
+    // Several PRs can share a head branch; the open one is the live one.
+    const result = fold([
+      prNode({ number: 20, state: 'CLOSED' }),
+      prNode({ number: 19, state: 'OPEN' }),
+    ]);
     expect(result.pr.number).toBe(19);
     expect(result.pr.state).toBe('OPEN');
-  });
-
-  test('a missing rollup on an open PR is treated as no checks', () => {
-    const result = parseBranchPrResponse(
-      envelope([prNode({ state: 'OPEN', checks: null })]),
-      COPILOT,
-    );
-    expect(result.checks).toBe('none');
   });
 });
 

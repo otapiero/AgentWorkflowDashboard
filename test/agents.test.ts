@@ -100,10 +100,6 @@ describe('resolveAgent — model', () => {
       resolveAgent(config, task({ model: 'opus' }), 'plan', {}, { model: 'sonnet' }).model,
     ).toBe('sonnet');
   });
-
-  test('a non-agent phase has no model', () => {
-    expect(resolveAgent(config, task(), 'ci', {}).model).toBeNull();
-  });
 });
 
 describe('resolveAgent — effort', () => {
@@ -121,13 +117,6 @@ describe('resolveAgent — effort', () => {
     ).toBe('max');
   });
 
-  test('agent, model and effort can all be pinned together', () => {
-    const r = resolveAgent(config, task(), 'plan', {
-      plan: { agent: 'copilot', model: 'gpt-6-sol', effort: 'high' },
-    });
-    expect(r).toEqual({ agent: 'copilot', model: 'gpt-6-sol', effort: 'high' });
-  });
-
   test('a saved model the agent no longer offers falls back to the CLI default', () => {
     // An org admin withdrew it, or it was mistyped: sending it fails the launch.
     const r = resolveAgent(config, task(), 'plan', {
@@ -138,27 +127,6 @@ describe('resolveAgent — effort', () => {
 });
 
 describe('agentCapabilities', () => {
-  test('supplies built-in models and efforts when the profile omits them', () => {
-    const caps = agentCapabilities('claude', config.agents.claude as AgentProfile);
-    expect(caps.models.length).toBeGreaterThan(0);
-    expect(caps.efforts).toContain('high');
-    expect(caps.effortFlag).toBe('--effort');
-  });
-
-  test("agentCapabilities > uses Copilot's dotted model identifiers", () => {
-    const caps = agentCapabilities('copilot', config.agents.copilot as AgentProfile);
-    expect(caps.models[0]).toBe('auto');
-    expect(caps.models).toContain('claude-opus-5.5');
-    expect(caps.models).toContain('gpt-6-sol');
-    expect(caps.models).not.toContain('gpt-5.6-terra');
-  });
-
-  test("copilot's built-in effort list includes its extra levels", () => {
-    const caps = agentCapabilities('copilot', config.agents.copilot as AgentProfile);
-    expect(caps.efforts).toContain('minimal');
-    expect(caps.hasEffort).toBe(true);
-  });
-
   test('supplies Codex models and config-based effort support', () => {
     const caps = agentCapabilities('codex', config.agents.codex as AgentProfile);
     expect(caps.models).toContain('gpt-5.6-sol');

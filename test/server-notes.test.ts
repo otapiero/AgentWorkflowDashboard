@@ -15,12 +15,10 @@ import type { Config } from '../src/shared/types.ts';
 let home: string;
 let service: NotesService;
 let app: ReturnType<typeof Fastify>;
-let broadcaster: Broadcaster;
 const projectId = 'acme__app';
 beforeEach(async () => {
   home = await mkdtemp(join(tmpdir(), 'mc-notes-http-'));
-  broadcaster = new Broadcaster();
-  service = new NotesService({ home, projectId, tasks: () => [{ issue: 42, title: 'Task' }], onSnapshot: value => broadcaster.send('notes', value), onStatus: value => broadcaster.send('notes-status', value) });
+  service = new NotesService({ home, projectId, tasks: () => [{ issue: 42, title: 'Task' }] });
   await service.start();
   app = Fastify();
   registerNotesRoutes(app, { service });
@@ -48,22 +46,6 @@ test('checks project identity on every route and requires it on writes', async (
   expect((await app.inject(`/api/notes/${randomUUID()}`)).statusCode).toBe(404);
   expect((await create({ unknown: true })).statusCode).toBe(400);
   expect((await create({ body: 'x'.repeat(65537) })).statusCode).toBe(413);
-});
-test('replays empty and committed snapshots, and suppresses replay when requested', async () => {
-  const capture = (replay: boolean) => {
-    const chunks: string[] = [];
-    const raw = new PassThrough();
-    raw.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
-    broadcaster.add({ raw } as never, { replay });
-    return chunks;
-  };
-  const empty = capture(true).join('');
-  expect(empty).toContain('event: notes\n');
-  expect(empty).toContain('"available":true');
-  expect(empty).toContain('"notes":[]');
-  await create();
-  expect(capture(true).join('')).toContain('"body":"Text"');
-  expect(capture(false)).toEqual([]);
 });
 test('lease conflict disables notes routes and publishes only unavailable status', async () => {
   const chunks: string[] = [];

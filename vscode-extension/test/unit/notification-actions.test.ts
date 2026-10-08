@@ -2,9 +2,9 @@ import { expect, test } from 'vitest';
 import { notificationActions } from '../../src/notifications/notification-actions.ts';
 import { task } from './fixtures.ts';
 
-test('offers PR and worktree actions independently with dashboard fallback', () => {
+test('never offers Run Phase for non-approval events, even when connected', () => {
   const value = task();
-  expect(notificationActions({ kind: 'reviewComments', issue: value.issue, title: '', message: '', fingerprint: '', prUrl: 'https://example.test/pr/1' }, value, undefined)).toEqual(['View PR', 'Open Worktree', 'Open Dashboard']);
+  expect(notificationActions({ kind: 'reviewComments', issue: value.issue, title: '', message: '', fingerprint: '', prUrl: 'https://example.test/pr/1' }, value, undefined, true)).toEqual(['View PR', 'Open Worktree', 'Open Dashboard']);
 });
 
 test('filters actions that cannot succeed', () => {

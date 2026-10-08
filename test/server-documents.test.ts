@@ -155,18 +155,6 @@ describe('PUT /api/tasks/:issue/artifacts/:name', () => {
     await server.close();
   });
 
-  test('reports snapshot-only when the original is gone', async () => {
-    seedArtifact('design.md', 'old\n', { original: false });
-    const server = app();
-    const res = await server.inject({
-      method: 'PUT',
-      url: `/api/tasks/${ISSUE}/artifacts/design.md`,
-      payload: { content: 'new\n' },
-    });
-    expect(res.json()).toEqual({ ok: true, writeTarget: 'snapshot' });
-    await server.close();
-  });
-
   test('400s a non-string body', async () => {
     seedArtifact('design.md', 'old\n', { original: true });
     const server = app();

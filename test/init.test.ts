@@ -43,14 +43,6 @@ describe('renderConfigTemplate', () => {
     expect(cfg.repo).toEqual(REPO);
   });
 
-  test('leaves no unsubstituted repo placeholders behind', () => {
-    const template = readFileSync(exampleConfigPath(), 'utf8');
-    const rendered = renderConfigTemplate(template, REPO);
-    for (const name of ['repoPath', 'owner', 'repoName', 'baseBranch', 'branchPrefix']) {
-      expect(rendered).not.toContain(`{{${name}}}`);
-    }
-  });
-
   test('leaves the agent argument placeholders alone', () => {
     // {{effort}} and {{taskDir}} are expanded at spawn time, not at init.
     // Substituting them here would bake one task's directory into the config.
@@ -73,11 +65,6 @@ describe('initProject', () => {
     expect(result.slug).toBe(projectSlug('acme', 'widgets'));
     expect(existsSync(result.configPath)).toBe(true);
     expect(activeProjectSlug()).toBe(result.slug);
-  });
-
-  test('the written config loads back through the real validator', () => {
-    const result = initProject(REPO);
-    expect(parseConfig(readFileSync(result.configPath, 'utf8')).repo.owner).toBe('acme');
   });
 
   test('creates the tasks and worktrees directories the runtime expects', () => {

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { t3ServerRuntimePath } from '../src/orchestrator/t3/paths.ts';
-import { discoverT3, readServerRuntime } from '../src/orchestrator/t3/discovery.ts';
+import { discoverT3 } from '../src/orchestrator/t3/discovery.ts';
 
 let home: string;
 
@@ -49,22 +49,6 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.T3_HOME;
   rmSync(home, { recursive: true, force: true });
-});
-
-describe('readServerRuntime', () => {
-  test('reads a well-formed runtime file', () => {
-    writeRuntime(liveRuntime());
-    expect(readServerRuntime()?.origin).toBe('http://127.0.0.1:3773');
-  });
-
-  test('a missing file is undefined, not a throw', () => {
-    expect(readServerRuntime()).toBeUndefined();
-  });
-
-  test('a truncated file is undefined, not a throw', () => {
-    writeRuntime('{ not json');
-    expect(readServerRuntime()).toBeUndefined();
-  });
 });
 
 describe('discoverT3', () => {

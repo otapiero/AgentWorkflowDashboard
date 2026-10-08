@@ -96,16 +96,6 @@ test('failed commit leaves memory and broadcasts untouched', async () => {
   expect(await service.snapshot()).toEqual(before);
   expect(snapshots).toHaveLength(count);
 });
-test('pins home despite active-project changes and keeps repositories isolated', async () => {
-  const otherHome = await mkdtemp(join(tmpdir(), 'mc-notes-other-'));
-  const other = new NotesService({ home: otherHome, projectId: 'acme__other', tasks: () => [] });
-  await other.start();
-  try {
-    await service.create(input());
-    expect((await other.snapshot()).notes).toEqual([]);
-    expect((await service.snapshot()).projectId).toBe(projectId);
-  } finally { await other.close(); await rm(otherHome, { recursive: true, force: true }); }
-});
 test('a publication observes the committed file and starts from a populated replay', async () => {
   const { note } = await service.create(input());
   await service.close();

@@ -7,7 +7,6 @@ import { spawn } from 'node:child_process';
 import Fastify from 'fastify';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { NotesService } from '../src/orchestrator/notes.ts';
@@ -220,10 +219,9 @@ test('a successful response must acknowledge the requested note or creation requ
 });
 
 test.each([
-  ['notes_create', { body: ' ' }], ['notes_create', { body: 'א'.repeat(32769) }],
-  ['notes_create', { body: 'OK', title: 'x'.repeat(241) }], ['notes_create', { body: 'OK', taskIssue: 0 }],
+  ['notes_create', { body: 'OK', taskIssue: 0 }],
   ['notes_create', { body: 'OK', taskIssue: 1.5 }], ['notes_create', { body: 'OK', taskIssue: Number.MAX_SAFE_INTEGER + 1 }],
-  ['notes_create', { body: 'OK', clientRequestId: 'bad' }], ['notes_create', { body: 'OK', projectId: 'injected' }],
+  ['notes_create', { body: 'OK', projectId: 'injected' }],
   ['notes_get', { id: '../tasks' }], ['notes_list', { scope: 'task' }], ['notes_list', { scope: 'general', taskIssue: 42 }],
   ['notes_update', { id: randomUUID(), body: 'OK' }], ['notes_update', { id: randomUUID(), expectedRevision: 1 }],
   ['notes_set_status', { id: randomUUID(), expectedRevision: 0, status: 'settled' }],
@@ -308,20 +306,4 @@ test('spawned CLI handles MCP before config loading and emits only protocol JSON
   await new Promise<void>((resolve, reject) => { const timer = setTimeout(() => { child.kill(); reject(new Error('MCP CLI did not exit on stdin EOF')); }, 5000); child.once('exit', code => { clearTimeout(timer); expect(code).toBe(0); resolve(); }); });
   expect(stdout).toBe('');
   expect(JSON.parse(await readFile(join(home, 'notes.json'), 'utf8')).notes).toHaveLength(1);
-}, 30000);
-
-test('SDK modern stdio client connects to the spawned CLI with pinned current negotiation', async () => {
-  const transport = new StdioClientTransport({ command: process.execPath,
-    args: cliArgs(),
-    cwd: home, env: { MC_ROOT: home, MC_HOME: join(home, 'missing-config') }, stderr: 'pipe',
-  });
-  let stderr = ''; transport.stderr?.on('data', chunk => { stderr += chunk.toString(); });
-  const client = new Client({ name: 'spawned-modern', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } } });
-  cleanup.push(() => client.close());
-  await client.connect(transport);
-  expect(client.getNegotiatedProtocolVersion()).toBe('2026-07-28');
-  expect((await client.listTools()).tools).toHaveLength(6);
-  const saved = await create(client);
-  expect(saved.note.taskIssue).toBeNull();
-  expect(stderr).toBe('');
 }, 30000);

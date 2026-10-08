@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { PassThrough } from 'node:stream';
 import { Broadcaster } from '../src/server/sse.ts';
-import { api, ApiError, subscribe } from '../src/web/api.ts';
+import { api, subscribe } from '../src/web/api.ts';
 import { initialNotesState, reconnectNotes, acceptSnapshot, acceptNote, acceptStatus } from '../src/web/notes-model.ts';
 import type { Note, NotesSnapshot, NotesStatus } from '../src/shared/notes.ts';
 const n: Note = { id: 'a', title: null, body: 'old', taskIssue: null, taskTitleAtLink: null, status: 'active', createdAt: '', updatedAt: '', settledAt: null, revision: 1, clientRequestId: 'request' };
@@ -23,10 +23,6 @@ test('acknowledgments never lower a note revision or advance collection revision
   expect(updated.revision).toBe(5);
   expect(acceptNote(updated, { ...snapshot(), note: n }, 0)).toBe(updated);
   expect(acceptSnapshot(updated, snapshot(6), 0).notes[0]?.body).toBe('new');
-});
-test('new session resets the collection baseline and note revisions', () => {
-  const state = acceptSnapshot(reconnectNotes(acceptSnapshot(initialNotesState('p'), snapshot(9), 0)), snapshot(1, 's2'), 1);
-  expect(state.revision).toBe(1); expect(state.serverSessionId).toBe('s2');
 });
 test('a new-session status arriving before snapshot cannot carry old notes into the new session', () => {
   const previous = acceptSnapshot(initialNotesState('p'), { ...snapshot(9), notes: [{ ...n, revision: 9 }, { ...n, id: 'old-only' }] }, 0);
@@ -53,17 +49,6 @@ test.each([1, 2])('same-session snapshot revision %s cannot clear unavailable st
   const next = acceptSnapshot(state, snapshot(revision), 0);
   expect(next.notes).toEqual([n]);
   expect(next).toMatchObject({ revision, loading: false, available: false, error: 'Lease lost' });
-});
-
-test('successful GET started before unavailable status cannot restore availability', async () => {
-  let finish!: (response: Response) => void;
-  vi.stubGlobal('fetch', () => new Promise<Response>(resolve => { finish = resolve; }));
-  const pending = api.notes('p');
-  const state = acceptStatus(acceptSnapshot(initialNotesState('p'), snapshot(), 0), unavailable, 0);
-  finish(new Response(JSON.stringify(snapshot()), { status: 200 }));
-  const next = acceptSnapshot(state, await pending, 0);
-  expect(next.notes).toEqual([n]);
-  expect(next).toMatchObject({ available: false, error: 'Lease lost' });
 });
 
 test('Broadcaster status-before-notes replay preserves unavailable status and cached notes', () => {

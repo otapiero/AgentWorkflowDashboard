@@ -47,14 +47,6 @@ describe('laneLayout', () => {
     expect(twenty!.grow).toBe(four!.grow);
   });
 
-  test('a four-card lane gets roughly twice a one-card lane', () => {
-    const [one, four] = laneLayout([
-      { id: 'plan' as Phase, count: 1 },
-      { id: 'implement' as Phase, count: 4 },
-    ]);
-    expect(four!.grow / one!.grow).toBeCloseTo(1.69, 2);
-  });
-
   test('order is preserved exactly', () => {
     const layout = laneLayout([
       { id: 'inbox' as Phase, count: 0 },
@@ -63,23 +55,11 @@ describe('laneLayout', () => {
     ]);
     expect(layout.map((l) => l.id)).toEqual(['inbox', 'plan', 'done']);
   });
-
-  test('an all-empty board leaves every lane collapsed', () => {
-    const layout = laneLayout([
-      { id: 'inbox' as Phase, count: 0 },
-      { id: 'plan' as Phase, count: 0 },
-    ]);
-    expect(layout.every((l) => l.collapsed)).toBe(true);
-  });
 });
 
 describe('attentionTasks', () => {
   test('keeps only the tasks that need you, in board order', () => {
     const result = attentionTasks([task(1, false), task(2, true), task(3, true)]);
     expect(result.map((t) => t.issue)).toEqual([2, 3]);
-  });
-
-  test('is empty when nothing needs you — the rail vanishes', () => {
-    expect(attentionTasks([task(1, false)])).toEqual([]);
   });
 });

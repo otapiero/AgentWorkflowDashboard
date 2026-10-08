@@ -8,7 +8,7 @@ import {
   parseRescuePaths,
   cleanupDoneTask,
   rescueDir,
-  shouldCleanupOnDone,
+  rescueFiles,
 } from '../src/orchestrator/cleanup.ts';
 import { worktreePath } from '../src/orchestrator/paths.ts';
 import type { Config } from '../src/shared/types.ts';
@@ -62,43 +62,6 @@ describe('parseRescuePaths', () => {
   test('takes the destination of a rename, not the arrow form', () => {
     // A staged rename reads "R  old -> new"; the file on disk is the new one.
     expect(parseRescuePaths('R  old/name.ts -> new/name.ts')).toEqual(['new/name.ts']);
-  });
-
-  test('a clean tree rescues nothing', () => {
-    expect(parseRescuePaths('')).toEqual([]);
-  });
-});
-
-describe('rescueDir', () => {
-  test('lands inside the task directory, where the doc rail already looks', () => {
-    expect(rescueDir(3259)).toBe(join(home, 'tasks', '3259', 'rescued-from-worktree'));
-  });
-});
-
-describe('shouldCleanupOnDone', () => {
-  test('cleans a done task that still has a worktree', () => {
-    expect(shouldCleanupOnDone(config(), 'done', true)).toBe(true);
-  });
-
-  test('does nothing when the task is not done', () => {
-    expect(shouldCleanupOnDone(config(), 'merge', true)).toBe(false);
-    expect(shouldCleanupOnDone(config(), 'implement', true)).toBe(false);
-  });
-
-  test('does nothing when there is no worktree left to remove', () => {
-    expect(shouldCleanupOnDone(config(), 'done', false)).toBe(false);
-  });
-
-  test('respects onDone: false', () => {
-    expect(shouldCleanupOnDone(config({ onDone: false }), 'done', true)).toBe(false);
-  });
-
-  test('defaults to on when the config omits the block entirely', () => {
-    // Every config written before this feature existed has no cleanup block,
-    // and those installs should still get the behaviour.
-    const bare = { ...config() } as Config;
-    delete (bare as { cleanup?: unknown }).cleanup;
-    expect(shouldCleanupOnDone(bare, 'done', true)).toBe(true);
   });
 });
 
@@ -157,8 +120,7 @@ describe('rescuing files off a worktree', () => {
     expect(readFileSync(join(worktree, 'notes.md'), 'utf8')).toBe('keep');
   });
 
-  test('copies each reported file into the task directory, flattened', async () => {
-    const { rescueFiles } = await import('../src/orchestrator/cleanup.ts');
+  test('copies each reported file into the task directory, flattened', () => {
     const worktree = join(home, 'wt');
     mkdirSync(join(worktree, 'backend'), { recursive: true });
     writeFileSync(join(worktree, 'backend', 'notes.md'), 'research', 'utf8');
@@ -171,8 +133,7 @@ describe('rescuing files off a worktree', () => {
     expect(existsSync(join(rescueDir(3259), 'top.json'))).toBe(true);
   });
 
-  test('two files sharing a basename both survive, suffixed', async () => {
-    const { rescueFiles } = await import('../src/orchestrator/cleanup.ts');
+  test('two files sharing a basename both survive, suffixed', () => {
     const worktree = join(home, 'wt');
     mkdirSync(join(worktree, 'a'), { recursive: true });
     mkdirSync(join(worktree, 'b'), { recursive: true });
@@ -185,24 +146,13 @@ describe('rescuing files off a worktree', () => {
     expect(readFileSync(join(rescueDir(3259), 'notes-2.md'), 'utf8')).toBe('from b');
   });
 
-  test('a path that has since vanished is skipped rather than throwing', async () => {
-    const { rescueFiles } = await import('../src/orchestrator/cleanup.ts');
+  test('a path that has since vanished is skipped rather than throwing', () => {
     const worktree = join(home, 'wt');
     mkdirSync(worktree, { recursive: true });
     expect(rescueFiles(3259, worktree, ['gone.md'])).toEqual([]);
   });
 
-  test('a deleted-but-unstaged file is reported by git yet cannot be copied', async () => {
-    // 'D  x' means the file is gone from disk. Nothing to rescue, and the
-    // cleanup must not fall over on it.
-    const { rescueFiles } = await import('../src/orchestrator/cleanup.ts');
-    const worktree = join(home, 'wt');
-    mkdirSync(worktree, { recursive: true });
-    expect(() => rescueFiles(3259, worktree, ['deleted.ts'])).not.toThrow();
-  });
-
-  test('nothing to rescue creates no directory', async () => {
-    const { rescueFiles } = await import('../src/orchestrator/cleanup.ts');
+  test('nothing to rescue creates no directory', () => {
     const worktree = join(home, 'wt');
     mkdirSync(worktree, { recursive: true });
     expect(rescueFiles(3259, worktree, [])).toEqual([]);

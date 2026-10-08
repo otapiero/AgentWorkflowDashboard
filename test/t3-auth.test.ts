@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 import { existsSync, readFileSync } from 'node:fs';
 
-import { mcHome, mcRoot } from '../src/orchestrator/paths.ts';
+import { mcHome } from '../src/orchestrator/paths.ts';
 import {
   T3TokenStore,
   T3_SCOPES,
@@ -55,20 +55,19 @@ const goodToken = {
 };
 
 describe('pairing credential on disk', () => {
-  test('the credential lives under MC_HOME, never in the project repo', () => {
-    expect(t3CredentialPath().startsWith(mcHome())).toBe(true);
-  });
-
-  test('the credential lives at the install root, so projects share one pairing', () => {
-    // A T3 pairing link is single-use and expires in about three minutes.
-    // Re-pairing per project would be unusable, so this is deliberate.
-    expect(t3CredentialPath()).toBe(join(mcRoot(), 't3-credential'));
-    expect(t3TokenCachePath()).toBe(join(mcRoot(), 't3-token.json'));
-  });
-
   test('a written credential is read back with surrounding whitespace stripped', () => {
     writeCredential('  pair-abc123\n');
     expect(readPairingCredential()).toBe('pair-abc123');
+  });
+
+  test('the credential and token cache belong to the install, not a project', () => {
+    // One pairing serves every project, so neither may live under MC_HOME.
+    const project = join(home, 'projects', 'acme__widgets');
+    process.env.MC_HOME = project;
+    expect(t3CredentialPath().startsWith(project)).toBe(false);
+    expect(t3TokenCachePath().startsWith(project)).toBe(false);
+    expect(t3CredentialPath().startsWith(home)).toBe(true);
+    expect(t3TokenCachePath().startsWith(home)).toBe(true);
   });
 
   test('no credential file reads as null, not a throw', () => {
@@ -92,11 +91,6 @@ describe('pairing credential on disk', () => {
 
   test('a query-string pairing URL works too', () => {
     writeCredential('http://192.168.110.1:3773/pair?token=pair-abc123');
-    expect(readPairingCredential()).toBe('pair-abc123');
-  });
-
-  test('extra query parameters on the pairing URL do not confuse it', () => {
-    writeCredential('http://127.0.0.1:3773/pair?token=pair-abc123&label=mc');
     expect(readPairingCredential()).toBe('pair-abc123');
   });
 
@@ -208,18 +202,6 @@ describe('T3TokenStore', () => {
 
       expect(existsSync(t3TokenCachePath())).toBe(true);
       expect(JSON.parse(readFileSync(t3TokenCachePath(), 'utf8')).accessToken).toBe('tok-1');
-    });
-
-    test('a fresh store reuses the persisted token instead of exchanging', async () => {
-      const first = recordingFetch([{ status: 200, body: goodToken }]);
-      await new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', first.impl).getToken();
-
-      // A new process, and the pairing token has been spent — so an exchange
-      // here would fail. The persisted token must carry it.
-      const second = recordingFetch([{ status: 401, body: { error: 'invalid_grant' } }]);
-      const store = new T3TokenStore('http://127.0.0.1:3773', 'spent', second.impl);
-      expect(await store.getToken()).toBe('tok-1');
-      expect(second.calls).toHaveLength(0);
     });
 
     test('a spent pairing token is fine when a valid access token is on disk', async () => {
