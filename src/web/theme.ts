@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 /**
  * The colour theme. "system" follows the OS: graphite when it is dark,
  * daylight when it is light. The resolved name goes on <html data-theme>,
- * which is all styles.css reads. index.html applies the stored choice before
+ * which is all styles/theme.css reads. index.html applies the stored choice before
  * first paint so a light-theme user never sees a dark flash.
  */
 export type ThemeChoice = 'system' | 'graphite' | 'midnight' | 'daylight';

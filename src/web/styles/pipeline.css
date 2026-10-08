@@ -1,0 +1,83 @@
+/* ---------- pipeline bar ---------- */
+
+/*
+  Every stage of the pipeline in one row, with its count. It replaces the
+  collapsed lane rails: an empty stage still keeps its place in the sequence,
+  but costs no board width.
+*/
+.pipeline {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line-soft);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.stage {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  color: var(--dimmer);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.stage + .stage::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 6px;
+  height: 1px;
+  background: var(--line);
+}
+
+.stage:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.stage-n {
+  font-family: var(--mono);
+  font-size: 11px;
+  min-width: 18px;
+  text-align: center;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: var(--hover);
+  color: var(--dimmer);
+  font-variant-numeric: tabular-nums;
+}
+
+.stage.has-tasks {
+  color: var(--ink);
+  background: var(--card);
+  border-color: var(--line-soft);
+}
+
+.stage.has-tasks .stage-n {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.stage.has-attention .stage-n {
+  background: var(--attention-soft);
+  color: var(--attention);
+}
+
+.stage.has-live .stage-n {
+  background: var(--live-soft);
+  color: var(--live);
+}

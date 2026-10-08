@@ -1,0 +1,68 @@
+/* ---------- done list ---------- */
+
+.done-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--card);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.done-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 11px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--dim);
+  text-align: left;
+  font-size: 12.5px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.done-item:first-child {
+  border-top: 0;
+}
+
+.done-item:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.done-item.is-selected {
+  background: var(--accent-soft);
+  color: var(--ink-strong);
+}
+
+.done-item > .icon {
+  color: var(--nominal);
+  width: 14px;
+  height: 14px;
+}
+
+.done-item .card-issue {
+  color: var(--dimmer);
+}
+
+.done-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.done-more {
+  padding: 8px 11px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--dim);
+  font-size: 12px;
+  text-align: left;
+}
+
+.done-more:hover {
+  color: var(--accent);
+  background: var(--hover);
+}

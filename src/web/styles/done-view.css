@@ -1,0 +1,42 @@
+/* ---------- done view ---------- */
+
+.done-view {
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+}
+
+.done-view-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 16px;
+}
+
+.done-view-head h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--ink-strong);
+}
+
+.done-view-head .count {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dimmer);
+}
+
+.done-view-head p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.done-view .done-item {
+  padding: 10px 14px;
+  font-size: 13px;
+}
