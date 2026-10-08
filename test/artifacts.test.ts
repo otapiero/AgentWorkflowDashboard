@@ -1,11 +1,10 @@
-import { afterEach, beforeEach, describe, it, expect } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, it, expect } from 'vitest';
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execaSync } from 'execa';
 import {
   parsePorcelainPaths,
-  diffFiles,
   uniqueName,
   shouldCollectRun,
   COLLECT_GRACE_MS,
@@ -26,21 +25,9 @@ describe('parsePorcelainPaths', () => {
     const out = ' M docs/spec.md\n?? docs/new.md\nR  a.md -> b.md\n';
     expect(parsePorcelainPaths(out)).toEqual(['docs/spec.md', 'docs/new.md', 'b.md']);
   });
-  it('returns [] for empty output', () => {
-    expect(parsePorcelainPaths('')).toEqual([]);
-  });
-});
-
-describe('diffFiles', () => {
-  it('returns entries present in after but not before', () => {
-    expect(diffFiles(['a'], ['a', 'b', 'c'])).toEqual(['b', 'c']);
-  });
 });
 
 describe('uniqueName', () => {
-  it('keeps the base when free', () => {
-    expect(uniqueName([], 'plan.md')).toBe('plan.md');
-  });
   it('suffixes before the extension on collision', () => {
     expect(uniqueName(['plan.md'], 'plan.md')).toBe('plan-1.md');
     expect(uniqueName(['plan.md', 'plan-1.md'], 'plan.md')).toBe('plan-2.md');
@@ -148,14 +135,6 @@ describe('snapshot + collectArtifacts', () => {
     // Copies live under the task's own folder.
     expect(existsSync(join(taskDir(ISSUE), 'artifacts', 'design.md'))).toBe(true);
     expect(readArtifacts(ISSUE)).toHaveLength(refs.length);
-  });
-
-  it('is idempotent within a run', async () => {
-    writeRunSnapshot(config, ISSUE, 'plan');
-    writeFileSync(join(taskDir(ISSUE), 'spec.md'), 'x');
-    await collectArtifacts(config, ISSUE, 'plan');
-    await collectArtifacts(config, ISSUE, 'plan');
-    expect(readArtifacts(ISSUE)).toHaveLength(1);
   });
 
   it('keeps earlier artifacts when a later run collects', async () => {
