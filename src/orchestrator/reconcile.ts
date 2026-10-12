@@ -15,8 +15,15 @@ export function reconcile(
   const gates = computeGates(facts);
   gates.done = manualPhase === 'done';
   const derivedPhase = derivePhase(facts);
-  const badges = computeBadges(facts);
-  const { needsYou, needsYouReason } = computeNeedsYou(facts, manualPhase === 'done' ? 'done' : derivedPhase);
+  const planAwaitingReview = planReady(facts) && !(
+    facts.implementationStarted || facts.pr.exists ||
+    (manualPhase ?? derivedPhase) === 'implement' ||
+    facts.markers.some(marker => marker.startsWith('implement.')) ||
+    facts.liveSpawn?.phase === 'implement' ||
+    (manualPhase !== null && manualPhase !== 'inbox' && manualPhase !== 'plan')
+  );
+  const badges = computeBadges(facts, planAwaitingReview);
+  const { needsYou, needsYouReason } = computeNeedsYou(facts, manualPhase === 'done' ? 'done' : derivedPhase, planAwaitingReview);
 
   return {
     issue: facts.issue,
@@ -116,7 +123,7 @@ function computeGates(facts: Facts): Record<Phase, boolean> {
   return satisfied;
 }
 
-function computeBadges(facts: Facts): Badge[] {
+function computeBadges(facts: Facts, planAwaitingReview: boolean): Badge[] {
   const badges: Badge[] = [];
 
   if (isLive(facts)) {
@@ -141,7 +148,7 @@ function computeBadges(facts: Facts): Badge[] {
     });
   }
 
-  if (planReady(facts)) {
+  if (planAwaitingReview) {
     badges.push({ kind: 'plan-ready', label: 'plan ready', tone: 'good' });
   }
 
@@ -208,6 +215,7 @@ function computeBadges(facts: Facts): Badge[] {
 function computeNeedsYou(
   facts: Facts,
   derivedPhase: Phase,
+  planAwaitingReview: boolean,
 ): { needsYou: boolean; needsYouReason: string | null } {
   const no = { needsYou: false, needsYouReason: null };
 
@@ -255,7 +263,7 @@ function computeNeedsYou(
   if (derivedPhase === 'publish') {
     return { needsYou: true, needsYouReason: 'Ready to publish the PR' };
   }
-  if (derivedPhase === 'implement' && planReady(facts)) {
+  if (derivedPhase === 'implement' && planAwaitingReview) {
     return { needsYou: true, needsYouReason: 'Plan ready for your review' };
   }
   return no;

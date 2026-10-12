@@ -1,0 +1,8 @@
+/* Keep jump-to targets clear of the pinned pipeline bar and notes header. */
+.lane {
+  scroll-margin-top: 64px;
+}
+
+.notes-panel .notes-card {
+  scroll-margin-top: 200px;
+}

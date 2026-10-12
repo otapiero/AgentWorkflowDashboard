@@ -1,0 +1,185 @@
+/* ---------- card ---------- */
+
+/*
+  The card is a wrapper so a second control (the note count) can sit beside
+  the main button instead of nested inside it.
+*/
+.card {
+  position: relative;
+  flex-shrink: 0;
+  background: var(--card);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+
+.card:hover {
+  border-color: var(--line);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 13px;
+  border-radius: inherit;
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  row-gap: 5px;
+}
+
+.card-issue {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--dimmer);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-title {
+  font-size: 13.5px;
+  font-weight: 550;
+  line-height: 1.38;
+  color: var(--ink-strong);
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+/* leave room for the absolutely-placed note button */
+.card.has-notes .card-foot {
+  padding-right: 40px;
+}
+
+.card-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.card-status .icon {
+  width: 13px;
+  height: 13px;
+}
+
+/* a status dot with a soft halo, used in place of a coloured card border */
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+  flex-shrink: 0;
+}
+
+.status-attention {
+  color: var(--attention);
+}
+
+.status-fault {
+  color: var(--fault);
+}
+
+.status-live {
+  color: var(--live);
+}
+
+.status-nominal {
+  color: var(--nominal);
+}
+
+.status-idle {
+  color: var(--dim);
+}
+
+.status-idle .status-dot {
+  background: var(--dimmer);
+  box-shadow: none;
+}
+
+.status-stale {
+  color: var(--attention);
+}
+
+/* Last-known state, held in place because the reconcile could not reach GitHub. */
+.card.is-stale {
+  opacity: 0.66;
+}
+
+.card-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* git state and PR as quiet icon counts */
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.meta-item .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.meta-item.tone-warn {
+  color: var(--attention);
+}
+
+.meta-item.tone-good {
+  color: var(--nominal);
+}
+
+.card-note {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--attention);
+  background: var(--attention-soft);
+  transition: filter 120ms ease;
+}
+
+.card-note:hover {
+  filter: brightness(1.15);
+}
+
+.card-note .icon {
+  width: 13px;
+  height: 13px;
+}

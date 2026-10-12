@@ -1,0 +1,28 @@
+/* ---------- import: issue rows ---------- */
+
+.issue-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-soft);
+  background: var(--card);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.issue-row:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--card));
+}
+
+.issue-row:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.issue-row .card-title {
+  font-size: 13px;
+}

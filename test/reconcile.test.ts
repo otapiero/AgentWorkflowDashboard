@@ -381,9 +381,31 @@ describe('needsYou', () => {
   test('an attached plan awaiting your review needs you', () => {
     const d = reconcile(
       facts({ worktreeExists: true, branchExists: true, planMdExists: true }),
+      'plan',
     );
     expect(d.needsYou).toBe(true);
     expect(d.needsYouReason).toMatch(/plan/i);
+    expect(d.badges.map(badge => badge.kind)).toContain('plan-ready');
+  });
+
+  test.each(['implement.running', 'implement.done'])('implementation marker %s prevents asking for the old plan again', marker => {
+    const d = reconcile(facts({ planMdExists: true, markers: ['plan.done', marker] }), 'plan');
+    expect(d.displayPhase).toBe('plan');
+    expect(d.badges.map(badge => badge.kind)).not.toContain('plan-ready');
+    expect(d.needsYou).toBe(false);
+  });
+
+  test('moving a task to implementation clears its plan review prompt', () => {
+    const d = reconcile(facts({ planMdExists: true }), 'implement');
+    expect(d.badges.map(badge => badge.kind)).not.toContain('plan-ready');
+    expect(d.needsYou).toBe(false);
+  });
+
+  test('a card automatically placed in implementation no longer asks for plan review', () => {
+    const d = reconcile(facts({ planMdExists: true }));
+    expect(d.displayPhase).toBe('implement');
+    expect(d.badges.map(badge => badge.kind)).not.toContain('plan-ready');
+    expect(d.needsYou).toBe(false);
   });
 
   test('an approved PR needs you, because only you merge', () => {

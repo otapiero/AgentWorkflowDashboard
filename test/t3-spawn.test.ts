@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { resolveT3Launch } from '../src/orchestrator/spawn.ts';
+import { resolveT3Launch } from '../src/orchestrator/spawn/t3.ts';
 import type { AgentProfile, PhaseConfig } from '../src/shared/types.ts';
 
 describe('resolveT3Launch', () => {

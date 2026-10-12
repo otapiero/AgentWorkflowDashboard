@@ -1,0 +1,91 @@
+/* ---------- top bar extras ---------- */
+
+.search-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 240px;
+  padding: 6px 8px 6px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--dimmer);
+  font-size: 12.5px;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+
+.search-trigger:hover {
+  border-color: var(--line);
+  color: var(--dim);
+}
+
+.search-trigger kbd,
+.notes-quick kbd,
+.palette kbd {
+  margin-left: auto;
+  font: 10.5px var(--mono);
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--dim);
+  background: var(--bg-soft);
+}
+
+.btn-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.conn-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 6px 4px 8px;
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.conn-status:hover {
+  background: var(--hover);
+}
+
+.conn-status .is-low {
+  color: var(--attention);
+}
+
+.conn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dimmer);
+}
+
+.conn-dot.is-on {
+  background: var(--nominal);
+  box-shadow: 0 0 0 3px var(--nominal-soft);
+}
+
+.conn-dot.is-off {
+  background: var(--fault);
+  box-shadow: 0 0 0 3px var(--fault-soft);
+}
+
+.rail-caption {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--dimmer);
+}
+
+.done-pr {
+  display: inline-flex;
+  color: var(--dimmer);
+}
+
+.done-pr .icon {
+  width: 14px;
+  height: 14px;
+}

@@ -1,0 +1,78 @@
+/* A native select with our own chrome and chevron. */
+.select {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.select::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--dim);
+  border-bottom: 1.5px solid var(--dim);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+.select select {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 32px 8px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font: 13px var(--sans);
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.select select:hover {
+  border-color: color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
+.select select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.select select option {
+  background: var(--card);
+  color: var(--ink);
+}
+
+.select.is-disabled {
+  padding: 8px 11px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--line);
+  color: var(--dimmer);
+  font-size: 12.5px;
+}
+
+.select.is-disabled::after {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .launcher-grid,
+  .picker.is-labelled {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-scrim {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .settings {
+    max-height: none;
+    border-radius: 0;
+  }
+}

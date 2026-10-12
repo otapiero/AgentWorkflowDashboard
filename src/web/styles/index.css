@@ -1,0 +1,34 @@
+/*
+  The stylesheet, in cascade order. Later files win ties, so the order of
+  these imports is load-bearing: add a new file where its rules belong in
+  the cascade, not at the end by habit. Design notes and theme tokens are in
+  theme.css.
+*/
+
+@import './theme.css';
+@import './shell.css';
+@import './review-requests.css';
+@import './buttons.css';
+@import './forms.css';
+@import './pipeline.css';
+@import './board.css';
+@import './done-list.css';
+@import './rail.css';
+@import './card.css';
+@import './chips.css';
+@import './drawer.css';
+@import './launch.css';
+@import './workbench.css';
+@import './notes.css';
+@import './workspace.css';
+@import './top-bar.css';
+@import './done-view.css';
+@import './notes-panel.css';
+@import './command-palette.css';
+@import './scrollbars.css';
+@import './settings.css';
+@import './agent-picker.css';
+@import './select.css';
+@import './import.css';
+@import './rail-collapsed.css';
+@import './scroll-targets.css';

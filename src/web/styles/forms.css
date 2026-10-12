@@ -1,0 +1,36 @@
+/* ---------- form controls ---------- */
+
+.field {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 7px 9px;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.field::placeholder {
+  color: var(--dimmer);
+}
+
+select.field {
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 12.5px;
+}
+
+.field:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.textarea {
+  width: 100%;
+  min-height: 62px;
+  resize: vertical;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.45;
+}

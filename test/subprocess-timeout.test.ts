@@ -4,12 +4,12 @@ const execa = vi.hoisted(() => vi.fn());
 vi.mock('execa', () => ({ execa, execaSync: vi.fn(() => ({ stdout: '' })) }));
 
 import { SUBPROCESS_TIMEOUT_MS } from '../src/orchestrator/exec.ts';
-import { fetchBranchPrs } from '../src/orchestrator/github.ts';
+import { fetchIssuePrs } from '../src/orchestrator/github.ts';
 import { listBranches } from '../src/orchestrator/worktree.ts';
 import type { Config } from '../src/shared/types.ts';
 
 const config = {
-  repo: { path: 'C:\\repo', owner: 'o', name: 'r', baseBranch: 'main', branchPrefix: 'alice/' },
+  repo: { path: 'C:\\src\\widgets', owner: 'acme', name: 'widgets', baseBranch: 'main', branchPrefix: 'alice' },
   github: { auth: 'gh-cli', pollIntervalSeconds: 30, copilotReviewerLogin: 'bot' },
   agents: {},
   pipeline: [],
@@ -28,7 +28,7 @@ beforeEach(() => {
 describe('external commands are bounded', () => {
   test('gh runs under the shared timeout', async () => {
     execa.mockResolvedValue({ stdout: '{"data":{"repository":{}}}' });
-    await fetchBranchPrs(config, ['feature/x']);
+    await fetchIssuePrs(config, [3060]);
     expect(execa).toHaveBeenCalledWith(
       'gh',
       expect.any(Array),
@@ -48,7 +48,7 @@ describe('external commands are bounded', () => {
   test('a timed-out gh degrades to an unavailable board rather than hanging', async () => {
     const timedOut = Object.assign(new Error('Command timed out'), { timedOut: true });
     execa.mockRejectedValue(timedOut);
-    await expect(fetchBranchPrs(config, ['feature/x'])).resolves.toMatchObject({ ok: false });
+    await expect(fetchIssuePrs(config, [3060])).resolves.toMatchObject({ ok: false });
   });
 
   test('a timed-out git degrades to an empty branch list rather than hanging', async () => {

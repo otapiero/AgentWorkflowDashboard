@@ -1,0 +1,162 @@
+/*
+  Mission Control.
+
+  A calm control surface rather than a generic kanban. Neutral surfaces carry
+  the structure; colour is spent only on meaning. One accent marks everything
+  you can act on or have selected; orange means "needs you", green "done or
+  satisfied", red "failure", cyan "a session is running". Agents appear as a
+  small avatar in their product colour. Instrumentation (issue numbers, counts)
+  is monospace; prose is a clean sans.
+
+  Three themes share one token set, chosen by data-theme on <html> (see
+  theme.ts): graphite (default dark), midnight (cool dark) and daylight.
+*/
+
+:root {
+  --bg: #0b0b0d;
+  --bg-soft: #111114;
+  --lane: #0b0b0d;
+  --lane-head: #0b0b0d;
+  --card: #141417;
+  --card-hi: #1b1b20;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-soft: rgba(255, 255, 255, 0.055);
+
+  --ink: #dcdce3;
+  --ink-strong: #f4f4f7;
+  --dim: #9b9ba8;
+  --dimmer: #66666f;
+
+  --accent: #8b7cff;
+  --accent-ink: #0d0a24;
+
+  --attention: #f5a524; /* needs you */
+  --nominal: #3ecf8e; /* ready / satisfied */
+  --fault: #f2555a; /* failure / changes requested */
+  --live: #4cc2ff; /* a session is running */
+
+  --claude: #d97757; /* Claude coral */
+  --copilot: #7c74ff; /* Copilot indigo */
+  --codex: #10a37f; /* OpenAI green */
+
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 10px 28px -14px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 24px 70px -10px rgba(0, 0, 0, 0.65);
+  --scrim: rgba(0, 0, 0, 0.6);
+
+  --mono: "Geist Mono", "Cascadia Mono", "Cascadia Code", ui-monospace, Consolas, monospace;
+  --sans: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  --radius: 10px;
+  --radius-sm: 7px;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="midnight"] {
+  --bg: #0d1117;
+  --bg-soft: #121821;
+  --lane: #0d1117;
+  --lane-head: #0d1117;
+  --card: #151c26;
+  --card-hi: #1b2430;
+  --line: rgba(148, 180, 220, 0.12);
+  --line-soft: rgba(148, 180, 220, 0.07);
+
+  --ink: #d9e1ea;
+  --ink-strong: #f0f4f8;
+  --dim: #8b98a8;
+  --dimmer: #5c6878;
+
+  --accent: #3d9cff;
+  --accent-ink: #04111f;
+
+  --attention: #e3a33b;
+  --nominal: #3fb950;
+  --fault: #f0565d;
+  --live: #39c5cf;
+
+  --shadow: 0 10px 28px -14px rgba(0, 0, 0, 0.75);
+}
+
+:root[data-theme="daylight"] {
+  --bg: #f4f4f2;
+  --bg-soft: #fafaf9;
+  --lane: #f4f4f2;
+  --lane-head: #f4f4f2;
+  --card: #ffffff;
+  --card-hi: #fbfbfa;
+  --line: rgba(20, 20, 30, 0.12);
+  --line-soft: rgba(20, 20, 30, 0.075);
+
+  --ink: #27272a;
+  --ink-strong: #111113;
+  --dim: #5f5f6a;
+  --dimmer: #8f8f99;
+
+  --accent: #5b4cf0;
+  --accent-ink: #ffffff;
+
+  --attention: #c27400;
+  --nominal: #138a52;
+  --fault: #d23b42;
+  --live: #0a84d0;
+
+  --claude: #c8603d;
+  --copilot: #5b5ce6;
+  --codex: #0f8f6c;
+
+  --shadow: 0 1px 2px rgba(20, 20, 30, 0.05), 0 8px 22px -12px rgba(20, 20, 30, 0.2);
+  --shadow-lg: 0 24px 70px -12px rgba(20, 20, 30, 0.3);
+  --scrim: rgba(20, 20, 30, 0.32);
+
+  color-scheme: light;
+}
+
+/* Tints derived from the semantic colours, so every theme gets them for free. */
+:root {
+  --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
+  --attention-soft: color-mix(in srgb, var(--attention) 13%, transparent);
+  --nominal-soft: color-mix(in srgb, var(--nominal) 13%, transparent);
+  --fault-soft: color-mix(in srgb, var(--fault) 12%, transparent);
+  --live-soft: color-mix(in srgb, var(--live) 14%, transparent);
+  --hover: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  transition: background 200ms ease, color 200ms ease;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

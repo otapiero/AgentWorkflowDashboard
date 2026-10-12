@@ -401,14 +401,19 @@ src/
     facts.ts               gathers git + gh + markers into Facts
     worktree.ts github.ts  git and gh access
     markers.ts             durable phase signals with PID liveness
-    spawn.ts               builds + launches the detached wt tab
+    spawn/                 builds + launches the detached wt/vscode/T3 run
     poller.ts              interval reconcile + SSE broadcast
     paths.ts               install root vs per-project home
     init.ts                first-run setup
     cli.ts                 headless harness
   server/                  Fastify REST + SSE, static hosting
+    app.ts                 the HTTP app, shared by the server and the e2e suite
+    routes.ts              registers one *-routes.ts module per API area
   mcp/                     stdio tools calling the loopback notes API
   web/                     React board (instrument panel)
+    styles/                one stylesheet per area, imported in cascade order
+test/                      vitest unit + process suites
+e2e/                       Playwright smoke tests over the real app
 assets/
   claude/commands/mc-*.md  shared prompt sources, installed to ~/.claude/commands
   scripts/                 common.ps1, run-phase.ps1
@@ -424,12 +429,16 @@ under `projects/<owner>__<name>/` holding `config.yaml`, `state.json`, `notes.js
 ## Testing
 
 ```powershell
-npm test          # 633 unit tests
+npm test          # unit and process suites (vitest)
+npm run test:e2e  # builds the UI, then Playwright smoke tests in Chromium
 npm run typecheck
 ```
 
 The reconciler is the main verification surface and is tested exhaustively
 against hand-built facts and against the real recorded shapes of `gh` output.
+The e2e suite drives the built UI against the real server over a throwaway
+project (`e2e/server.ts`), so it never touches GitHub or your own install.
+What makes a test worth keeping is set out in [AGENTS.md](AGENTS.md).
 
 ## VS Code companion
 

@@ -29,8 +29,20 @@ before opening a pull request.
 npm run dev        # Vite dev server + Fastify, live reload
 npm test           # the unit suite
 npm run test:watch
+npm run test:e2e   # Playwright smoke tests; first run: npx playwright install chromium
 npm run typecheck
 ```
+
+Before adding a test, read the testing rules in [AGENTS.md](AGENTS.md).
+
+The UI has no component tests; it is covered end to end by `e2e/`, which runs
+the real app against `e2e/server.ts`, a throwaway project with a fixed board.
+A UI regression worth a test belongs there: assert what the user sees through
+roles and labels, not class names, wherever the markup allows.
+
+Styles live in `src/web/styles/`, one file per area, imported in cascade
+order from `index.css`. Put a rule in the file for the component it styles;
+add a new file where it belongs in the cascade, not at the end by habit.
 
 The reconciler (`src/orchestrator/reconcile.ts`) is pure and is the main
 verification surface — it is tested exhaustively against hand-built facts and

@@ -1,0 +1,117 @@
+/* ---------- shell ---------- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg-soft);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--accent-ink);
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 45%, var(--live)));
+  box-shadow: 0 4px 14px -6px var(--accent);
+}
+
+.brand-mark svg {
+  width: 16px;
+  height: 16px;
+}
+
+.brand-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink-strong);
+}
+
+.brand-repo {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--dim);
+  padding-left: 12px;
+  margin-left: 2px;
+  border-left: 1px solid var(--line);
+}
+
+.topbar-spacer {
+  flex: 1;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+
+
+
+
+
+
+
+
+/* Board / Notes switch: a segmented control */
+.view-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--bg);
+  border: 1px solid var(--line-soft);
+}
+
+.view-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  color: var(--dim);
+  font-weight: 500;
+  font-size: 13px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.view-tabs button:hover {
+  color: var(--ink);
+}
+
+.view-tabs button[aria-current="page"] {
+  background: var(--card);
+  color: var(--ink-strong);
+  box-shadow: var(--shadow);
+}
+
+.view-tabs .count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dimmer);
+  font-variant-numeric: tabular-nums;
+}
+
+/* theme picker */
+.theme-picker {
+  position: relative;
+}

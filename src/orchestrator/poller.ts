@@ -7,11 +7,11 @@ import {
   snapshotAgeMs,
 } from './artifacts.ts';
 import { CUSTOM_RUN_ID } from '../shared/custom-run.ts';
-import { fetchBranchPrs } from './github.ts';
+import { fetchIssuePrs } from './github.ts';
 import { reconcile } from './reconcile.ts';
 import { toEditorIntegration } from './editor-integration.ts';
 import { loadState, saveState } from './state.ts';
-import { listBranches, worktreeExists } from './worktree.ts';
+import { listBranches } from './worktree.ts';
 import { resolveAgent } from './agents.ts';
 import { T3Client } from './t3/client.ts';
 import { latestThreadId } from './t3/facts.ts';
@@ -61,7 +61,7 @@ export function mergedFields(
  * current phase would use. Only agent phases carry a chip; resting phases like
  * CI or Merge do not, so the board stays uncluttered.
  */
-function pinnedFor(
+export function pinnedFor(
   config: Config,
   task: TaskRecord,
   derived: DerivedState,
@@ -89,20 +89,9 @@ export async function reconcileAll(
   const phaseDefaults = state.phaseDefaults ?? {};
   const branches = new Set(await listBranches(config));
 
-  // One batched GraphQL call covers every active branch's PR plus the budget.
-  // Active = not merged and actually started (has a branch or a worktree).
-  const activeBranches = [
-    ...new Set(
-      state.tasks
-        .filter(
-          (t) =>
-            t.prState !== 'MERGED' &&
-            (branches.has(t.branch) || worktreeExists(t.issue)),
-        )
-        .map((t) => t.branch),
-    ),
-  ];
-  const batch = await fetchBranchPrs(config, activeBranches);
+  // Attached PRs can belong to work done elsewhere, with no local branch.
+  const activeIssues = [...new Set(state.tasks.filter(t => t.prState !== 'MERGED').map(t => t.issue))];
+  const batch = await fetchIssuePrs(config, activeIssues);
 
   // One snapshot covers every task, so the cost does not scale with board size.
   const t3Snapshot = shouldFetchT3Snapshot(state.tasks) ? await t3.fetchSnapshot() : undefined;

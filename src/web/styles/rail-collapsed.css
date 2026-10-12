@@ -1,0 +1,92 @@
+/* ---------- needs-you rail, collapsed ---------- */
+
+.rail-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 3px 6px 3px 2px;
+  margin-left: -2px;
+  border-radius: 6px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.rail-toggle:hover {
+  background: var(--hover);
+}
+
+.rail-chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--dim);
+  transition: transform 150ms ease;
+}
+
+.rail.is-expanded .rail-chevron {
+  transform: rotate(90deg);
+}
+
+.rail:not(.is-expanded) .rail-head {
+  margin-bottom: 0;
+}
+
+.rail:not(.is-expanded) {
+  padding-bottom: 2px;
+}
+
+.rail-pills {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.rail-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.rail-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  max-width: 280px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: var(--card);
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--ink);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.rail-pill:hover {
+  border-color: color-mix(in srgb, var(--attention) 55%, transparent);
+  background: color-mix(in srgb, var(--attention) 6%, var(--card));
+}
+
+.rail-pill.is-selected {
+  border-color: var(--accent);
+}
+
+.rail-pill .status-dot {
+  color: var(--attention);
+  width: 6px;
+  height: 6px;
+}
+
+.rail-pill.is-note .icon {
+  width: 13px;
+  height: 13px;
+  color: var(--attention);
+}
+
+.rail-pill-title {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

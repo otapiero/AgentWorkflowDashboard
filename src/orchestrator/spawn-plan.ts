@@ -1,7 +1,7 @@
 import { resolveAgent } from './agents.ts';
 import { buildPrompt } from './prompt.ts';
 import { pipelineWith } from '../shared/custom-run.ts';
-import { STANDING_RULES } from './spawn.ts';
+import { STANDING_RULES } from './spawn/build.ts';
 import type {
   AgentProfile,
   ArtifactRef,

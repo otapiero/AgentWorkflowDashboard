@@ -3,9 +3,9 @@ import {
   parseChecksRollup,
   normalizeReviewDecision,
   parseReviewThreads,
-  parseBranchPrsResponse,
+  parseIssuePrsResponse,
   parseRateLimit,
-  unavailableBranches,
+  unavailableIssues,
 } from '../src/orchestrator/github.ts';
 
 const COPILOT = 'copilot-pull-request-reviewer';
@@ -125,7 +125,7 @@ describe('parseReviewThreads', () => {
   test('human threads count toward the total but not the Copilot count', () => {
     expect(
       parseReviewThreads(
-        [thread(false, 'Sonya'), thread(false, COPILOT), thread(true, 'avichai')],
+        [thread(false, 'alice'), thread(false, COPILOT), thread(true, 'bob')],
         COPILOT,
       ),
     ).toEqual({ unresolvedThreads: 2, copilotUnresolved: 1 });
@@ -155,41 +155,32 @@ describe('parseReviewThreads', () => {
   });
 });
 
-describe('folding a branch PR connection', () => {
-  /** Fold one branch's PR connection through the batched parser. */
-  const fold = (nodes: unknown[]) =>
-    parseBranchPrsResponse(
-      { data: { repository: { b0: { nodes } } } },
-      ['feat'],
-      COPILOT,
-    ).get('feat')!;
+describe('folding issue-attached PRs', () => {
+  const fold = (nodes: unknown[]) => parseIssuePrsResponse(
+    { data: { repository: { i0: { closedByPullRequestsReferences: { nodes } } } } },
+    [3060], COPILOT,
+  ).get(3060)!;
 
-  /** One pull-request node in the combined-query shape. */
   const prNode = (opts: {
     number?: number;
     state?: 'OPEN' | 'MERGED' | 'CLOSED';
+    createdAt?: string;
     reviewDecision?: string | null;
     threads?: unknown[];
     checks?: unknown[] | null;
   }) => ({
-    number: opts.number ?? 3119,
-    url: `https://github.com/o/r/pull/${opts.number ?? 3119}`,
+    number: opts.number ?? 42,
+    url: `https://github.com/acme/widgets/pull/${opts.number ?? 42}`,
     state: opts.state ?? 'OPEN',
+    createdAt: opts.createdAt ?? '2026-07-01T00:00:00Z',
     reviewDecision: opts.reviewDecision ?? '',
     reviewThreads: { nodes: opts.threads ?? [] },
-    commits: {
-      nodes: [
-        {
-          commit: {
-            statusCheckRollup:
-              opts.checks === null ? null : { contexts: { nodes: opts.checks ?? [] } },
-          },
-        },
-      ],
-    },
+    commits: { nodes: [{ commit: { statusCheckRollup:
+      opts.checks === null ? null : { contexts: { nodes: opts.checks ?? [] } },
+    } }] },
   });
 
-  test('a branch with no associated PR reports no PR and no live gates', () => {
+  test('an issue with no attached PR reports no PR and no live gates', () => {
     expect(fold([])).toEqual({
       pr: { exists: false, number: null, url: null, state: null },
       checks: 'none',
@@ -197,147 +188,97 @@ describe('folding a branch PR connection', () => {
     });
   });
 
-  test('an open PR reports checks, decision and thread counts together', () => {
-    // The whole point of the combined query: one call yields every live gate.
-    const result = fold([
-      prNode({
-        state: 'OPEN',
-        reviewDecision: 'REVIEW_REQUIRED',
-        checks: [
-          { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' },
-        ],
-        threads: [
-          { isResolved: false, comments: { nodes: [{ author: { login: COPILOT } }] } },
-          { isResolved: false, comments: { nodes: [{ author: { login: 'alice' } }] } },
-        ],
-      }),
-    ]);
+  test('an attached open PR reports checks, decision and thread counts together', () => {
+    const result = fold([prNode({
+      reviewDecision: 'REVIEW_REQUIRED',
+      checks: [{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' }],
+      threads: [
+        { isResolved: false, comments: { nodes: [{ author: { login: COPILOT } }] } },
+        { isResolved: false, comments: { nodes: [{ author: { login: 'alice' } }] } },
+      ],
+    })]);
     expect(result.checks).toBe('success');
-    expect(result.review).toEqual({
-      decision: 'REVIEW_REQUIRED',
-      unresolvedThreads: 2,
-      copilotUnresolved: 1,
-    });
+    expect(result.review).toEqual({ decision: 'REVIEW_REQUIRED', unresolvedThreads: 2, copilotUnresolved: 1 });
   });
 
-  test('a closed or merged PR reports no live checks or review', () => {
-    // A PR that is not OPEN has no gates to poll.
-    const result = fold([
-      prNode({
-        state: 'MERGED',
-        reviewDecision: 'APPROVED',
-        checks: [{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'FAILURE' }],
-        threads: [
-          { isResolved: false, comments: { nodes: [{ author: { login: 'alice' } }] } },
-        ],
-      }),
-    ]);
+  test('a completed attached PR reports no live checks or review', () => {
+    const result = fold([prNode({
+      state: 'MERGED', reviewDecision: 'APPROVED',
+      checks: [{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'FAILURE' }],
+      threads: [{ isResolved: false, comments: { nodes: [{ author: { login: 'alice' } }] } }],
+    })]);
     expect(result.pr.state).toBe('MERGED');
     expect(result.checks).toBe('none');
-    expect(result.review).toEqual({
-      decision: 'NONE',
-      unresolvedThreads: 0,
-      copilotUnresolved: 0,
-    });
+    expect(result.review).toEqual({ decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 });
   });
 
-  test('an open PR is preferred over a more recent closed one', () => {
-    // Several PRs can share a head branch; the open one is the live one.
+  test('an attached open PR wins over a newer closed one', () => {
     const result = fold([
-      prNode({ number: 20, state: 'CLOSED' }),
+      prNode({ number: 20, state: 'CLOSED', createdAt: '2026-07-02T00:00:00Z' }),
       prNode({ number: 19, state: 'OPEN' }),
     ]);
-    expect(result.pr.number).toBe(19);
-    expect(result.pr.state).toBe('OPEN');
+    expect(result.pr).toMatchObject({ number: 19, state: 'OPEN' });
+  });
+
+  test('chooses the newest live PR regardless of relationship order', () => {
+    const result = fold([
+      prNode({ number: 19 }),
+      prNode({ number: 20, createdAt: '2026-07-02T00:00:00Z' }),
+    ]);
+    expect(result.pr.number).toBe(20);
   });
 });
 
-describe('parseBranchPrsResponse', () => {
-  // The batched envelope: one aliased connection per branch, keyed b0, b1, ...
-  const prNode = (state: 'OPEN' | 'CLOSED' | 'MERGED', number: number) => ({
-    number,
-    url: `https://x/pull/${number}`,
-    state,
-    reviewDecision: '',
-    reviewThreads: { nodes: [] },
-    commits: {
-      nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [] } } } }],
-    },
+describe('parseIssuePrsResponse', () => {
+  const attached = (number: number) => ({ closedByPullRequestsReferences: { nodes: [{
+    number, url: `https://github.com/acme/widgets/pull/${number}`, state: 'OPEN',
+    createdAt: '2026-07-01T00:00:00Z', reviewDecision: '', reviewThreads: { nodes: [] },
+    commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: [] } } } }] },
+  }] } });
+
+  test('maps each issue alias to its attached PR, including an issue without one', () => {
+    const raw = { data: { repository: {
+      i0: attached(11), i1: { closedByPullRequestsReferences: { nodes: [] } },
+    } } };
+    const map = parseIssuePrsResponse(raw, [3060, 3061], COPILOT);
+    expect(map.get(3060)?.pr).toEqual({ exists: true, number: 11, url: 'https://github.com/acme/widgets/pull/11', state: 'OPEN' });
+    expect(map.get(3061)?.pr.exists).toBe(false);
   });
 
-  test('maps each aliased connection back to its branch', () => {
+  test('a missing issue response folds to no PR', () => {
+    expect(parseIssuePrsResponse({ data: { repository: {} } }, [3060], COPILOT).get(3060)?.pr.exists).toBe(false);
+  });
+
+  test('healthy issue aliases still fold when a sibling lookup errored', () => {
     const raw = {
-      data: {
-        repository: {
-          b0: { nodes: [prNode('OPEN', 11)] },
-          b1: { nodes: [] },
-        },
-      },
+      data: { repository: { i0: attached(11), i1: null } },
+      errors: [{ type: 'SERVICE_UNAVAILABLE', path: ['repository', 'i1'] }],
     };
-    const map = parseBranchPrsResponse(raw, ['feat-a', 'feat-b'], COPILOT);
-    expect(map.get('feat-a')?.pr).toEqual({
-      exists: true, number: 11, url: 'https://x/pull/11', state: 'OPEN',
-    });
-    expect(map.get('feat-b')?.pr).toEqual({
-      exists: false, number: null, url: null, state: null,
-    });
-  });
-
-  test('a branch missing from the response folds to no PR', () => {
-    const map = parseBranchPrsResponse({ data: { repository: {} } }, ['x'], COPILOT);
-    expect(map.get('x')?.pr.exists).toBe(false);
-  });
-
-  test('healthy aliases still fold when a sibling alias errored', () => {
-    // GitHub fills in every alias it could answer and nulls the one it could
-    // not; the good branches must survive their neighbour's failure.
-    const raw = {
-      data: { repository: { b0: { nodes: [prNode('OPEN', 11)] }, b1: null } },
-      errors: [{ type: 'SERVICE_UNAVAILABLE', path: ['repository', 'b1'] }],
-    };
-    const map = parseBranchPrsResponse(raw, ['feat-a', 'feat-b'], COPILOT);
-    expect(map.get('feat-a')?.pr.number).toBe(11);
+    expect(parseIssuePrsResponse(raw, [3060, 3061], COPILOT).get(3060)?.pr.number).toBe(11);
   });
 });
 
-describe('unavailableBranches', () => {
-  test('a clean response leaves every branch trusted', () => {
-    expect(unavailableBranches({ data: {} }, ['a', 'b'])).toEqual(new Set());
-    expect(unavailableBranches({ data: {}, errors: [] }, ['a'])).toEqual(new Set());
+describe('unavailableIssues', () => {
+  test('a clean response leaves every issue trusted', () => {
+    expect(unavailableIssues({ data: {}, errors: [] }, [3060, 3061])).toEqual(new Set());
   });
 
-  test('an aliased error distrusts only the branch it names', () => {
-    // Real shape: gh exits non-zero for this, but four of five branches are
-    // perfectly good and must not be held back with the fifth.
-    const raw = {
-      errors: [
-        {
-          type: 'SERVICE_UNAVAILABLE',
-          path: ['repository', 'b2'],
-          message: 'timedout',
-        },
-      ],
-    };
-    expect(unavailableBranches(raw, ['a', 'b', 'c', 'd'])).toEqual(new Set(['c']));
+  test('an aliased error distrusts only the issue it names', () => {
+    const raw = { errors: [{ type: 'SERVICE_UNAVAILABLE', path: ['repository', 'i2'], message: 'timedout' }] };
+    expect(unavailableIssues(raw, [3060, 3061, 3062, 3063])).toEqual(new Set([3062]));
   });
 
-  test('several aliased errors distrust exactly their own branches', () => {
-    const raw = {
-      errors: [{ path: ['repository', 'b0'] }, { path: ['repository', 'b3'] }],
-    };
-    expect(unavailableBranches(raw, ['a', 'b', 'c', 'd'])).toEqual(
-      new Set(['a', 'd']),
-    );
+  test('several errors distrust exactly their own issues', () => {
+    const raw = { errors: [{ path: ['repository', 'i0'] }, { path: ['repository', 'i3'] }] };
+    expect(unavailableIssues(raw, [3060, 3061, 3062, 3063])).toEqual(new Set([3060, 3063]));
   });
 
   test('an error naming no alias poisons the whole batch', () => {
-    // RATE_LIMITED and MAX_NODE_LIMIT_EXCEEDED arrive without a path: nothing
-    // in the payload can be trusted, so null says "hold every card".
-    expect(unavailableBranches({ errors: [{ type: 'RATE_LIMITED' }] }, ['a'])).toBeNull();
+    expect(unavailableIssues({ errors: [{ type: 'RATE_LIMITED' }] }, [3060])).toBeNull();
   });
 
   test('an alias outside the queried range poisons the batch', () => {
-    expect(unavailableBranches({ errors: [{ path: ['repository', 'b9'] }] }, ['a'])).toBeNull();
+    expect(unavailableIssues({ errors: [{ path: ['repository', 'i9'] }] }, [3060])).toBeNull();
   });
 });
 

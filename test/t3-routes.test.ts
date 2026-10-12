@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { isValidLauncher } from '../src/server/routes.ts';
+import { isValidLauncher } from '../src/server/config-routes.ts';
 
 describe('launcher validation', () => {
   test('accepts every launcher the board offers', () => {

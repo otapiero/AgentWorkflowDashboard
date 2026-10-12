@@ -6,7 +6,7 @@ import {
   buildCodeWorkspace,
   summarisePrompt,
   PROMPT_TOKEN,
-} from '../src/orchestrator/spawn.ts';
+} from '../src/orchestrator/spawn/build.ts';
 import type { AgentProfile } from '../src/shared/types.ts';
 
 const claude: AgentProfile = {
