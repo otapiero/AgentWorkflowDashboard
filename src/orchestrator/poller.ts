@@ -61,7 +61,7 @@ export function mergedFields(
  * current phase would use. Only agent phases carry a chip; resting phases like
  * CI or Merge do not, so the board stays uncluttered.
  */
-function pinnedFor(
+export function pinnedFor(
   config: Config,
   task: TaskRecord,
   derived: DerivedState,
