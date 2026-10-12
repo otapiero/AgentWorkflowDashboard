@@ -18,13 +18,15 @@ function queryProcessStart(pid: number): string | null {
     return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] ?? null;
   } catch { return null; }
 }
-let ownProcessStart: string | null | undefined;
+let ownProcessStart: string | undefined;
 function processStart(pid: number): string | null {
   // This process cannot change its PID/start identity. Foreign processes still
   // require a fresh query because a PID may have been reused between checks.
   if (pid === process.pid && ownProcessStart !== undefined) return ownProcessStart;
   const value = queryProcessStart(pid);
-  if (pid === process.pid) ownProcessStart = value;
+  // Only a real answer is remembered: a cold PowerShell that timed out once
+  // must not leave notes unavailable for the rest of this process's life.
+  if (pid === process.pid && value !== null) ownProcessStart = value;
   return value;
 }
 function readOwner(path: string): Owner | null {
@@ -56,7 +58,9 @@ export async function acquireNotesLease(home: string, onCompromised?: (error: Er
   const target = join(home, 'notes.json');
   const directory = `${target}.lock`;
   const metadata = join(directory, 'owner.json');
-  const start = processStart(process.pid);
+  // The first PowerShell of a session can be slow enough to time out; the
+  // second starts warm.
+  const start = processStart(process.pid) ?? processStart(process.pid);
   if (!start) throw new Error('Cannot establish the notes lease process start identity');
   const owner: Owner = { token: randomUUID(), pid: process.pid, processStart: start };
   let compromised = false;
