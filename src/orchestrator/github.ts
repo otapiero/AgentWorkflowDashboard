@@ -112,14 +112,14 @@ export function parseReviewThreads(
   return { unresolvedThreads, copilotUnresolved };
 }
 
-/** Everything the reconciler needs to know about a branch's PR, in one shape. */
-export interface BranchPrFacts {
+/** Everything the reconciler needs to know about an issue's attached PR. */
+export interface PrFacts {
   pr: { exists: boolean; number: number | null; url: string | null; state: PrState | null };
   checks: ChecksState;
   review: { decision: ReviewDecision; unresolvedThreads: number; copilotUnresolved: number };
 }
 
-function noBranchPr(): BranchPrFacts {
+function noPr(): PrFacts {
   return {
     pr: { exists: false, number: null, url: null, state: null },
     checks: 'none',
@@ -127,10 +127,11 @@ function noBranchPr(): BranchPrFacts {
   };
 }
 
-interface BranchPrNode {
+interface PrNode {
   number?: number;
   url?: string;
   state?: string;
+  createdAt?: string;
   reviewDecision?: string | null;
   reviewThreads?: { nodes?: ThreadNode[] };
   commits?: {
@@ -142,22 +143,15 @@ interface BranchPrNode {
   };
 }
 
-/**
- * Fold the combined branch-PR GraphQL response into facts.
- *
- * One query now answers what four `gh` calls used to: the PR, its checks, its
- * review decision, and its threads. Kept pure and separate from the fetch so it
- * can be tested against recorded payloads without the network.
- */
-/** Fold one branch's PR connection nodes into facts (shared by both parsers). */
-function foldBranchPrNodes(
-  nodes: BranchPrNode[] | null | undefined,
+/** Prefer a live attached PR, then the most recently created attached PR. */
+function foldPrNodes(
+  nodes: PrNode[] | null | undefined,
   copilotLogin: string,
-): BranchPrFacts {
-  if (!nodes || nodes.length === 0) return noBranchPr();
+): PrFacts {
+  if (!nodes || nodes.length === 0) return noPr();
 
-  // Prefer an open PR; otherwise the most recent one (nodes are newest-first).
-  const node = nodes.find((n) => n.state === 'OPEN') ?? nodes[0]!;
+  const newest = [...nodes].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+  const node = newest.find((n) => n.state === 'OPEN') ?? newest[0]!;
   const state = (node.state ?? null) as PrState | null;
   const pr = {
     exists: true,
@@ -167,7 +161,7 @@ function foldBranchPrNodes(
   };
 
   // A merged or closed PR has no live gates worth reporting.
-  if (state !== 'OPEN') return { ...noBranchPr(), pr };
+  if (state !== 'OPEN') return { ...noPr(), pr };
 
   const contexts =
     node.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes;
@@ -181,47 +175,47 @@ function foldBranchPrNodes(
   };
 }
 
-/** Fold a batched, aliased response into a branch -> facts map. */
-export function parseBranchPrsResponse(
+/** Fold GitHub's issue-to-PR relationships into facts keyed by issue number. */
+export function parseIssuePrsResponse(
   raw: unknown,
-  branches: string[],
+  issues: number[],
   copilotLogin: string,
-): Map<string, BranchPrFacts> {
+): Map<number, PrFacts> {
   const repo = (
-    raw as { data?: { repository?: Record<string, { nodes?: BranchPrNode[] }> } }
+    raw as { data?: { repository?: Record<string, { closedByPullRequestsReferences?: { nodes?: PrNode[] } }> } }
   )?.data?.repository;
-  const map = new Map<string, BranchPrFacts>();
-  branches.forEach((branch, i) => {
-    map.set(branch, foldBranchPrNodes(repo?.[`b${i}`]?.nodes, copilotLogin));
+  const map = new Map<number, PrFacts>();
+  issues.forEach((issue, i) => {
+    map.set(issue, foldPrNodes(repo?.[`i${i}`]?.closedByPullRequestsReferences?.nodes, copilotLogin));
   });
   return map;
 }
 
 /**
- * The branches a partial GraphQL response could not answer for.
+ * The issues a partial GraphQL response could not answer for.
  *
- * GitHub answers a batched query per alias: when one branch's alias times out
+ * GitHub answers a batched query per alias: when one issue's alias times out
  * it nulls that alias, reports it in `errors`, and still fills in every healthy
- * one. So an error is only a reason to distrust the branch it names.
+ * one. So an error is only a reason to distrust the issue it names.
  *
  * Returns null when an error names no alias we asked for — RATE_LIMITED and
  * MAX_NODE_LIMIT_EXCEEDED arrive with no path, and nothing in a payload like
  * that can be trusted, so the caller must hold every card at last-good.
  */
-export function unavailableBranches(
+export function unavailableIssues(
   raw: unknown,
-  branches: string[],
-): Set<string> | null {
+  issues: number[],
+): Set<number> | null {
   const errors = (raw as { errors?: Array<{ path?: unknown }> })?.errors;
   if (!errors || errors.length === 0) return new Set();
 
-  const out = new Set<string>();
+  const out = new Set<number>();
   for (const err of errors) {
     const path = Array.isArray(err.path) ? err.path.map(String) : [];
-    const alias = path.find((segment) => /^b\d+$/.test(segment));
-    const branch = alias ? branches[Number(alias.slice(1))] : undefined;
-    if (branch === undefined) return null;
-    out.add(branch);
+    const alias = path.find((segment) => /^i\d+$/.test(segment));
+    const issue = alias ? issues[Number(alias.slice(1))] : undefined;
+    if (issue === undefined) return null;
+    out.add(issue);
   }
   return out;
 }
@@ -328,23 +322,22 @@ export async function listOpenIssues(
   }
 }
 
-export interface BatchedBranchPrs {
+export interface BatchedIssuePrs {
   /** False when nothing usable came back, so callers hold every card at last-good. */
   ok: boolean;
-  byBranch: Map<string, BranchPrFacts>;
+  byIssue: Map<number, PrFacts>;
   /**
-   * Branches this response could not answer for. Absent from the map means
-   * "no PR"; listed here means "unknown" — callers must hold these at
-   * last-good rather than reading them as PR-less.
+   * Issues this response could not answer for. Hold their last good facts
+   * rather than reading a failed lookup as an issue with no attached PR.
    */
-  unavailable: Set<string>;
+  unavailable: Set<number>;
   rateLimit: RateLimit | null;
 }
 
-/** The per-branch selection, shared by every alias in the batched query. */
+/** The attached PR selection, shared by every issue alias in the batch. */
 const PR_FIELDS = `
   nodes{
-    number url state reviewDecision
+    number url state createdAt reviewDecision
     reviewThreads(first:30){
       nodes{ isResolved comments(first:1){ nodes{ author{ login } } } }
     }
@@ -358,18 +351,17 @@ const PR_FIELDS = `
   }`;
 
 /**
- * One GraphQL query for every active branch's PR at once, using aliases
- * (b0, b1, …) and one string variable per branch. `first:1` keeps each alias
- * cheap; the reduced first:30 counts cut the point cost ~10x versus first:100.
- * `rateLimit` is folded in so the budget read costs no extra round trip.
+ * One query follows each issue's attached PRs, independent of branch names or
+ * local checkouts. Include completed PRs so a merged issue can be recognized.
+ * The rate-limit budget comes back in the same request.
  */
 function buildBatchQuery(count: number): string {
   const vars = ['$owner:String!', '$name:String!'];
   const aliases: string[] = [];
   for (let i = 0; i < count; i++) {
-    vars.push(`$b${i}:String!`);
+    vars.push(`$i${i}:Int!`);
     aliases.push(
-      `b${i}: pullRequests(headRefName:$b${i}, first:1, orderBy:{field:CREATED_AT, direction:DESC}){${PR_FIELDS}\n    }`,
+      `i${i}: issue(number:$i${i}){ closedByPullRequestsReferences(first:10, includeClosedPrs:true, orderByState:true){${PR_FIELDS}\n    } }`,
     );
   }
   return `query(${vars.join(',')}){
@@ -380,33 +372,33 @@ function buildBatchQuery(count: number): string {
 }`;
 }
 
-export async function fetchBranchPrs(
+export async function fetchIssuePrs(
   config: Config,
-  branches: string[],
-): Promise<BatchedBranchPrs> {
+  issues: number[],
+): Promise<BatchedIssuePrs> {
   // The whole request is unusable. The poller holds active cards at last-good
   // rather than blanking every PR at once.
-  const failed = (): BatchedBranchPrs => ({
+  const failed = (): BatchedIssuePrs => ({
     ok: false,
-    byBranch: new Map(),
-    unavailable: new Set(branches),
+    byIssue: new Map(),
+    unavailable: new Set(issues),
     rateLimit: null,
   });
 
-  // No active branch: no network at all this poll. The heartbeat still fires;
+  // No active issues: no network at all this poll. The heartbeat still fires;
   // the budget simply reports null for this cycle.
-  if (branches.length === 0) {
-    return { ok: true, byBranch: new Map(), unavailable: new Set(), rateLimit: null };
+  if (issues.length === 0) {
+    return { ok: true, byIssue: new Map(), unavailable: new Set(), rateLimit: null };
   }
 
   const args = [
     'api', 'graphql',
-    '-f', `query=${buildBatchQuery(branches.length)}`,
+    '-f', `query=${buildBatchQuery(issues.length)}`,
     '-f', `owner=${config.repo.owner}`,
     '-f', `name=${config.repo.name}`,
   ];
-  branches.forEach((b, i) => {
-    args.push('-f', `b${i}=${b}`);
+  issues.forEach((issue, i) => {
+    args.push('-F', `i${i}=${issue}`);
   });
 
   let body: string;
@@ -414,11 +406,11 @@ export async function fetchBranchPrs(
     body = await gh(args, config.repo.path);
   } catch (err) {
     // gh exits non-zero whenever the response carries an `errors` block — most
-    // often because a single alias timed out while every other branch came back
+    // often because a single alias timed out while every other issue came back
     // intact. The payload is still on stdout, so salvage it instead of blinding
-    // the whole board on one sick branch.
+    // the whole board on one failed issue lookup.
     const { stdout, stderr } = err as { stdout?: string; stderr?: string };
-    console.error(`[mc] branch PR query errored: ${stderr?.trim() || String(err)}`);
+    console.error(`[mc] attached PR query errored: ${stderr?.trim() || String(err)}`);
     if (!stdout) return failed();
     body = stdout;
   }
@@ -431,18 +423,18 @@ export async function fetchBranchPrs(
   }
 
   // No repository block at all means the failure was above the aliases (auth,
-  // a bad repo, a network stub) and every branch would fold to a false "no PR".
+  // a bad repo, a network stub) and every issue would fold to a false "no PR".
   const hasRepo = Boolean(
     (raw as { data?: { repository?: unknown } })?.data?.repository,
   );
-  const unavailable = unavailableBranches(raw, branches);
+  const unavailable = unavailableIssues(raw, issues);
   if (!hasRepo || !unavailable) return failed();
 
   return {
     ok: true,
-    byBranch: parseBranchPrsResponse(
+    byIssue: parseIssuePrsResponse(
       raw,
-      branches,
+      issues,
       config.github.copilotReviewerLogin,
     ),
     unavailable,

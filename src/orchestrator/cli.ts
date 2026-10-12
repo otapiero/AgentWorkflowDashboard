@@ -18,7 +18,7 @@ import { loadConfig } from './config.ts';
 import { gatherFacts } from './facts.ts';
 import { reconcile } from './reconcile.ts';
 import { getTask, listTasks, newTask, removeTask, upsertTask } from './state.ts';
-import { fetchBranchPrs, fetchIssueTitle, listOpenIssues } from './github.ts';
+import { fetchIssuePrs, fetchIssueTitle, listOpenIssues } from './github.ts';
 import { spawnPhase } from './spawn/phase.ts';
 import { collectArtifacts } from './artifacts.ts';
 import { listBranches, resolveBranch } from './worktree.ts';
@@ -227,7 +227,7 @@ async function main(): Promise<void> {
     case 'facts': {
       const task = requireTask(Number(rest[0]));
       const branches = new Set(await listBranches(config));
-      const batch = await fetchBranchPrs(config, [task.branch]);
+      const batch = await fetchIssuePrs(config, task.prState === 'MERGED' ? [] : [task.issue]);
       console.log(
         JSON.stringify(await gatherFacts(config, task, branches, batch), null, 2),
       );
@@ -237,7 +237,7 @@ async function main(): Promise<void> {
     case 'reconcile': {
       const task = requireTask(Number(rest[0]));
       const branches = new Set(await listBranches(config));
-      const batch = await fetchBranchPrs(config, [task.branch]);
+      const batch = await fetchIssuePrs(config, task.prState === 'MERGED' ? [] : [task.issue]);
       const facts = await gatherFacts(config, task, branches, batch);
       printDerived(task, reconcile(facts, task.manualPhase));
       return;
@@ -250,9 +250,9 @@ async function main(): Promise<void> {
         return;
       }
       const branches = new Set(await listBranches(config));
-      // One batched call for every board branch, mirroring the poller.
-      const batch = await fetchBranchPrs(config, [
-        ...new Set(tasks.map((t) => t.branch)),
+      // One batched call for every unmerged issue, mirroring the poller.
+      const batch = await fetchIssuePrs(config, [
+        ...new Set(tasks.filter(t => t.prState !== 'MERGED').map(t => t.issue)),
       ]);
       for (const task of tasks) {
         const facts = await gatherFacts(config, task, branches, batch);

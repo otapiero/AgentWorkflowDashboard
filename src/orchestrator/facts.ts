@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { planPath } from './paths.ts';
 import { readArtifacts } from './artifacts.ts';
 import { listMarkers, readLiveSpawn } from './markers.ts';
-import type { BatchedBranchPrs } from './github.ts';
+import type { BatchedIssuePrs } from './github.ts';
 import { gatherGitFacts, worktreeExists } from './worktree.ts';
 import { latestThreadId, toT3Fact } from './t3/facts.ts';
 import type { T3Snapshot } from './t3/schemas.ts';
@@ -23,7 +23,7 @@ export async function gatherFacts(
   config: Config,
   task: TaskRecord,
   branches: Set<string>,
-  batch: BatchedBranchPrs,
+  batch: BatchedIssuePrs,
   /**
    * The orchestration snapshot for this cycle, fetched once by the poller.
    * Absent means T3 is unavailable, which is a normal state.
@@ -40,6 +40,7 @@ export async function gatherFacts(
     branchExists: false,
     markers,
     planMdExists: existsSync(planPath(task.issue)),
+    implementationStarted: task.spawnHistory.some(run => run.phase !== 'plan' && run.phase !== 'custom' && run.phase !== 'inbox'),
     artifacts: readArtifacts(task.issue),
     hasPushedCommits: false,
     dirtyFileCount: 0,
@@ -67,30 +68,26 @@ export async function gatherFacts(
   const hasBranch = branches.has(task.branch);
   facts.branchExists = hasBranch;
 
-  // An issue that was never started has nothing to query; don't spend calls
-  // on it, and don't let network latency scale with board size.
-  if (!hasBranch && !hasWorktree) return facts;
-
-  // Active task whose PR facts did not come back this cycle — either the whole
-  // request failed or this branch's own alias errored. Throw so the poller's
+  // A task whose attached PR facts did not come back this cycle: throw so the poller's
   // per-task catch holds this card at its last good place instead of showing it
-  // as PR-less. Branches whose aliases answered are unaffected.
-  if (!batch.ok || batch.unavailable.has(task.branch)) {
-    throw new Error(`branch PR facts unavailable for #${task.issue}`);
+  // as PR-less. Issues whose aliases answered are unaffected.
+  if (!batch.ok || batch.unavailable.has(task.issue)) {
+    throw new Error(`attached PR facts unavailable for #${task.issue}`);
   }
+
+  const issuePr = batch.byIssue.get(task.issue);
+  if (issuePr) {
+    facts.pr = issuePr.pr;
+    facts.checks = issuePr.checks;
+    facts.review = issuePr.review;
+  }
+
+  if (!hasBranch && !hasWorktree) return facts;
 
   const git = await gatherGitFacts(config, task.issue, task.branch);
   facts.dirtyFileCount = git.dirtyFileCount;
   facts.unpushedCommits = git.unpushedCommits;
   facts.hasPushedCommits = git.hasPushedCommits;
 
-  // The PR, its checks, decision and threads come from the one batched call the
-  // poller already made this cycle. A branch with no PR simply is not in the map.
-  const branchPr = batch.byBranch.get(task.branch);
-  if (branchPr) {
-    facts.pr = branchPr.pr;
-    facts.checks = branchPr.checks;
-    facts.review = branchPr.review;
-  }
   return facts;
 }

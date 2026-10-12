@@ -88,6 +88,8 @@ export interface Facts {
   /** Marker file names present, e.g. ['plan.done', 'implement.running']. */
   markers: string[];
   planMdExists: boolean;
+  /** A recorded implementation or later pipeline run has already begun. */
+  implementationStarted?: boolean;
   /** Artifacts a plan run produced, from artifacts.json. Empty when none. */
   artifacts: ArtifactRef[];
   /** Branch has commits that exist on the remote. */

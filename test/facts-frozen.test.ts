@@ -12,8 +12,8 @@ vi.mock('../src/orchestrator/worktree.ts', () => ({
 
 import { gatherFacts } from '../src/orchestrator/facts.ts';
 import type {
-  BatchedBranchPrs,
-  BranchPrFacts,
+  BatchedIssuePrs,
+  PrFacts,
 } from '../src/orchestrator/github.ts';
 import type { Config, TaskRecord } from '../src/shared/types.ts';
 
@@ -26,15 +26,15 @@ function task(overrides: Partial<TaskRecord> = {}): TaskRecord {
     mergedAt: '2026-07-01T00:00:00Z', ...overrides,
   };
 }
-const openPr: BranchPrFacts = {
+const openPr: PrFacts = {
   pr: { exists: true, number: 42, url: 'u', state: 'OPEN' },
   checks: 'success',
   review: { decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 },
 };
-function batch(over: Partial<BatchedBranchPrs> = {}): BatchedBranchPrs {
+function batch(over: Partial<BatchedIssuePrs> = {}): BatchedIssuePrs {
   return {
     ok: true,
-    byBranch: new Map(),
+    byIssue: new Map(),
     unavailable: new Set(),
     rateLimit: null,
     ...over,
@@ -84,18 +84,18 @@ describe('gatherFacts — active task', () => {
     ).rejects.toThrow();
   });
 
-  test('a branch whose own alias errored throws', async () => {
+  test('an issue whose own alias errored throws', async () => {
     await expect(
       gatherFacts(
         config,
         task({ prState: 'OPEN', mergedAt: null }),
         new Set(['b']),
-        batch({ unavailable: new Set(['b']) }),
+        batch({ unavailable: new Set([3130]) }),
       ),
     ).rejects.toThrow();
   });
 
-  test('a healthy branch resolves even when a sibling alias errored', async () => {
+  test('a healthy issue resolves even when a sibling alias errored', async () => {
     // The bug this guards: one timed-out alias used to mark every active card
     // unavailable, so the whole board froze on a single bad branch.
     const facts = await gatherFacts(
@@ -103,8 +103,8 @@ describe('gatherFacts — active task', () => {
       task({ prState: 'OPEN', mergedAt: null }),
       new Set(['b']),
       batch({
-        byBranch: new Map([['b', openPr]]),
-        unavailable: new Set(['some-other-branch']),
+        byIssue: new Map([[3130, openPr]]),
+        unavailable: new Set([3060]),
       }),
     );
     expect(gatherGitFacts).toHaveBeenCalledOnce();
