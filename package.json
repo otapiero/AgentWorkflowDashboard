@@ -37,6 +37,7 @@
     "mc": "tsx src/orchestrator/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "npm run build && playwright test",
     "typecheck": "tsc --noEmit",
     "extension:install-deps": "npm --prefix vscode-extension ci",
     "extension:verify": "npm --prefix vscode-extension run verify",
@@ -55,6 +56,7 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.3.1",
+    "@playwright/test": "^1.64.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^24.0.10",
     "@types/proper-lockfile": "4.1.4",
