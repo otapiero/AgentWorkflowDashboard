@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import type { ReviewRequestsSnapshot } from '../src/shared/review-requests.ts';
+import type { ReviewDashboardSnapshot } from '../src/shared/review-requests.ts';
 
 /**
  * Smoke tests over the real app (see e2e/server.ts for the fixture board):
@@ -10,7 +10,7 @@ import type { ReviewRequestsSnapshot } from '../src/shared/review-requests.ts';
 
 test.beforeEach(async ({ page }) => {
   // The one GitHub call a page load makes. Answered here so nothing leaves the machine.
-  const empty: ReviewRequestsSnapshot = { pullRequests: [], checkedAt: new Date().toISOString(), error: null, limitReached: false };
+  const empty: ReviewDashboardSnapshot = { pullRequests: [], worktrees: [], checkedAt: new Date().toISOString(), error: null, limitReached: false };
   await page.route('**/api/review-requests*', (route) => route.fulfill({ json: empty }));
   await page.goto('/');
   await expect(page.getByRole('navigation', { name: 'Pipeline' })).toBeVisible();
@@ -19,7 +19,9 @@ test.beforeEach(async ({ page }) => {
 /** The notes side panel, opened if a previous visit left it closed. */
 async function notesPanel(page: Page) {
   const panel = page.getByRole('complementary', { name: 'Notes' });
-  if (!(await panel.isVisible())) await page.getByRole('button', { name: /^Notes \d+$/ }).click();
+  const toggle = page.getByRole('button', { name: /^Notes \d+$/ });
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute('aria-pressed') === 'false') await toggle.click();
   await expect(panel).toBeVisible();
   return panel;
 }

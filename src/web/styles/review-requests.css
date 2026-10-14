@@ -16,6 +16,15 @@
 .review-item-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .review-item-title { font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
 .review-item-meta { color: var(--dim); font-size: 11.5px; overflow-wrap: anywhere; }
+.review-section-title { display: flex; gap: 8px; align-items: center; margin: 0; padding: 12px 14px 4px; font-size: 12px; font-weight: 600; color: var(--ink-strong); }
+.review-section-title span { color: var(--dim); font-weight: 400; }
+.review-section-hint { margin: 0; padding: 2px 14px 4px; color: var(--dim); font-size: 11px; line-height: 1.5; }
+.review-item-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 12px 40px; }
+.review-worktree-badge { display: inline-block; margin-left: 8px; padding: 1px 6px; border: 1px solid var(--attention); border-radius: 4px; color: var(--attention); font-size: 10px; font-weight: 600; }
+.review-list .is-local-review { border-left: 3px solid var(--attention); }
+.review-list .is-local-review .review-item-actions { padding-left: 37px; }
+.review-local-count { color: var(--attention); font-size: 11px; white-space: nowrap; }
+.review-notice.is-error { color: var(--fault); }
 .review-empty { margin: 0; padding: 28px 16px; color: var(--dim); text-align: center; }
 .review-notice { padding: 10px 12px; margin: 10px; color: var(--attention); background: var(--attention-soft); border-radius: var(--radius-sm); font-size: 12px; }
 .review-popover-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-top: 1px solid var(--line-soft); flex-shrink: 0; }

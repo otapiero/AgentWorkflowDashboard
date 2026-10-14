@@ -176,6 +176,18 @@ export function worktreePath(issue: number): string {
   return join(worktreesDir(), `issue-${issue}`);
 }
 
+export function reviewsDir(): string {
+  return join(mcHome(), 'reviews');
+}
+
+export function reviewDir(number: number): string {
+  return join(reviewsDir(), `pr-${number}`);
+}
+
+export function reviewWorktreePath(number: number): string {
+  return join(worktreesDir(), `review-pr-${number}`);
+}
+
 /** Where install.ps1 places the user-scoped Claude command files. */
 export function claudeCommandsDir(): string {
   return process.env.MC_CLAUDE_COMMANDS ?? join(homedir(), '.claude', 'commands');

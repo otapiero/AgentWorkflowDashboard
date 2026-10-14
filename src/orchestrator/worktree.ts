@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { execa } from 'execa';
 
 import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
-import { worktreePath, worktreesDir } from './paths.ts';
+import { reviewWorktreePath, worktreePath, worktreesDir } from './paths.ts';
 import type { Config } from '../shared/types.ts';
 
 /**
@@ -169,6 +169,18 @@ export async function removeWorktree(
   if (!Number.isSafeInteger(issue) || issue <= 0 || dirname(path) !== resolve(worktreesDir())) {
     throw new Error('Refusing to remove a path outside the task worktrees directory');
   }
+  await removeManagedWorktree(config, path);
+}
+
+export async function removeReviewWorktree(config: Config, number: number): Promise<void> {
+  const path = resolve(reviewWorktreePath(number));
+  if (!Number.isSafeInteger(number) || number <= 0 || dirname(path) !== resolve(worktreesDir())) {
+    throw new Error('Refusing to remove a path outside the review worktrees directory');
+  }
+  await removeManagedWorktree(config, path);
+}
+
+async function removeManagedWorktree(config: Config, path: string): Promise<void> {
   await git(['worktree', 'remove', path, '--force'], config.repo.path);
   await git(['worktree', 'prune'], config.repo.path);
 
@@ -177,7 +189,7 @@ export async function removeWorktree(
   rmSync(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   if (existsSync(path)) {
     throw new Error(
-      `Deregistered the worktree for issue ${issue} but could not delete ${path}. Something is holding it open; close it and remove the folder by hand.`,
+      `Deregistered the worktree but could not delete ${path}. Something is holding it open; close it and retry.`,
     );
   }
 }

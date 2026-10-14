@@ -74,6 +74,10 @@ export function rescueFiles(
   worktree: string,
   paths: readonly string[],
 ): string[] {
+  return rescueFilesTo(rescueDir(issue), worktree, paths);
+}
+
+function rescueFilesTo(destination: string, worktree: string, paths: readonly string[]): string[] {
   const rescued: string[] = [];
   const used = new Set<string>();
 
@@ -87,12 +91,12 @@ export function rescueFiles(
     const stem = ext ? name.slice(0, -ext.length) : name;
 
     let target = name;
-    for (let n = 2; used.has(target) || existsSync(join(rescueDir(issue), target)); n += 1) target = `${stem}-${n}${ext}`;
+    for (let n = 2; used.has(target) || existsSync(join(destination, target)); n += 1) target = `${stem}-${n}${ext}`;
     used.add(target);
 
     // Created lazily so a clean worktree leaves no empty directory behind.
-    mkdirSync(rescueDir(issue), { recursive: true });
-    copyFileSync(source, join(rescueDir(issue), target));
+    mkdirSync(destination, { recursive: true });
+    copyFileSync(source, join(destination, target));
     rescued.push(relative);
   }
 
@@ -157,8 +161,28 @@ export async function cleanupDoneTask(
   issue: number,
   branch: string,
 ): Promise<CleanupResult> {
-  const worktree = worktreePath(issue);
-  const receiptPath = join(taskDir(issue), 'worktree-cleanup.json');
+  const rescued = await rescueAndRemoveWorktree(
+    worktreePath(issue), taskDir(issue), branch, () => removeWorktree(config, issue),
+  );
+
+  let branchDeleted = false;
+  if (config.cleanup?.deleteBranch ?? true) {
+    const result = await git(['branch', '-D', branch], config.repo.path);
+    branchDeleted = result.ok;
+  }
+
+  return { issue, rescued, branchDeleted };
+}
+
+/** Shared rescue and retry receipt for issue and review checkouts. */
+export async function rescueAndRemoveWorktree(
+  worktree: string,
+  directory: string,
+  branch: string,
+  remove: () => Promise<void>,
+): Promise<string[]> {
+  const destination = join(directory, 'rescued-from-worktree');
+  const receiptPath = join(directory, 'worktree-cleanup.json');
   let previous: { worktree: string; branch: string; rescued: string[] } | null = null;
   try {
     const receipt = JSON.parse(readFileSync(receiptPath, 'utf8'));
@@ -174,29 +198,23 @@ export async function cleanupDoneTask(
   let rescued: string[];
   if (status.ok) {
     const ignored = await git(['ls-files', '--others', '--ignored', '--exclude-standard', '-z'], worktree);
-    if (!ignored.ok) throw new Error(`Could not inspect ignored files for issue ${issue}; no files were removed`);
+    if (!ignored.ok) throw new Error('Could not inspect ignored files; no files were removed');
     // Installed dependencies are disposable. Keep ignored local config and
     // notes, including .env, alongside the normal uncommitted-file rescue.
     const ignoredPaths = ignored.stdout.split('\0').filter((p) => p && !p.split('/').includes('node_modules'));
-    rescued = rescueFiles(issue, worktree, [...new Set([...parseRescuePaths(status.stdout), ...ignoredPaths])]);
-    mkdirSync(taskDir(issue), { recursive: true });
+    rescued = rescueFilesTo(destination, worktree, [...new Set([...parseRescuePaths(status.stdout), ...ignoredPaths])]);
+    mkdirSync(directory, { recursive: true });
     writeFileSync(receiptPath, JSON.stringify({ worktree, branch, rescued }), 'utf8');
   } else if (previous) {
     // Windows may have deregistered the checkout before a locked folder
     // prevented deletion. Its saved rescue lets that deletion be retried.
-    rescued = [...previous.rescued, ...rescueFiles(issue, worktree, orphanFiles(worktree))];
+    rescued = [...previous.rescued, ...rescueFilesTo(destination, worktree, orphanFiles(worktree))];
   } else {
-    throw new Error(`Could not inspect the worktree for issue ${issue}; no files were removed`);
+    throw new Error('Could not inspect the worktree; no files were removed');
   }
 
-  await removeWorktree(config, issue);
+  await remove();
   rmSync(receiptPath, { force: true });
 
-  let branchDeleted = false;
-  if (config.cleanup?.deleteBranch ?? true) {
-    const result = await git(['branch', '-D', branch], config.repo.path);
-    branchDeleted = result.ok;
-  }
-
-  return { issue, rescued, branchDeleted };
+  return rescued;
 }

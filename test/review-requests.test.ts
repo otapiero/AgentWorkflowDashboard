@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { join } from 'node:path';
 
 const execa = vi.hoisted(() => vi.fn());
 vi.mock('execa', () => ({ execa, execaSync: vi.fn(() => ({ stdout: '' })) }));
@@ -24,7 +25,8 @@ const rawPr = {
 };
 const pr = { ...rawPr, author: 'bob' };
 
-beforeEach(() => { execa.mockReset(); });
+beforeEach(() => { execa.mockReset(); process.env.MC_HOME = join(process.env.MC_ROOT!, 'project'); });
+afterEach(() => { delete process.env.MC_HOME; });
 
 test('fetches outstanding reviews for the signed-in user in the configured repository', async () => {
   execa.mockResolvedValue({ stdout: JSON.stringify([rawPr]) });
@@ -108,5 +110,57 @@ test('the API exposes the review queue and supports explicit refresh', async () 
     const refreshed = await app.inject('/api/review-requests?refresh=true');
     expect(refreshed.json()).toMatchObject({ pullRequests: [], error: null });
     expect(execa).toHaveBeenCalledTimes(2);
+  } finally { await app.close(); }
+});
+
+test('opening a review resolves trusted PR metadata from the queue and rejects PRs outside it', async () => {
+  execa.mockResolvedValue({ stdout: JSON.stringify([rawPr]) });
+  const open = vi.fn(async () => ({ ...pr, openedAt: pr.updatedAt, workspacePath: 'C:\\src\\widgets', worktreeExists: true }));
+  const app = Fastify();
+  registerRoutes(app, {
+    config, broadcaster: new Broadcaster(), refresh: async () => [], health: createHealthResponse('test'),
+    reviewWorktrees: { list: () => [], open, finish: vi.fn() },
+  });
+  try {
+    const result = await app.inject({ method: 'POST', url: '/api/review-requests/42/open', payload: { title: 'Untrusted client title', workspacePath: 'C:\\unrelated' } });
+    expect(result.statusCode).toBe(200);
+    expect(open).toHaveBeenCalledWith(pr);
+    const missing = await app.inject({ method: 'POST', url: '/api/review-requests/99/open' });
+    expect(missing.statusCode).toBe(404);
+    expect(open).toHaveBeenCalledTimes(1);
+    const invalid = await app.inject({ method: 'POST', url: '/api/review-requests/0/open' });
+    expect(invalid.statusCode).toBe(400);
+    expect(open).toHaveBeenCalledTimes(1);
+  } finally { await app.close(); }
+});
+
+test('local review actions survive an empty or unavailable queue and failed cleanup remains retryable', async () => {
+  const local = { ...pr, openedAt: pr.updatedAt, workspacePath: 'C:\\src\\widgets', worktreeExists: true };
+  let active = [local];
+  const open = vi.fn(async () => local);
+  let heldOpen = true;
+  const finish = vi.fn(async () => {
+    if (heldOpen) throw new Error('Close the editor and retry');
+    active = [];
+    return { rescued: ['notes.txt'], rescuePath: 'C:\\src\\widgets\\rescued' };
+  });
+  const app = Fastify();
+  registerRoutes(app, {
+    config, broadcaster: new Broadcaster(), refresh: async () => [], health: createHealthResponse('test'),
+    reviewWorktrees: { list: () => active, open, finish },
+  });
+  try {
+    execa.mockResolvedValueOnce({ stdout: '[]' });
+    expect((await app.inject('/api/review-requests')).json()).toMatchObject({ pullRequests: [], worktrees: [local] });
+    execa.mockRejectedValue(new Error('Offline'));
+    expect((await app.inject({ method: 'POST', url: '/api/review-requests/42/open' })).statusCode).toBe(200);
+    expect(open).toHaveBeenCalledWith(local);
+    expect((await app.inject({ method: 'POST', url: '/api/review-requests/42/finish' })).statusCode).toBe(409);
+    expect((await app.inject('/api/review-requests?refresh=true')).json()).toMatchObject({ error: expect.any(String), worktrees: [local] });
+    heldOpen = false;
+    const finished = await app.inject({ method: 'POST', url: '/api/review-requests/42/finish' });
+    expect(finished.statusCode).toBe(200);
+    expect(finished.json()).toMatchObject({ rescued: ['notes.txt'] });
+    expect((await app.inject('/api/review-requests')).json()).toMatchObject({ worktrees: [] });
   } finally { await app.close(); }
 });

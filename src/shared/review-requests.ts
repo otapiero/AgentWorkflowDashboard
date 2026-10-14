@@ -15,3 +15,18 @@ export interface ReviewRequestsSnapshot {
   error: string | null;
   limitReached: boolean;
 }
+
+export interface ReviewWorktree extends ReviewRequest {
+  openedAt: string;
+  workspacePath: string;
+  worktreeExists: boolean;
+}
+
+export interface ReviewDashboardSnapshot extends ReviewRequestsSnapshot {
+  worktrees: ReviewWorktree[];
+}
+
+export interface ReviewCleanupResult {
+  rescued: string[];
+  rescuePath: string;
+}
