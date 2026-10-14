@@ -66,6 +66,8 @@ test('opens the PR head detached even when its branch is in another worktree, an
   expect(editor.folders).toEqual([{ path: opened.workspacePath }]);
   expect(editor.settings['window.title']).toContain('Review PR #42');
   writeFileSync(join(opened.workspacePath, 'widgets.txt'), 'local review edit');
+  // Git canonicalizes Windows drive casing, while the configured home may not.
+  process.env.MC_HOME = home.replace(/^[A-Z]:/, drive => drive.toLowerCase());
   await reviews.open(pr);
   expect(readFileSync(join(opened.workspacePath, 'widgets.txt'), 'utf8')).toBe('local review edit');
   expect(createReviewWorktrees(config).list()).toMatchObject([{ number: 42, worktreeExists: true }]);

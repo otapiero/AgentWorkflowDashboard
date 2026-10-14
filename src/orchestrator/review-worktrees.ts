@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative } from 'node:path';
 import { execa } from 'execa';
 import { z } from 'zod';
 
@@ -83,7 +83,7 @@ export function createReviewWorktrees(config: Config, deps: {
       if (existsSync(path)) {
         if (!record) throw new Error(`Refusing to adopt an unmanaged directory at ${path}`);
         const actual = await git(['rev-parse', '--show-toplevel'], path);
-        if (resolve(actual) !== resolve(path)) throw new Error('Review checkout is no longer registered. Finish review to clean it up.');
+        if (relative(actual, path) !== '') throw new Error('Review checkout is no longer registered. Finish review to clean it up.');
       } else {
         // GitHub's pull ref also works for PRs from forks. Each PR gets its own
         // ref, so concurrent fetches cannot race over FETCH_HEAD.
