@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 const SERVER_PORT = process.env.MC_PORT ?? '4317';
 
 const PROCESS_SUITES = [
+  'test/review-worktrees.test.ts',
   'test/artifacts.test.ts',
   'test/cleanup.test.ts',
   'test/notes-lease.test.ts',

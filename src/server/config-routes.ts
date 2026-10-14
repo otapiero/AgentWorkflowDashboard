@@ -16,22 +16,16 @@ export function isValidLauncher(value: unknown): value is LauncherKind {
   return typeof value === 'string' && (LAUNCHERS as string[]).includes(value);
 }
 
-/** Health, the review-request feed, and the config and settings the pickers read. */
+/** Health, and the config and settings the pickers read. */
 export function registerConfigRoutes(
   app: FastifyInstance,
   {
     config,
     refresh,
     health,
-    readReviewRequests,
-  }: Pick<RouteContext, 'config' | 'refresh' | 'health' | 'readReviewRequests'>,
+  }: Pick<RouteContext, 'config' | 'refresh' | 'health'>,
 ): void {
   app.get('/api/health', async () => health);
-
-  app.get<{ Querystring: { refresh?: string } }>('/api/review-requests', async (req, reply) => {
-    reply.header('Cache-Control', 'no-store');
-    return readReviewRequests(req.query.refresh === 'true');
-  });
 
   app.get('/api/config', async () => ({
     repo: config.repo,

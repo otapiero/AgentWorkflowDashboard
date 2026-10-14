@@ -1,5 +1,10 @@
 # Agent instructions
 
+## Pull requests
+
+Finish each feature on its own branch. After the required checks pass, push
+that branch and open a pull request against the repository's base branch.
+
 ## Testing
 
 A test earns its place only if all four are true:

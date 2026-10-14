@@ -85,6 +85,16 @@ is visible; opening the list or clicking Refresh checks again. Draft PRs are
 excluded. If GitHub is unavailable, the last successful list stays visible with
 a retry message.
 
+Each waiting PR has an **Open for review** button. It checks out the PR's head
+in a separate `review-pr-<number>` worktree and opens a VS Code window labeled
+**Review PR #<number>**. Reopening keeps the existing checkout and local edits.
+Local reviews stay in the list across restarts and after the GitHub review
+request disappears. **Finish review** saves uncommitted and ignored files under
+the project's `reviews/pr-<number>/rescued-from-worktree` directory, saves local
+commits in `commits.bundle`, and removes the checkout. Disposable `node_modules`
+directories are excluded. If cleanup fails, the review stays available to retry.
+Finish review only manages the local checkout; submit your review on GitHub.
+
 Merged PRs rest in the **Merged** column until you click **Mark Done** in the
 task's Run tab. Mark Done moves the card to Done and removes its worktree,
 saving uncommitted and ignored files in the task's `rescued-from-worktree` folder
