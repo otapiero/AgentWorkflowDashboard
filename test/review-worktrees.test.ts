@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execa } from 'execa';
@@ -68,6 +68,11 @@ test('opens the PR head detached even when its branch is in another worktree, an
   writeFileSync(join(opened.workspacePath, 'widgets.txt'), 'local review edit');
   // Git canonicalizes Windows drive casing, while the configured home may not.
   process.env.MC_HOME = home.replace(/^[A-Z]:/, drive => drive.toLowerCase());
+  await reviews.open(pr);
+  // Windows temporary roots may also be aliases for the physical directory.
+  const alias = join(root, 'project-alias');
+  symlinkSync(home, alias, 'junction');
+  process.env.MC_HOME = alias;
   await reviews.open(pr);
   expect(readFileSync(join(opened.workspacePath, 'widgets.txt'), 'utf8')).toBe('local review edit');
   expect(createReviewWorktrees(config).list()).toMatchObject([{ number: 42, worktreeExists: true }]);
