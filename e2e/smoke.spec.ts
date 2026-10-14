@@ -19,7 +19,9 @@ test.beforeEach(async ({ page }) => {
 /** The notes side panel, opened if a previous visit left it closed. */
 async function notesPanel(page: Page) {
   const panel = page.getByRole('complementary', { name: 'Notes' });
-  if (!(await panel.isVisible())) await page.getByRole('button', { name: /^Notes \d+$/ }).click();
+  const toggle = page.getByRole('button', { name: /^Notes \d+$/ });
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute('aria-pressed') === 'false') await toggle.click();
   await expect(panel).toBeVisible();
   return panel;
 }
