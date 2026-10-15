@@ -246,6 +246,17 @@ async function gh(args: string[], cwd: string): Promise<string> {
   return stdout;
 }
 
+/** Preserve usable aliases even when gh exits nonzero on a partial response. */
+export async function queryGithub(config: Config, query: string): Promise<unknown> {
+  const args = ['api', 'graphql', '-f', `query=${query}`, '-f', `owner=${config.repo.owner}`, '-f', `name=${config.repo.name}`];
+  try { return JSON.parse(await gh(args, config.repo.path)); }
+  catch (error) {
+    const stdout = (error as { stdout?: string }).stdout;
+    if (stdout) return JSON.parse(stdout);
+    throw error;
+  }
+}
+
 const reviewRequestsSchema = z.array(z.object({
   number: z.number().int().positive(),
   title: z.string(),

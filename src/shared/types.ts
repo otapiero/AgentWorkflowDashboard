@@ -8,6 +8,8 @@
  * computes from Facts alone.
  */
 
+import type { StackView, TaskStack } from './pr-stack.ts';
+
 export const PHASES = [
   'inbox',
   'plan',
@@ -82,6 +84,7 @@ export interface PlanSnapshot {
 }
 
 export interface Facts {
+  stack?: StackView;
   issue: number;
   worktreeExists: boolean;
   branchExists: boolean;
@@ -221,6 +224,8 @@ export interface DerivedState {
 }
 
 export interface SpawnRecord {
+  layerKey?: string;
+  workspacePath?: string;
   phase: RunKind;
   agent: string;
   startedAt: string;
@@ -245,6 +250,7 @@ export interface TaskOverrides {
 }
 
 export interface TaskRecord {
+  stack?: TaskStack;
   issue: number;
   title: string;
   slug: string;
