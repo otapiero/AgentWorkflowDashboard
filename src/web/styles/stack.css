@@ -1,0 +1,13 @@
+.stack-panel { padding: 12px 22px; border-bottom: 1px solid var(--line); max-height: 38vh; overflow-y: auto; flex-shrink: 0; }
+.stack-panel summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.stack-layers { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 8px; }
+.stack-layers li { padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
+.stack-layers li.is-selected { border-color: currentColor; }
+.stack-select { display: flex; gap: 8px; align-items: start; font-size: 13px; cursor: pointer; }
+.stack-select input { margin-top: 3px; width: auto; }
+.stack-meta { margin: 5px 0 0 22px; font-size: 11px; opacity: .7; overflow-wrap: anywhere; }
+.stack-warning { margin: 5px 0 0 22px; font-size: 12px; }
+.stack-attach label { display: grid; gap: 5px; font-size: 12px; }
+.stack-attach input { width: 100%; box-sizing: border-box; }
+.stack-attach .actions { margin-top: 8px; }
+.stack-companion { display: flex; align-items: center; gap: 8px; font-size: 12px; overflow-wrap: anywhere; }

@@ -18,7 +18,8 @@ import { loadConfig } from './config.ts';
 import { gatherFacts } from './facts.ts';
 import { reconcile } from './reconcile.ts';
 import { getTask, listTasks, newTask, removeTask, upsertTask } from './state.ts';
-import { fetchIssuePrs, fetchIssueTitle, listOpenIssues } from './github.ts';
+import { fetchIssueTitle, listOpenIssues } from './github.ts';
+import { createStackCollector } from './github-stack.ts';
 import { spawnPhase } from './spawn/phase.ts';
 import { collectArtifacts } from './artifacts.ts';
 import { listBranches, resolveBranch } from './worktree.ts';
@@ -227,7 +228,7 @@ async function main(): Promise<void> {
     case 'facts': {
       const task = requireTask(Number(rest[0]));
       const branches = new Set(await listBranches(config));
-      const batch = await fetchIssuePrs(config, task.prState === 'MERGED' ? [] : [task.issue]);
+      const batch = await createStackCollector(config).collect([task]);
       console.log(
         JSON.stringify(await gatherFacts(config, task, branches, batch), null, 2),
       );
@@ -237,7 +238,7 @@ async function main(): Promise<void> {
     case 'reconcile': {
       const task = requireTask(Number(rest[0]));
       const branches = new Set(await listBranches(config));
-      const batch = await fetchIssuePrs(config, task.prState === 'MERGED' ? [] : [task.issue]);
+      const batch = await createStackCollector(config).collect([task]);
       const facts = await gatherFacts(config, task, branches, batch);
       printDerived(task, reconcile(facts, task.manualPhase));
       return;
@@ -251,9 +252,7 @@ async function main(): Promise<void> {
       }
       const branches = new Set(await listBranches(config));
       // One batched call for every unmerged issue, mirroring the poller.
-      const batch = await fetchIssuePrs(config, [
-        ...new Set(tasks.filter(t => t.prState !== 'MERGED').map(t => t.issue)),
-      ]);
+      const batch = await createStackCollector(config).collect(tasks);
       for (const task of tasks) {
         const facts = await gatherFacts(config, task, branches, batch);
         printDerived(task, reconcile(facts, task.manualPhase));
@@ -270,7 +269,8 @@ async function main(): Promise<void> {
       const record = await spawnPhase(config, task, phase, {
         customInstructions: rest.slice(2).join(' ') || undefined,
       });
-      upsertTask({ ...task, spawnHistory: [...task.spawnHistory, record] });
+      const current = getTask(task.issue);
+      if (current) upsertTask({ ...current, spawnHistory: [...current.spawnHistory, record] });
       console.log(`spawned ${phase.id} for #${task.issue} in a new terminal tab`);
       console.log(record.command);
       return;

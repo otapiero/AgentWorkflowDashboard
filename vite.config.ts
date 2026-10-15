@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 const SERVER_PORT = process.env.MC_PORT ?? '4317';
 
 const PROCESS_SUITES = [
+  'test/layer-worktrees.test.ts',
   'test/review-worktrees.test.ts',
   'test/artifacts.test.ts',
   'test/cleanup.test.ts',
@@ -31,6 +32,7 @@ export default defineConfig({
     },
   },
   test: {
+    maxWorkers: 2,
     globals: true,
     environment: 'node',
     root: '.',

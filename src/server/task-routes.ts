@@ -8,6 +8,7 @@ import { removeWorktree, resolveBranch, worktreeExists } from '../orchestrator/w
 import { shouldCleanupOnDone } from '../orchestrator/cleanup.ts';
 import { PHASES } from '../shared/types.ts';
 import type { Phase } from '../shared/types.ts';
+import { cleanupLayerWorktrees, ownedLayerWorktrees } from '../orchestrator/layer-worktrees.ts';
 import { errorMessage, findTask, type RouteContext } from './route-helpers.ts';
 
 function isPhase(value: unknown): value is Phase {
@@ -91,9 +92,10 @@ export function registerTaskRoutes(
       // this is where its checkout is retired. Derivation is deliberately not
       // the trigger: a merged PR is GitHub's opinion, and the operator may
       // still be using the worktree for something.
-      if (phase && shouldCleanupOnDone(config, phase, worktreeExists(task.issue))) {
+      if (phase && shouldCleanupOnDone(config, phase, worktreeExists(task.issue) || ownedLayerWorktrees(task.issue).some(p => p.path))) {
         try {
-          const result = await cleanupTask(config, task.issue, task.branch);
+          await cleanupLayerWorktrees(config, task.issue);
+          const result = worktreeExists(task.issue) ? await cleanupTask(config, task.issue, task.branch) : { rescued: [], branchDeleted: false };
           const extras = [
             result.rescued.length ? `rescued ${result.rescued.length} file(s)` : null,
             result.branchDeleted ? `deleted ${task.branch}` : null,
@@ -145,6 +147,7 @@ export function registerTaskRoutes(
       const task = findTask(req.params.issue, reply);
       if (!task) return reply;
       // Only removes Mission Control's own worktree; the repo is untouched.
+      await cleanupLayerWorktrees(config, task.issue);
       await removeWorktree(config, task.issue);
       return refresh();
     },

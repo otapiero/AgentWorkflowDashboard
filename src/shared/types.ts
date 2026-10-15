@@ -8,6 +8,8 @@
  * computes from Facts alone.
  */
 
+import type { StackView, TaskStack } from './pr-stack.ts';
+
 export const PHASES = [
   'inbox',
   'plan',
@@ -72,6 +74,7 @@ export interface ArtifactRef {
 
 /** The "before" picture captured at plan spawn, used to attribute artifacts. */
 export interface PlanSnapshot {
+  workspacePath?: string;
   takenAt: string;
   /** File names present in the task dir (excluding MC's own bookkeeping). */
   taskDirFiles: string[];
@@ -82,6 +85,7 @@ export interface PlanSnapshot {
 }
 
 export interface Facts {
+  stack?: StackView;
   issue: number;
   worktreeExists: boolean;
   branchExists: boolean;
@@ -187,6 +191,7 @@ export interface BoardConfig {
 }
 
 export type BadgeKind =
+  | 'stack'
   | 'live'
   | 'stale-spawn'
   | 't3-error'
@@ -221,6 +226,8 @@ export interface DerivedState {
 }
 
 export interface SpawnRecord {
+  layerKey?: string;
+  workspacePath?: string;
   phase: RunKind;
   agent: string;
   startedAt: string;
@@ -245,6 +252,7 @@ export interface TaskOverrides {
 }
 
 export interface TaskRecord {
+  stack?: TaskStack;
   issue: number;
   title: string;
   slug: string;
@@ -252,9 +260,9 @@ export interface TaskRecord {
   worktreePath: string | null;
   prNumber: number | null;
   prUrl: string | null;
-  /** Last observed PR state; persisted so merged tasks can be frozen. */
+  /** Last observed issue summary state across its PR layers. */
   prState?: PrState | null;
-  /** ISO time merge was first observed; enables the done-freeze. */
+  /** ISO time all known layers first completed. Cleared when work resumes. */
   mergedAt?: string | null;
   manualPhase: Phase | null;
   overrides?: TaskOverrides;

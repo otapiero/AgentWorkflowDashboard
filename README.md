@@ -8,6 +8,31 @@ with no retyped prompts.
 Windows only. It leans on Windows Terminal, PowerShell 7 and the `gh` CLI, and
 there is no plan to port it.
 
+## Stacked pull requests
+
+An issue can have several PR layers. Expand its Pull requests section to see
+their branch order, checks, reviews and dependencies. Select a layer before
+launching work or opening its checkout. Planning stays attached to the issue;
+PR work uses the selected layer's writable checkout and actual base branch.
+
+Attach a PR by URL if GitHub's issue links miss it. Detach superseded or invalid
+entries, and keep PRs from other repositories as companion links. Fork PRs can
+be displayed but cannot be launched through this app. Merging one layer leaves
+the remaining layers active; marking the issue Done rescues uncommitted files
+and cleans up its owned checkouts. Rebasing, retargeting and merging stay manual.
+
+Status reads share batched GitHub GraphQL requests, with at most 20 selections
+per batch and one status selection per unique PR. Discovery uses metadata only
+and refreshes every five minutes. Large connections continue on later polls.
+Selecting a layer and previewing its prompt make no GitHub requests. A newly
+discovered PR gets full status on the next poll. Failed manual lookups retry
+every five minutes and can be removed from the drawer.
+
+After upgrading, rerun `powershell -File scripts\install.ps1` to update the phase
+scripts. A pending terminal launch reserves the issue until the terminal starts.
+If the terminal never opens, use Cancel pending launch before retrying; a delayed
+cancelled terminal cannot start the agent with another run's prompt.
+
 ## The three principles
 
 - **Deterministic scripts over agents.** Worktrees, branches, markers, and `gh`

@@ -6,6 +6,7 @@ import { markerPath, runPhaseScript, taskDir, worktreePath } from '../paths.ts';
 import { readArtifacts, resolveArtifactStoredPath } from '../artifacts.ts';
 import { ensureWorktree } from '../worktree.ts';
 import { buildCodeArgs, buildCodeWorkspace, buildWtArgs } from './build.ts';
+import type { ExecutionTarget } from '../execution-target.ts';
 import type { Config, PhaseConfig, TaskRecord } from '../../shared/types.ts';
 
 function codeWorkspacePath(issue: number): string {
@@ -39,23 +40,25 @@ export async function launchVscode(
   task: TaskRecord,
   phase: PhaseConfig,
   specFile: string,
+  target?: ExecutionTarget,
+  launchToken?: string,
 ): Promise<string> {
-  await ensureWorktree(config, task.issue, task.branch);
+  if (!target?.layerKey) await ensureWorktree(config, task.issue, task.branch);
 
   // This is a deliberate launch, so clear any guard left by a previous run —
   // otherwise the phase script would treat this as a re-open and skip the agent.
-  const guardFile = markerPath(task.issue, `${phase.id}.vscode-launched`);
+  const guardFile = launchToken ? join(taskDir(task.issue), 'runs', launchToken, 'vscode-launched') : markerPath(task.issue, `${phase.id}.vscode-launched`);
   rmSync(guardFile, { force: true });
 
   const workspace = buildCodeWorkspace({
     issue: task.issue,
     phase: phase.id,
-    worktree: worktreePath(task.issue),
+    worktree: target?.worktreePath ?? worktreePath(task.issue),
     script: runPhaseScript(),
     specFile,
     guardFile,
   });
-  const wsFile = codeWorkspacePath(task.issue);
+  const wsFile = launchToken ? join(taskDir(task.issue), 'runs', launchToken, 'workspace.code-workspace') : codeWorkspacePath(task.issue);
   writeFileSync(wsFile, JSON.stringify(workspace, null, 2), 'utf8');
 
   const codeArgs = buildCodeArgs(wsFile, { newWindow: true });
@@ -71,8 +74,8 @@ export async function launchVscode(
  * plain folder (not the phase workspace) is deliberate: the operator wants to
  * look at or edit the code, not launch an agent.
  */
-export function openWorktreeInVscode(issue: number): void {
-  const path = worktreePath(issue);
+export function openWorktreeInVscode(issue: number, workspace?: string): void {
+  const path = workspace ?? worktreePath(issue);
   if (!existsSync(path)) {
     throw new Error(
       `No worktree yet for issue ${issue}. Run a phase first — that is what creates the checkout.`,

@@ -9,6 +9,9 @@ import { readPlan, writePlan } from '../orchestrator/plan.ts';
 import { openArtifactInEditor, openWorktreeInVscode } from '../orchestrator/spawn/launchers.ts';
 import { missionUsage } from '../orchestrator/usage.ts';
 import { errorMessage, findTask } from './route-helpers.ts';
+import type { Config } from '../shared/types.ts';
+import { resolveExecutionTarget } from '../orchestrator/execution-target.ts';
+import { ensureLayerWorktree } from '../orchestrator/layer-worktrees.ts';
 
 /** How a document failure surfaces over HTTP. */
 const DOCUMENT_FAILURE: Record<DocumentError, { status: number; error: string }> = {
@@ -19,7 +22,7 @@ const DOCUMENT_FAILURE: Record<DocumentError, { status: number; error: string }>
 };
 
 /** A task's plan and collected artifacts, its usage, and the shortcuts into the editor. */
-export function registerDocumentRoutes(app: FastifyInstance): void {
+export function registerDocumentRoutes(app: FastifyInstance, config?: Config): void {
   app.get<{ Params: { issue: string } }>('/api/tasks/:issue/plan', async (req, reply) => {
     const content = readPlan(Number(req.params.issue));
     if (content === null) return reply.code(404).send({ error: 'no plan attached yet' });
@@ -45,13 +48,15 @@ export function registerDocumentRoutes(app: FastifyInstance): void {
     return missionUsage(task.issue);
   });
 
-  app.post<{ Params: { issue: string } }>(
+  app.post<{ Params: { issue: string }; Body: { layerKey?: string } }>(
     '/api/tasks/:issue/open-code',
     async (req, reply) => {
       const task = findTask(req.params.issue, reply);
       if (!task) return reply;
       try {
-        openWorktreeInVscode(task.issue);
+        const target = config && task.stack?.layers.length ? resolveExecutionTarget(config, task, req.body?.layerKey) : undefined;
+        if (target?.layerKey && config) await ensureLayerWorktree(config, task, target);
+        openWorktreeInVscode(task.issue, target?.worktreePath);
         return { ok: true };
       } catch (err) {
         return reply.code(400).send({ error: errorMessage(err) });

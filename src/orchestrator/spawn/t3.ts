@@ -124,10 +124,10 @@ export async function launchT3(
   config: Config,
   task: TaskRecord,
   phase: PhaseConfig,
-  plan: { modelSelection: ModelSelection; modes: T3PhaseModes; prompt: string },
+  plan: { modelSelection: ModelSelection; modes: T3PhaseModes; prompt: string; target?: import('../execution-target.ts').ExecutionTarget },
   client: T3Client = new T3Client(),
 ): Promise<{ command: string; threadId: string }> {
-  await ensureWorktree(config, task.issue, task.branch);
+  if (!plan.target?.layerKey) await ensureWorktree(config, task.issue, task.branch);
 
   const createdAt = new Date().toISOString();
 
@@ -177,8 +177,8 @@ export async function launchT3(
       threadId,
       projectId,
       title: `#${task.issue} ${phase.id}`,
-      worktreePath: worktreePath(task.issue),
-      branch: task.branch,
+      worktreePath: plan.target?.worktreePath ?? worktreePath(task.issue),
+      branch: plan.target?.branch ?? task.branch,
       modelSelection: plan.modelSelection,
       modes: plan.modes,
       createdAt,

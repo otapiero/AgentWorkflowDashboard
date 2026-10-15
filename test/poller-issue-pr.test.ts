@@ -32,8 +32,9 @@ test('finds and persists the issue-attached PR without a matching branch or loca
   saveState({ version: 1, tasks: [newTask(3060, 'Audio mode', 'alice')] });
   execa.mockImplementation(async (command: string, args: string[]) => {
     if (command === 'git') return { stdout: '' };
-    if (command === 'gh' && args.includes('i0=3060') && args.some(arg => arg.includes('closedByPullRequestsReferences'))) {
+    if (command === 'gh' && args.some(arg => arg.includes('issue(number:3060)') && arg.includes('closedByPullRequestsReferences'))) {
       return { stdout: JSON.stringify({ data: { repository: {
+        openPrs: { nodes: [], pageInfo: { hasNextPage: false } },
         i0: { closedByPullRequestsReferences: { nodes: [{
           number: 42, url: 'https://github.com/acme/widgets/pull/42', state: 'OPEN',
           createdAt: '2026-07-01T00:00:00Z', headRefName: 'unrelated-branch-name',
@@ -62,7 +63,7 @@ test('a previous implementation run suppresses plan review after its markers are
   mkdirSync(taskDir(3060), { recursive: true });
   writeFileSync(planPath(3060), '# Audio mode plan\n');
   execa.mockImplementation(async (command: string) => command === 'git' ? { stdout: '' } : {
-    stdout: JSON.stringify({ data: { repository: { i0: { closedByPullRequestsReferences: { nodes: [] } } } } }),
+    stdout: JSON.stringify({ data: { repository: { openPrs: { nodes: [], pageInfo: { hasNextPage: false } }, i0: { closedByPullRequestsReferences: { nodes: [] } } } } }),
   });
   const { results } = await reconcileAll(config);
   expect(results[0]!.derived.displayPhase).toBe('plan');

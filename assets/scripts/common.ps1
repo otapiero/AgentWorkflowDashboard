@@ -74,6 +74,10 @@ function Ensure-Worktree {
     )
 
     if (Test-Path $Worktree) {
+        $actualBranch = git -C $Worktree symbolic-ref --short HEAD
+        if ($LASTEXITCODE -ne 0 -or $actualBranch -ne $Branch) {
+            throw "Checkout branch does not match '$Branch'. No agent was launched."
+        }
         Write-Host "[mc] worktree already present: $Worktree" -ForegroundColor DarkGray
         return
     }

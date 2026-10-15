@@ -40,6 +40,7 @@ const post = <T>(url: string, body?: unknown) =>
   request<T>(url, { method: 'POST', body: body ? JSON.stringify(body) : undefined });
 
 export interface PromptPreview {
+  target?: { branch: string; baseBranch: string; worktreePath: string; prNumber?: number };
   text: string;
   command: string;
   words: number;
@@ -54,6 +55,8 @@ export interface DocumentPayload {
 }
 
 export const api = {
+  cancelLaunch: (issue: number) => post<{ ok: true }>(`/api/tasks/${issue}/cancel-launch`),
+  stack: (issue: number, operation: import('../server/stack-routes.ts').StackOperation) => post<import('../shared/types.ts').TaskRecord>(`/api/tasks/${issue}/stack`, operation),
   reviewRequests: (refresh = false) => request<ReviewDashboardSnapshot>(`/api/review-requests${refresh ? '?refresh=true' : ''}`),
   openReview: (number: number) => post<ReviewWorktree>(`/api/review-requests/${number}/open`),
   finishReview: (number: number) => post<ReviewCleanupResult>(`/api/review-requests/${number}/finish`),
@@ -81,6 +84,7 @@ export const api = {
     issue: number,
     phase: RunKind,
     opts: {
+      layerKey?: string;
       customInstructions?: string;
       agent?: string;
       model?: string;
@@ -94,8 +98,9 @@ export const api = {
     phase: RunKind,
     instructions?: string,
     includeContext?: boolean,
+    layerKey?: string,
   ) =>
-    post<PromptPreview>(`/api/tasks/${issue}/prompt`, { phase, instructions, includeContext }),
+    post<PromptPreview>(`/api/tasks/${issue}/prompt`, { phase, instructions, includeContext, layerKey }),
 
   markDone: (issue: number, phase: Phase) =>
     post<TaskWithDerived[]>(`/api/tasks/${issue}/mark-done`, { phase }),
@@ -116,7 +121,7 @@ export const api = {
     post<TaskWithDerived[]>('/api/phase-defaults', { phase, ...o }),
   setLauncher: (launcher: LauncherKind) =>
     post<TaskWithDerived[]>('/api/settings', { launcher }),
-  openCode: (issue: number) => post<{ ok: true }>(`/api/tasks/${issue}/open-code`),
+  openCode: (issue: number, layerKey?: string) => post<{ ok: true }>(`/api/tasks/${issue}/open-code`, { layerKey }),
   openArtifact: (issue: number, name: string) =>
     post<{ ok: true }>(`/api/tasks/${issue}/artifacts/${encodeURIComponent(name)}/open`),
   readArtifact: (issue: number, name: string) =>

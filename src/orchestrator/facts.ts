@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { buildStack } from '../shared/pr-stack.ts';
 
 import { planPath } from './paths.ts';
 import { readArtifacts } from './artifacts.ts';
@@ -54,13 +55,13 @@ export async function gatherFacts(
 
   // A merged PR is terminal: freeze the mission from the cached record and spend
   // no git or GraphQL calls re-learning a fact that can never change.
-  if (task.prState === 'MERGED') {
+  if (task.manualPhase === 'done') {
     facts.branchExists = branches.has(task.branch);
-    facts.pr = {
+    if (task.prNumber !== null) facts.pr = {
       exists: true,
       number: task.prNumber,
       url: task.prUrl,
-      state: 'MERGED',
+      state: task.prState ?? null,
     };
     return facts;
   }
@@ -76,6 +77,8 @@ export async function gatherFacts(
   }
 
   const issuePr = batch.byIssue.get(task.issue);
+  const stack = batch.stacks?.get(task.issue);
+  if (stack) facts.stack = buildStack(stack.layers, config.repo.baseBranch, stack.discoveryComplete);
   if (issuePr) {
     facts.pr = issuePr.pr;
     facts.checks = issuePr.checks;

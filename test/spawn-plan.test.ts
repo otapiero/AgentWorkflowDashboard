@@ -95,6 +95,17 @@ afterEach(() => {
 });
 
 describe('resolveSpawnPlan', () => {
+  test('layer preview uses its actual branch, base and checkout, including raw custom runs', () => {
+    writeFileSync(join(commands, 'mc-implementer.md'), '{{branch}} base {{baseBranch}} at {{worktree}}');
+    const p = { host: 'github.com', repository: 'acme/widgets', number: 11, state: 'OPEN', headRepository: 'acme/widgets', headBranch: 'alice/child', baseBranch: 'alice/parent', headSha: 'a'.repeat(40), available: true, checkedAt: new Date().toISOString() } as import('../src/shared/pr-stack.ts').PrLayer;
+    const t = task({ stack: { layers: [p], discoveryComplete: true } });
+    const planned = resolveSpawnPlan(config(), t, implementPhase(), {}, { layerKey: 'github.com/acme/widgets/11' });
+    expect(planned.promptText).toContain('alice/child base alice/parent');
+    expect(planned.promptText).toContain(planned.target.worktreePath);
+    const raw = resolveSpawnPlan(config(), t, implementPhase(), {}, { layerKey: 'github.com/acme/widgets/11', rawPrompt: 'Check this' });
+    expect(raw.target).toEqual(planned.target);
+    expect(raw.promptText).toBe('Check this');
+  });
   test('renders the command with the task context', () => {
     const plan = resolveSpawnPlan(config(), task(), implementPhase(), {}, {});
     expect(plan.command).toBe('mc-implementer');

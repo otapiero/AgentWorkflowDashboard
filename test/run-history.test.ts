@@ -1,0 +1,31 @@
+import Fastify from 'fastify';
+import { beforeEach, afterEach, expect, test, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+const spawn = vi.hoisted(() => vi.fn());
+vi.mock('../src/orchestrator/spawn/phase.ts', () => ({ spawnPhase: spawn }));
+import { registerRunRoutes } from '../src/server/run-routes.ts';
+import { getTask, newTask, saveState, upsertTask } from '../src/orchestrator/state.ts';
+import type { Config, SpawnRecord } from '../src/shared/types.ts';
+let home: string;
+beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'mc-run-history-')); process.env.MC_HOME = home; });
+afterEach(() => { delete process.env.MC_HOME; rmSync(home, { recursive: true, force: true }); });
+test('launch completion preserves membership edits that arrived during startup', async () => {
+  const config = { agents: {}, pipeline: [{ id: 'implement', spawnable: true }] } as unknown as Config;
+  const task = newTask(1, 'Feature', 'alice'); saveState({ version: 1, tasks: [task] });
+  let finish!: (record: SpawnRecord) => void; let started!: () => void;
+  const beginning = new Promise<void>(resolve => { started = resolve; });
+  spawn.mockImplementation(() => { started(); return new Promise<SpawnRecord>(resolve => { finish = resolve; }); });
+  const app = Fastify(); registerRunRoutes(app, { config, refresh: async () => [] });
+  const response = app.inject({ method: 'POST', url: '/api/tasks/1/spawn', payload: { phase: 'implement' } });
+  // inject begins when consumed; drive it while awaiting our launch boundary.
+  const result = response.then(r => r);
+  await beginning;
+  upsertTask({ ...getTask(1)!, stack: { layers: [], manualNumbers: [12], discoveryComplete: false } });
+  finish({ phase: 'implement', agent: 'codex', startedAt: new Date().toISOString(), command: 'run' });
+  expect((await result).statusCode).toBe(200);
+  expect(getTask(1)?.stack?.manualNumbers).toEqual([12]);
+  expect(getTask(1)?.spawnHistory).toHaveLength(1);
+  await app.close();
+});
