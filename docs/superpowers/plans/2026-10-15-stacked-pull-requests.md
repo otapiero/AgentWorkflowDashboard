@@ -136,7 +136,7 @@ expect(target.worktreePath).not.toBe(worktreePath(task.issue));
 - [x] Run `npm run typecheck` followed by `npm test`, then `npm --prefix vscode-extension run verify`. Do not increase timeouts. Fix failures and repeat only affected checks before rerunning required gates.
 - [x] Use T3 `preview_status`, then `preview_open` if needed, and inspect the deterministic stack fixture. Verify keyboard selection, warnings, composition and prompt preview. Do not use production state for UI fixtures.
 - [x] Review recorded transport evidence: ordinary multi-layer polls use one batch within capacity, discovery is at five-minute intervals, status aliases are deduplicated, pagination advances one page per connection per poll, and drawer interactions produce no GitHub traffic.
-- [ ] Commit final docs, push `feat/stacked-pull-requests`, open a PR against `master` with validation and request-budget evidence, call `link_pull_request` immediately, and reconcile with `list_thread_pull_requests` before reporting the PR URL.
+- [x] Commit final docs, push `feat/stacked-pull-requests`, open a PR against `master` with validation and request-budget evidence, call `link_pull_request` immediately, and reconcile with `list_thread_pull_requests` before reporting the PR URL.
 
 ## Execution review
 
@@ -146,5 +146,5 @@ completed successfully. Review corrections include metadata-only discovery,
 reopened-child refresh, removable pending attachments, preserved concurrent
 intent, checkout ancestry checks and durable launch handoff with cancellation.
 The first two tasks share one implementation commit. Vitest uses two workers
-to avoid CPU contention without raising test timeouts. Publication is the final
-remaining step.
+to avoid CPU contention without raising test timeouts. Published as PR #3 against master and linked to the thread. Final verification
+passed 654 app tests, 145 extension tests and seven browser scenarios.
