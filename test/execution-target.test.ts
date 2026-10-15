@@ -6,6 +6,7 @@ import { resolveExecutionTarget } from '../src/orchestrator/execution-target.ts'
 import { newTask } from '../src/orchestrator/state.ts';
 import { prKey, type PrLayer } from '../src/shared/pr-stack.ts';
 import type { Config } from '../src/shared/types.ts';
+import { worktreePath } from '../src/orchestrator/paths.ts';
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), 'mc-target-')); process.env.MC_HOME = home; });
 afterEach(() => { delete process.env.MC_HOME; rmSync(home, { recursive: true, force: true }); });
@@ -17,7 +18,9 @@ test('resolves the child branch and actual base while leaving the issue branch i
   const target = resolveExecutionTarget(config, task, prKey(p));
   expect(target.branch).toBe('alice/child');
   expect(target.baseBranch).toBe('alice/parent');
-  expect(target.worktreePath).toContain('1-pr-11');
+  expect(target.worktreePath).toBe(worktreePath(task.issue));
+  task.stack.layers.push({ ...p, number: 12, headBranch: 'alice/next' });
+  expect(resolveExecutionTarget(config, task, prKey(task.stack.layers[1]!)).worktreePath).toBe(target.worktreePath);
   expect(task.branch).not.toBe(target.branch);
 });
 test('rejects unknown, unavailable, stale, fork and missing multi-layer targets', () => {

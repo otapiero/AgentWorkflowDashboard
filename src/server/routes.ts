@@ -49,6 +49,6 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
   registerTaskRoutes(app, ctx);
   registerStackRoutes(app, ctx);
   registerRunRoutes(app, ctx);
-  registerDocumentRoutes(app, config);
+  registerDocumentRoutes(app);
   registerEventsRoutes(app, ctx);
 }

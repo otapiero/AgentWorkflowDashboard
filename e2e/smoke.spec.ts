@@ -68,7 +68,7 @@ test('stack selection targets the child PR without changing the issue phase or r
   const preview = page.getByRole('dialog', { name: 'Prompt for Implement' });
   await expect(preview).toContainText('alice/layer-8');
   await expect(preview).toContainText('alice/layer-7');
-  await expect(preview).toContainText('103-pr-8');
+  await expect(preview).toContainText('issue-103');
   await expect(page.getByRole('region', { name: /^CI, 1 task$/ }).getByRole('button', { name: /^Issue 103,/ })).toBeVisible();
 });
 

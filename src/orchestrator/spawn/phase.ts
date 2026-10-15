@@ -1,4 +1,4 @@
-import { readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 
 import { mcHome, runPhaseScript, runSnapshotPath, taskDir } from '../paths.ts';
 import { writePromptFile } from '../prompt.ts';
@@ -85,8 +85,8 @@ async function launchPhase(config: Config, task: TaskRecord, phase: PhaseConfig,
   if (t3Plan && !t3Plan.ok) throw new Error(t3Plan.error);
   if (launcher === 't3') validateT3Prompt(promptText);
   // Never snapshot a checkout while git is still populating it.
-  if (target.layerKey) await ensureLayerWorktree(config, task, target);
-  else if (launcher === 't3' || launcher === 'vscode') {
+  if (target.layerKey || (task.stack?.layers.length && existsSync(target.worktreePath))) await ensureLayerWorktree(config, task, target);
+  else if (task.stack?.layers.length || launcher === 't3' || launcher === 'vscode') {
     await ensureWorktree(config, task.issue, task.branch);
   }
   assertLaunchReservation(task.issue, launchToken);

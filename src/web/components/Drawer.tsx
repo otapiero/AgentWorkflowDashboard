@@ -153,7 +153,7 @@ export function Drawer({ task, config, onClose, onChanged, initialTab = 'run', n
               <button
                 className="btn is-sm is-ghost"
                 disabled={busy !== null}
-                onClick={() => run('open-code', () => api.openCode(task.issue, stack?.selectedKey ?? undefined))}
+                onClick={() => run('open-code', () => api.openCode(task.issue))}
               >
                 {busy === 'open-code' ? 'Opening…' : '✎ VS Code'}
               </button>

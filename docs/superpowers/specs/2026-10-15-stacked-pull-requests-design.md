@@ -138,13 +138,18 @@ planning, spawn records and all launchers. Revalidate that the target belongs to
 the task and has usable metadata on the server. Reject unknown or stale targets
 instead of falling back to the issue branch. Include the PR identity in history.
 
-Use a writable per-layer worktree for PR-specific runs. Reuse an already managed
-checkout of the exact branch when possible, including the legacy issue checkout
-for its matching layer. Verify its actual branch before launch. Do not switch
-an existing checkout to a different layer. Fail clearly when git reports that a
-branch is checked out elsewhere or metadata cannot establish a writable local
-branch. Fork layers remain visible but launching against an unsupported fork
-must produce a clear error.
+All PR layers share the issue's writable worktree. This supersedes the initial
+per-layer checkout design following the user's workflow correction. A launch
+switches the shared checkout to the selected branch only when it has no
+uncommitted changes. Verify repository ownership and cached PR head ancestry
+before switching. Preserve every file in legacy layer directories; release a
+clean, manifest-owned legacy checkout's branch by detaching it. Refuse dirty
+legacy checkouts and branches occupied outside app-owned checkouts. Fork layers
+remain visible but launching against an unsupported fork produces a clear error.
+
+Opening the issue folder requires no PR selection or fresh GitHub metadata and
+never switches branches. Issue planning can still create a new issue branch
+from the repository base when its shared checkout does not exist.
 
 Pass the selected layer's actual base to publishing and review prompts. Include
 its PR number and the surrounding dependency context. Issue planning and runs
