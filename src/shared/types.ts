@@ -74,6 +74,7 @@ export interface ArtifactRef {
 
 /** The "before" picture captured at plan spawn, used to attribute artifacts. */
 export interface PlanSnapshot {
+  workspacePath?: string;
   takenAt: string;
   /** File names present in the task dir (excluding MC's own bookkeeping). */
   taskDirFiles: string[];
@@ -190,6 +191,7 @@ export interface BoardConfig {
 }
 
 export type BadgeKind =
+  | 'stack'
   | 'live'
   | 'stale-spawn'
   | 't3-error'
@@ -258,9 +260,9 @@ export interface TaskRecord {
   worktreePath: string | null;
   prNumber: number | null;
   prUrl: string | null;
-  /** Last observed PR state; persisted so merged tasks can be frozen. */
+  /** Last observed issue summary state across its PR layers. */
   prState?: PrState | null;
-  /** ISO time merge was first observed; enables the done-freeze. */
+  /** ISO time all known layers first completed. Cleared when work resumes. */
   mergedAt?: string | null;
   manualPhase: Phase | null;
   overrides?: TaskOverrides;

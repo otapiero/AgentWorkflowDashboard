@@ -38,6 +38,7 @@ export function createStackCollector(config: Config, deps: { now?: () => number;
   const fingerprints = new Map<number, string>();
   const statuses = new Map<number, PrLayer>();
   const pages = new Map<number, StatusPages>();
+  const retryAfter = new Map<number, number>();
   let index = fresh();
   let completeIndex: Node[] = [];
 
@@ -46,12 +47,13 @@ export function createStackCollector(config: Config, deps: { now?: () => number;
     const threadPage = node.reviewThreads;
     const checkPage = node.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts;
     let pending = pages.get(node.number);
-    if (pending?.sha !== (node.headRefOid ?? '')) pending = undefined;
-    const threads = [...(pending?.threads ?? []), ...(threadPage?.nodes ?? [])];
-    const checks = [...(pending?.checks ?? []), ...(checkPage?.nodes ?? [])];
-    const moreThreads = threadPage?.pageInfo?.hasNextPage ?? false;
-    const moreChecks = checkPage?.pageInfo?.hasNextPage ?? false;
-    if (full && (moreThreads || moreChecks)) pages.set(node.number, {
+    const changedDuringPagination = Boolean(pending && pending.sha !== (node.headRefOid ?? ''));
+    if (changedDuringPagination) { pending = undefined; pages.delete(node.number); }
+    const threads = pending && !pending.threadCursor ? pending.threads : [...(pending?.threads ?? []), ...(threadPage?.nodes ?? [])];
+    const checks = pending && !pending.checkCursor ? pending.checks : [...(pending?.checks ?? []), ...(checkPage?.nodes ?? [])];
+    const moreThreads = pending && !pending.threadCursor ? false : threadPage?.pageInfo?.hasNextPage ?? false;
+    const moreChecks = pending && !pending.checkCursor ? false : checkPage?.pageInfo?.hasNextPage ?? false;
+    if (full && !changedDuringPagination && (moreThreads || moreChecks)) pages.set(node.number, {
       sha: node.headRefOid ?? '', threads, checks,
       threadCursor: moreThreads ? threadPage!.pageInfo!.endCursor : null,
       checkCursor: moreChecks ? checkPage!.pageInfo!.endCursor : null,
@@ -61,12 +63,12 @@ export function createStackCollector(config: Config, deps: { now?: () => number;
       host: 'github.com', repository: repo, number: node.number, url: node.url,
       title: node.title ?? `PR #${node.number}`, state: node.state,
       headBranch: node.headRefName ?? old?.headBranch ?? '', baseBranch: node.baseRefName ?? old?.baseBranch ?? '',
-      headRepository: node.headRepository?.nameWithOwner ?? old?.headRepository ?? repo,
+      headRepository: node.headRepository === null ? '' : node.headRepository?.nameWithOwner ?? old?.headRepository ?? repo,
       baseRepository: node.baseRepository?.nameWithOwner ?? repo, headSha: node.headRefOid ?? old?.headSha ?? '',
       checks: full ? parseChecksRollup(checks) : old?.checks ?? 'none',
       review: full ? { decision: normalizeReviewDecision(node.reviewDecision), ...parseReviewThreads(threads, config.github.copilotReviewerLogin) }
         : old?.review ?? { decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 },
-      available: full && !moreThreads && !moreChecks,
+      available: full && !changedDuringPagination && !moreThreads && !moreChecks,
       checkedAt: full ? new Date(now()).toISOString() : old?.checkedAt,
       source,
     };
@@ -86,19 +88,22 @@ export function createStackCollector(config: Config, deps: { now?: () => number;
       const stacks = new Map<number, TaskStack>();
       const unavailable = new Set<number>();
       const byIssue: BatchedIssuePrs['byIssue'] = new Map();
-      const selections: { alias: string; text: string; kind: 'issue' | 'status' | 'index'; issue?: number; number?: number; bootstrap?: boolean }[] = [];
+      const selections: { alias: string; text: string; kind: 'issue' | 'status' | 'index'; issue?: number; number?: number }[] = [];
       const known = new Map<number, PrLayer>();
       for (const task of active) {
         for (const p of task.stack?.layers ?? []) { known.set(p.number, p); if (!statuses.has(p.number)) statuses.set(p.number, p); }
+        if (!task.stack?.layers.length && task.prNumber) known.set(task.prNumber, { number: task.prNumber, state: 'OPEN', available: false, source: 'attached' } as PrLayer);
         const fingerprint = JSON.stringify([task.stack?.manualNumbers, task.stack?.excludedKeys]);
-        if (fingerprints.get(task.issue) !== fingerprint) memberships.delete(task.issue);
+        if (fingerprints.get(task.issue) !== fingerprint) {
+          memberships.delete(task.issue);
+          if (fingerprints.has(task.issue)) index.due = 0;
+        }
         fingerprints.set(task.issue, fingerprint);
         const member = memberships.get(task.issue) ?? fresh();
         memberships.set(task.issue, member);
         if (now() >= member.due || !member.complete) {
-          const bootstrap = !task.stack?.layers.length;
-          selections.push({ alias: `i${active.indexOf(task)}`, issue: task.issue, kind: 'issue', bootstrap,
-            text: `i${active.indexOf(task)}:issue(number:${task.issue}){closedByPullRequestsReferences(first:100,includeClosedPrs:true${after(member.cursor)}){${pageInfo} nodes{${bootstrap ? statusFields() : metadata}}}}` });
+          selections.push({ alias: `i${active.indexOf(task)}`, issue: task.issue, kind: 'issue',
+            text: `i${active.indexOf(task)}:issue(number:${task.issue}){closedByPullRequestsReferences(first:100,includeClosedPrs:true${after(member.cursor)}){${pageInfo} nodes{${metadata}}}}` });
         }
         for (const number of task.stack?.manualNumbers ?? []) {
           if (!known.has(number)) known.set(number, { number, state: 'OPEN', available: false } as PrLayer);
@@ -106,6 +111,7 @@ export function createStackCollector(config: Config, deps: { now?: () => number;
       }
       for (const [number, p] of known) {
         if (p.state !== 'OPEN' && p.available) continue;
+        if (now() < (retryAfter.get(number) ?? 0)) continue;
         selections.push({ alias: `p${number}`, number, kind: 'status', text: `p${number}:pullRequest(number:${number}){${statusFields(pages.get(number))}}` });
       }
       if (active.length && (now() >= index.due || !index.complete)) selections.unshift({ alias: 'openPrs', kind: 'index',
@@ -120,24 +126,34 @@ export function createStackCollector(config: Config, deps: { now?: () => number;
           const result = body.data?.repository;
           rateLimit = parseRateLimit(raw) ?? rateLimit;
           for (const selection of batch) {
-            const invalid = !result || !result[selection.alias] || body.errors?.some(e => !e.path || e.path.includes(selection.alias));
+            const invalid = !result || !result[selection.alias] || body.errors?.some(e => !e.path?.length || e.path.includes(selection.alias));
             if (invalid) {
               failed = true;
               if (selection.kind === 'index') index.complete = false;
               if (selection.issue) { memberships.get(selection.issue)!.complete = false; unavailable.add(selection.issue); }
               if (selection.number && statuses.has(selection.number)) statuses.set(selection.number, { ...statuses.get(selection.number)!, available: false });
+              else if (selection.number) retryAfter.set(selection.number, now() + DISCOVERY_MS);
               continue;
             }
             if (selection.kind === 'index') {
-              accept(index, result![selection.alias] as Page<Node>);
+              const page = result![selection.alias] as Page<Node>;
+              accept(index, page);
+              for (const p of page.nodes) {
+                const old = statuses.get(p.number);
+                if (old && old.state !== p.state) statuses.set(p.number, toLayer(p, old.source, false));
+              }
               if (index.complete) completeIndex = [...index.nodes];
             } else if (selection.kind === 'issue') {
               const page = (result![selection.alias] as { closedByPullRequestsReferences: Page<Node> }).closedByPullRequestsReferences;
               if (!page?.nodes) { memberships.get(selection.issue!)!.complete = false; unavailable.add(selection.issue!); continue; }
               accept(memberships.get(selection.issue!)!, page);
-              for (const p of page.nodes) if (selection.bootstrap) statuses.set(p.number, toLayer(p, 'attached', true));
+              for (const p of page.nodes) {
+                const old = statuses.get(p.number);
+                if (old && old.state !== p.state) statuses.set(p.number, { ...toLayer(p, old.source, false), available: p.state !== 'OPEN' });
+              }
             } else {
               const p = result![selection.alias] as Node;
+              retryAfter.delete(p.number);
               statuses.set(p.number, toLayer(p, known.get(p.number)?.source ?? 'manual', true));
             }
           }
@@ -153,6 +169,7 @@ export function createStackCollector(config: Config, deps: { now?: () => number;
       for (const task of active) {
         const member = memberships.get(task.issue)!;
         const members = new Map((task.stack?.layers ?? []).map(p => [p.number, statuses.get(p.number) ?? p]));
+        if (task.prNumber && !task.stack?.layers.length && statuses.has(task.prNumber)) members.set(task.prNumber, statuses.get(task.prNumber)!);
         for (const node of member.nodes) members.set(node.number, statuses.get(node.number) ?? toLayer(node, 'attached', false));
         for (const number of task.stack?.manualNumbers ?? []) {
           const p = statuses.get(number);

@@ -12,7 +12,7 @@ import type { TaskWithDerived } from '../shared/types.ts';
  */
 export function boardSignature(tasks: TaskWithDerived[]): string {
   return JSON.stringify(tasks, (key, value) =>
-    key === 'lastReconciledAt' ? undefined : value,
+    key === 'lastReconciledAt' || key === 'checkedAt' ? undefined : value,
   );
 }
 

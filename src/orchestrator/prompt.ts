@@ -72,6 +72,7 @@ export function renderArtifactList(
 }
 
 export interface PromptTask {
+  worktree?: string;
   issue: number;
   title: string;
   branch: string;
@@ -117,7 +118,7 @@ export function buildPrompt(
     planPath: planPath(task.issue),
     donePath: markerPath(task.issue, options.doneMarkerName ?? 'plan.done'),
     artifacts: renderArtifactList(options.artifacts ?? [], task.issue),
-    worktree: worktreePath(task.issue),
+    worktree: task.worktree ?? worktreePath(task.issue),
     taskDir: taskDir(task.issue),
     customInstructions: options.customInstructions ?? '',
   };
@@ -138,9 +139,10 @@ export function buildPrompt(
     : body;
 }
 
-export function writePromptFile(issue: number, text: string): string {
-  mkdirSync(taskDir(issue), { recursive: true });
-  const file = promptPath(issue);
+export function writePromptFile(issue: number, text: string, launchToken?: string): string {
+  const directory = launchToken ? join(taskDir(issue), 'runs', launchToken) : taskDir(issue);
+  mkdirSync(directory, { recursive: true });
+  const file = launchToken ? join(directory, 'prompt.txt') : promptPath(issue);
   writeFileSync(file, text, 'utf8');
   return file;
 }

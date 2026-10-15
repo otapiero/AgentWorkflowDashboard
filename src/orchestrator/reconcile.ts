@@ -1,4 +1,5 @@
 import { PHASES } from '../shared/types.ts';
+import { layerPhase } from '../shared/pr-stack.ts';
 import type { Badge, DerivedState, Facts, Phase } from '../shared/types.ts';
 
 /**
@@ -23,7 +24,12 @@ export function reconcile(
     (manualPhase !== null && manualPhase !== 'inbox' && manualPhase !== 'plan')
   );
   const badges = computeBadges(facts, planAwaitingReview);
-  const { needsYou, needsYouReason } = computeNeedsYou(facts, manualPhase === 'done' ? 'done' : derivedPhase, planAwaitingReview);
+  let { needsYou, needsYouReason } = computeNeedsYou(facts, manualPhase === 'done' ? 'done' : derivedPhase, planAwaitingReview);
+  if (facts.stack && manualPhase !== 'done' && !isLive(facts)) {
+    const problem = facts.stack.layers.find(p => p.checks === 'failure' || p.review.unresolvedThreads > 0 || p.review.decision === 'CHANGES_REQUESTED' || p.warning);
+    if (problem) { needsYou = true; needsYouReason = `#${problem.number}: ${problem.warning ?? (problem.checks === 'failure' ? 'CI is failing' : 'Review needs attention')}`; }
+    if (!facts.stack.discoveryComplete) { needsYou = true; needsYouReason = 'Stack discovery incomplete'; }
+  }
 
   return {
     issue: facts.issue,
@@ -71,6 +77,14 @@ function isLive(facts: Facts): boolean {
 function derivePhase(facts: Facts): Phase {
   const { pr, review, checks } = facts;
 
+  if (facts.stack?.layers.length) {
+    if (facts.stack.complete) return 'merged';
+    const first = facts.stack.layers.find(p => p.state !== 'MERGED');
+    if (!first) return 'ci';
+    const phase = layerPhase(first);
+    return phase === 'merge' && (first.warning || !facts.stack.discoveryComplete) ? 'dev_review' : phase;
+  }
+
   if (pr.state === 'MERGED') return 'merged';
 
   if (pr.exists) {
@@ -113,18 +127,28 @@ function computeGates(facts: Facts): Record<Phase, boolean> {
       facts.review.unresolvedThreads === 0,
     // Merging is always a deliberate human act; never auto-satisfied.
     merge: false,
-    merged: facts.pr.state === 'MERGED',
+    merged: facts.stack ? facts.stack.complete : facts.pr.state === 'MERGED',
     done: false,
   };
   // Guard against a phase being added to PHASES without a gate rule here.
   for (const phase of PHASES) {
     if (!(phase in satisfied)) satisfied[phase] = false;
   }
+  if (facts.stack && (!facts.stack.discoveryComplete || facts.stack.layers.some(p => !p.available))) {
+    satisfied.ci = false;
+    satisfied.copilot_review = false;
+    satisfied.dev_review = false;
+  }
   return satisfied;
 }
 
 function computeBadges(facts: Facts, planAwaitingReview: boolean): Badge[] {
   const badges: Badge[] = [];
+  if (facts.stack && facts.stack.layers.length > 1) {
+    const layers = facts.stack.layers;
+    const failures = layers.filter(p => p.checks === 'failure').length;
+    badges.push({ kind: 'stack', label: `${layers.length} PRs, ${layers.filter(p => p.state === 'MERGED').length} merged${failures ? `, ${failures} failing` : ''}`, tone: failures ? 'bad' : 'neutral' });
+  }
 
   if (isLive(facts)) {
     // A T3-only run has no marker to name the phase; the badge still has to

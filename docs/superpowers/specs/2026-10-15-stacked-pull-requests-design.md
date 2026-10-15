@@ -1,6 +1,6 @@
 # Stacked pull requests
 
-Status: proposed for written-spec review.
+Status: approved and implemented.
 
 ## Outcome
 
@@ -62,10 +62,10 @@ The batched request combines these selections when needed:
   metadata only. Refresh it every five minutes to find children that do not
   directly close the issue. Join it to known parents locally.
 
-For an initial discovery response, the existing issue PR selection may include
-full status so direct attachments render immediately. Newly discovered children
-receive their full status in the next normal poll. Show status as unknown until
-then. Selection itself must not trigger a follow-up request.
+Initial discovery is metadata-only so nested connections cannot bypass the
+full-status alias budget. Newly discovered PRs receive their full status in the
+next normal poll. Show status as unknown until then. Selection itself must not
+trigger a follow-up request.
 
 Paginate membership and the open-PR index with pages of at most 100. Carry the
 cursor into the next serialized poll and put the next page in that poll's
@@ -153,7 +153,9 @@ honors the explicitly selected checkout without silently injecting prompt text.
 
 Keep issue-level run bookkeeping serialized: allow only one active issue run,
 regardless of layer. Reject a second launch before writing shared prompt/spec
-files or markers. Extend cleanup to every managed layer checkout using the
+files or markers. Preparation renews its reservation; detached handoff keeps a
+durable token until the script claims it or the operator cancels it. Each run
+owns immutable prompt/spec/workspace files. Extend cleanup to every managed layer checkout using the
 existing rescue mechanism; preserve checkouts belonging to other tasks.
 
 ## Verification

@@ -31,6 +31,7 @@ const { pinnedFor } = await import('../src/orchestrator/poller.ts');
 const { createApp } = await import('../src/server/app.ts');
 const { createHealthResponse } = await import('../src/server/health.ts');
 const { Broadcaster } = await import('../src/server/sse.ts');
+const { buildStack } = await import('../src/shared/pr-stack.ts');
 type Facts = import('../src/shared/types.ts').Facts;
 type Phase = import('../src/shared/types.ts').Phase;
 
@@ -96,6 +97,18 @@ const FIXTURES: Array<{ issue: number; title: string; facts: Facts; manualPhase?
 for (const fixture of FIXTURES) {
   const task = newTask(fixture.issue, fixture.title, 'alice');
   task.manualPhase = fixture.manualPhase ?? null;
+  if (fixture.issue === 103) {
+    task.stack = { discoveryComplete: true, layers: [7, 8].map(number => ({
+      host: 'github.com', repository: 'acme/widgets', number,
+      title: number === 7 ? 'Prepare redirect handling' : 'Complete redirect flow',
+      url: `https://github.com/acme/widgets/pull/${number}`, state: 'OPEN',
+      headRepository: 'acme/widgets', baseRepository: 'acme/widgets', headBranch: `alice/layer-${number}`,
+      baseBranch: number === 7 ? 'main' : 'alice/layer-7', headSha: 'a'.repeat(40),
+      checks: number === 7 ? 'failure' : 'success',
+      review: { decision: 'APPROVED', unresolvedThreads: 0, copilotUnresolved: 0 }, available: true,
+      source: 'attached', checkedAt: new Date().toISOString(),
+    })) };
+  }
   upsertTask(task);
 }
 writePlan(102, '# Plan for #102\n\nAdd a progress bar to the lesson header.\n');
@@ -104,7 +117,8 @@ const broadcaster = new Broadcaster();
 async function refresh() {
   const state = loadState();
   const tasks = state.tasks.map((task) => {
-    const taskFacts = FIXTURES.find((f) => f.issue === task.issue)?.facts ?? facts(task.issue);
+    const taskFacts = { ...(FIXTURES.find((f) => f.issue === task.issue)?.facts ?? facts(task.issue)),
+      ...(task.stack ? { stack: buildStack(task.stack.layers, config.repo.baseBranch, task.stack.discoveryComplete) } : {}) };
     const derived = reconcile(taskFacts, task.manualPhase);
     return {
       ...task,

@@ -13,8 +13,8 @@ export const layer = (number: number, overrides: Partial<PrLayer> = {}): PrLayer
 test('orders parents before children and preserves siblings and unrelated roots', () => {
   const view = buildStack([layer(12, { baseBranch: 'alice/change-10' }), layer(11, { baseBranch: 'alice/change-10' }), layer(10), layer(15)], 'main', true);
   expect(view.layers.map(p => p.number)).toEqual([10, 11, 12, 15]);
-  expect(view.layers[1].parentKey).toContain('/10');
-  expect(view.layers[1].warning).toContain('#10');
+  expect(view.layers[1]!.parentKey).toContain('/10');
+  expect(view.layers[1]!.warning).toContain('#10');
 });
 
 test('qualifies parents by repository and exposes cycles and ambiguous matches', () => {
@@ -30,7 +30,7 @@ test('requires complete discovery and every layer merged, and flags retargeting'
   const parent = layer(10, { state: 'MERGED' });
   const child = layer(11, { baseBranch: parent.headBranch });
   expect(buildStack([parent, child], 'main', true).complete).toBe(false);
-  expect(buildStack([parent, child], 'main', true).layers[1].warning).toContain('Retarget');
+  expect(buildStack([parent, child], 'main', true).layers[1]!.warning).toContain('Retarget');
   expect(buildStack([parent], 'main', false).complete).toBe(false);
   expect(buildStack([parent, layer(11, { state: 'CLOSED' })], 'main', true).complete).toBe(false);
   expect(buildStack([parent], 'main', true).complete).toBe(true);

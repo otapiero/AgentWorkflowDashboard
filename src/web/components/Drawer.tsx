@@ -14,6 +14,7 @@ import type { Note } from '../../shared/notes.ts';
 import type { NotesController } from '../use-notes.ts';
 import { noteCounts } from '../notes-model.ts';
 import { NotesTab } from './drawer/NotesTab.tsx';
+import { StackLayers } from './drawer/StackLayers.tsx';
 
 interface Props {
   task: TaskWithDerived;
@@ -57,6 +58,8 @@ export function Drawer({ task, config, onClose, onChanged, initialTab = 'run', n
   const [tab, setTab] = useState<DrawerTab>(initialTab);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stack, setStack] = useState(task.stack);
+  useEffect(() => setStack(task.stack), [task.issue, task.stack]);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const [width, setWidth] = useState(() => {
@@ -116,7 +119,8 @@ export function Drawer({ task, config, onClose, onChanged, initialTab = 'run', n
   );
 
   const issueUrl = `https://github.com/${config.repo.owner}/${config.repo.name}/issues/${task.issue}`;
-  const tabProps: TabProps = { task, config, busy, run, onClose, onChanged };
+  const selectedTask = { ...task, stack };
+  const tabProps: TabProps = { task: selectedTask, config, busy, run, onClose, onChanged };
 
   return (
     <>
@@ -149,7 +153,7 @@ export function Drawer({ task, config, onClose, onChanged, initialTab = 'run', n
               <button
                 className="btn is-sm is-ghost"
                 disabled={busy !== null}
-                onClick={() => run('open-code', () => api.openCode(task.issue))}
+                onClick={() => run('open-code', () => api.openCode(task.issue, stack?.selectedKey ?? undefined))}
               >
                 {busy === 'open-code' ? 'Opening…' : '✎ VS Code'}
               </button>
@@ -190,6 +194,7 @@ export function Drawer({ task, config, onClose, onChanged, initialTab = 'run', n
           )}
         </header>
 
+        <StackLayers key={task.issue} task={selectedTask} baseBranch={config.repo.baseBranch} repository={`${config.repo.owner}/${config.repo.name}`} onStack={setStack} />
         <nav className="drawer-tabs" role="tablist">
           {TABS.map((t) => (
             <button

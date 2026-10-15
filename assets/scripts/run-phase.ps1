@@ -1,4 +1,5 @@
 # Mission Control — run one pipeline phase.
+# mc-launch-protocol: 2
 #
 # setup (deterministic) -> agent (interactive) -> cleanup (deterministic)
 #
@@ -68,7 +69,22 @@ if ($GuardFile) {
 Ensure-Worktree -Issue $issue -Worktree $spec.worktree -Branch $spec.branch `
     -RepoPath $spec.repoPath -BaseBranch $spec.baseBranch
 
-Write-RunningMarker -McHome $mcHome -Issue $issue -Phase $phase
+$launchReservation = Join-Path (Get-TaskDir -McHome $mcHome -Issue $issue) 'launch-pending.json'
+if ($spec.launchToken) {
+    # Cancellation removes the token. An old delayed terminal must never consume
+    # another run's prompt. Hold an exclusive handle across the live-marker handoff.
+    $reservationStream = [IO.File]::Open($launchReservation, 'Open', 'ReadWrite', 'None')
+    try {
+        $reservationReader = [IO.StreamReader]::new($reservationStream, [Text.Encoding]::UTF8, $true, 1024, $true)
+        $reservation = $reservationReader.ReadToEnd() | ConvertFrom-Json
+        $reservationReader.Dispose()
+        if ($reservation.token -ne $spec.launchToken) { throw 'This launch was cancelled.' }
+        Write-RunningMarker -McHome $mcHome -Issue $issue -Phase $phase
+    }
+    finally { $reservationStream.Dispose() }
+    Remove-Item -LiteralPath $launchReservation -Force -ErrorAction SilentlyContinue
+}
+else { Write-RunningMarker -McHome $mcHome -Issue $issue -Phase $phase }
 
 # The agent needs to know which task it is on if it ever asks.
 $env:MC_ISSUE = $issue

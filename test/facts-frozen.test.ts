@@ -17,7 +17,7 @@ import type {
 } from '../src/orchestrator/github.ts';
 import type { Config, TaskRecord } from '../src/shared/types.ts';
 
-const config = {} as Config;
+const config = { repo: { baseBranch: 'main' } } as Config;
 function task(overrides: Partial<TaskRecord> = {}): TaskRecord {
   return {
     issue: 3130, title: 't', slug: 's', branch: 'b', worktreePath: null,
@@ -56,9 +56,9 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
-describe('gatherFacts — merged freeze', () => {
-  test('a merged task makes no git call and freezes its PR', async () => {
-    const facts = await gatherFacts(config, task(), new Set(['b']), batch());
+describe('gatherFacts — manual completion', () => {
+  test('an explicitly done task makes no git call and freezes its PR', async () => {
+    const facts = await gatherFacts(config, task({ manualPhase: 'done' }), new Set(['b']), batch());
     expect(gatherGitFacts).not.toHaveBeenCalled();
     expect(facts.pr).toEqual({
       exists: true, number: 42, url: 'https://x/pull/42', state: 'MERGED',
@@ -71,6 +71,15 @@ describe('gatherFacts — active task', () => {
     gatherGitFacts.mockResolvedValue({
       dirtyFileCount: 0, unpushedCommits: 0, hasPushedCommits: true,
     });
+  });
+
+  test('a cached scalar merge cannot freeze a task with an open stack layer', async () => {
+    const facts = await gatherFacts(config, task(), new Set(['b']), batch({
+      byIssue: new Map([[3130, openPr]]),
+      stacks: new Map([[3130, { layers: [], discoveryComplete: true }]]),
+    }));
+    expect(facts.pr.state).toBe('OPEN');
+    expect(gatherGitFacts).toHaveBeenCalledOnce();
   });
 
   test('a failed batch throws so the poller can hold last-good', async () => {

@@ -59,6 +59,7 @@ export function RunTab({ task, config, busy, run }: TabProps) {
             re-run. Custom writes the whole prompt yourself; it never moves the
             card.
           </p>
+          <button className="btn is-sm is-ghost" disabled={busy !== null} onClick={() => run('cancel-launch', () => api.cancelLaunch(task.issue))}>Cancel pending launch</button>
         </section>
       )}
 

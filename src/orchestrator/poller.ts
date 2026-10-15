@@ -7,7 +7,7 @@ import {
   snapshotAgeMs,
 } from './artifacts.ts';
 import { CUSTOM_RUN_ID } from '../shared/custom-run.ts';
-import { fetchIssuePrs } from './github.ts';
+import { createStackCollector } from './github-stack.ts';
 import { reconcile } from './reconcile.ts';
 import { toEditorIntegration } from './editor-integration.ts';
 import { loadState, saveState } from './state.ts';
@@ -82,6 +82,7 @@ export function pinnedFor(
  */
 export async function reconcileAll(
   config: Config,
+  collector = createStackCollector(config),
 ): Promise<{ results: TaskWithDerived[]; rateLimit: RateLimit | null }> {
   // Load the board once and gather the branch list once, rather than re-reading
   // state and running `git branch -a` per task.
@@ -90,8 +91,7 @@ export async function reconcileAll(
   const branches = new Set(await listBranches(config));
 
   // Attached PRs can belong to work done elsewhere, with no local branch.
-  const activeIssues = [...new Set(state.tasks.filter(t => t.prState !== 'MERGED').map(t => t.issue))];
-  const batch = await fetchIssuePrs(config, activeIssues);
+  const batch = await collector.collect(state.tasks);
 
   // One snapshot covers every task, so the cost does not scale with board size.
   const t3Snapshot = shouldFetchT3Snapshot(state.tasks) ? await t3.fetchSnapshot() : undefined;
@@ -132,10 +132,11 @@ export async function reconcileAll(
         const merged = mergedFields(task, facts.pr.state, now);
         const updated = {
           ...task,
+          stack: batch.stacks.get(task.issue) ?? task.stack,
           prNumber: facts.pr.number,
           prUrl: facts.pr.url,
           prState: merged.prState,
-          mergedAt: merged.mergedAt,
+          mergedAt: facts.stack && !facts.stack.complete ? null : merged.mergedAt,
           lastReconciledAt: now,
         };
         // Mutate the single in-memory board; one atomic save at the end avoids
@@ -145,6 +146,7 @@ export async function reconcileAll(
           task.prUrl !== updated.prUrl ||
           task.prState !== updated.prState ||
           task.mergedAt !== updated.mergedAt ||
+          JSON.stringify(task.stack) !== JSON.stringify(updated.stack) ||
           task.lastReconciledAt === null
         ) {
           const index = state.tasks.findIndex((t) => t.issue === task.issue);
@@ -192,7 +194,23 @@ export async function reconcileAll(
     }),
   );
 
-  if (dirty) saveState(state);
+  if (dirty) {
+    // Selection and membership edits can arrive while the GitHub batch is in flight.
+    const latest = loadState();
+    latest.tasks = latest.tasks.map(current => {
+      const observed = state.tasks.find(t => t.issue === current.issue);
+      if (!observed) return current;
+      const stack = observed.stack ? { ...observed.stack,
+        selectedKey: current.stack?.selectedKey,
+        excludedKeys: current.stack?.excludedKeys,
+        manualNumbers: current.stack?.manualNumbers,
+        companionUrls: current.stack?.companionUrls,
+        layers: observed.stack.layers.filter(p => !current.stack?.excludedKeys?.includes(`${p.host}/${p.repository}/${p.number}`.toLowerCase())),
+      } : current.stack;
+      return { ...current, prNumber: observed.prNumber, prUrl: observed.prUrl, prState: observed.prState, mergedAt: observed.mergedAt, lastReconciledAt: observed.lastReconciledAt, stack };
+    });
+    saveState(latest);
+  }
   return { results, rateLimit: batch.rateLimit };
 }
 
@@ -211,6 +229,7 @@ export interface PollHandlers {
 }
 
 export function startPoller(config: Config, handlers: PollHandlers): Poller {
+  const collector = createStackCollector(config);
   let timer: NodeJS.Timeout | null = null;
   // Runs are serialized through this handle: two reconciles must never overlap,
   // because they share one state file and one temp path when saving.
@@ -219,7 +238,7 @@ export function startPoller(config: Config, handlers: PollHandlers): Poller {
   let lastGood = new Map<number, TaskWithDerived>();
 
   async function runReconcile(force: boolean): Promise<TaskWithDerived[]> {
-    const { results: raw, rateLimit } = await reconcileAll(config);
+    const { results: raw, rateLimit } = await reconcileAll(config, collector);
 
     const applied = applyLastGood(raw, lastGood);
     lastGood = applied.lastGood;

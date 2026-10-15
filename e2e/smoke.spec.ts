@@ -54,6 +54,24 @@ test('a phase launch previews the prompt the agent would receive', async ({ page
   await expect(preview).toContainText('alice/102-add-progress-bar');
 });
 
+test('stack selection targets the child PR without changing the issue phase or refreshing GitHub', async ({ page }) => {
+  const drawer = await openTask(page, 103);
+  await expect(drawer.getByRole('list', { name: 'PR layers' }).getByRole('listitem')).toHaveCount(2);
+  let reconciles = 0;
+  page.on('request', request => { if (/\/api\/(reconcile|tasks)$/.test(request.url())) reconciles++; });
+  await drawer.getByRole('radio').nth(1).check();
+  await expect(drawer.getByRole('radio').nth(1)).toBeChecked();
+  expect(reconciles).toBe(0);
+  await drawer.getByRole('button', { name: 'Implement', exact: true }).click();
+  await expect(drawer).toContainText('Target PR #8: alice/layer-8');
+  await drawer.getByRole('button', { name: /Preview prompt/ }).click();
+  const preview = page.getByRole('dialog', { name: 'Prompt for Implement' });
+  await expect(preview).toContainText('alice/layer-8');
+  await expect(preview).toContainText('alice/layer-7');
+  await expect(preview).toContainText('103-pr-8');
+  await expect(page.getByRole('region', { name: /^CI, 1 task$/ }).getByRole('button', { name: /^Issue 103,/ })).toBeVisible();
+});
+
 test('the command palette finds a task by title and opens it', async ({ page }) => {
   await page.keyboard.press('Control+k');
   const palette = page.getByRole('dialog', { name: 'Command palette' });

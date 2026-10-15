@@ -52,6 +52,7 @@ export function HistoryTab({ task }: TabProps) {
           {[...task.spawnHistory].reverse().map((s, i) => (
             <div key={`${s.startedAt}-${i}`}>
               spawn: {new Date(s.startedAt).toLocaleString()} · {s.phase} · {s.agent}
+              {s.layerKey && <> · PR #{s.layerKey.split('/').at(-1)}</>}
               {s.promptSummary && <> · “{s.promptSummary}”</>}
               {/*
                 A copy button rather than a link: T3 Code is a desktop

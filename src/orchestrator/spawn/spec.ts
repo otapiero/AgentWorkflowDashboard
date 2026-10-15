@@ -1,10 +1,11 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { taskDir } from '../paths.ts';
 import type { Phase } from '../../shared/types.ts';
 
 export interface SpawnSpec {
+  launchToken?: string;
   issue: number;
   phase: Phase;
   branch: string;
@@ -24,13 +25,13 @@ export interface SpawnSpec {
   promptToken: string;
 }
 
-export function specPath(issue: number): string {
-  return join(taskDir(issue), 'spawn.json');
+export function specPath(issue: number, launchToken?: string): string {
+  return launchToken ? join(taskDir(issue), 'runs', launchToken, 'spawn.json') : join(taskDir(issue), 'spawn.json');
 }
 
 export function writeSpec(spec: SpawnSpec): string {
-  mkdirSync(taskDir(spec.issue), { recursive: true });
-  const file = specPath(spec.issue);
+  const file = specPath(spec.issue, spec.launchToken);
+  mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(spec, null, 2), 'utf8');
   return file;
 }

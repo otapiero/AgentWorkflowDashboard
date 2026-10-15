@@ -23,7 +23,8 @@ export const prKey = (pr: PrIdentity): string => `${pr.host}/${pr.repository}/${
 
 export function layerPhase(layer: PrLayer): Phase {
   if (layer.state === 'MERGED') return 'merged';
-  if (!layer.available || layer.state === 'CLOSED') return 'publish';
+  if (layer.state === 'CLOSED') return 'publish';
+  if (!layer.available) return 'ci';
   if (layer.checks === 'failure' || layer.checks === 'pending') return 'ci';
   if (layer.review.decision === 'CHANGES_REQUESTED' || layer.review.unresolvedThreads > layer.review.copilotUnresolved) return 'dev_review';
   if (layer.review.copilotUnresolved > 0) return 'copilot_review';
@@ -41,7 +42,7 @@ export function buildStack(input: PrLayer[], baseBranch: string, discoveryComple
       p.headRepository.toLowerCase() === child.baseRepository.toLowerCase() && p.headBranch === child.baseBranch);
     if (parents.length > 1) child.warning = 'Ambiguous parent branches';
     else if (parents.length === 1) {
-      const parent = parents[0];
+      const parent = parents[0]!;
       child.parentKey = prKey(parent);
       if (child.state === 'OPEN') child.warning = parent.state === 'MERGED'
         ? `Retarget from merged #${parent.number} to ${baseBranch}`

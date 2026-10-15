@@ -13,6 +13,7 @@ import { registerReviewRoutes } from './review-routes.ts';
 import type { RouteContext } from './route-helpers.ts';
 import { registerRunRoutes } from './run-routes.ts';
 import { registerTaskRoutes } from './task-routes.ts';
+import { registerStackRoutes } from './stack-routes.ts';
 import type { Broadcaster } from './sse.ts';
 
 interface Deps {
@@ -46,7 +47,8 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
     reviewWorktrees: deps.reviewWorktrees ?? createReviewWorktrees(config),
   });
   registerTaskRoutes(app, ctx);
+  registerStackRoutes(app, ctx);
   registerRunRoutes(app, ctx);
-  registerDocumentRoutes(app);
+  registerDocumentRoutes(app, config);
   registerEventsRoutes(app, ctx);
 }

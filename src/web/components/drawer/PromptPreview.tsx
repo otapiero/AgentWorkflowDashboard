@@ -5,6 +5,7 @@ import type { PromptPreview as Preview } from '../../api.ts';
 import type { RunKind } from '../../../shared/types.ts';
 
 interface Props {
+  layerKey?: string;
   issue: number;
   phase: RunKind;
   phaseLabel: string;
@@ -27,6 +28,7 @@ export function PromptPreview({
   phaseLabel,
   instructions,
   includeContext,
+  layerKey,
   onClose,
 }: Props) {
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -37,13 +39,13 @@ export function PromptPreview({
     setPreview(null);
     setError(null);
     api
-      .previewPrompt(issue, phase, instructions || undefined, includeContext)
+      .previewPrompt(issue, phase, instructions || undefined, includeContext, layerKey)
       .then((p) => live && setPreview(p))
       .catch((e: Error) => live && setError(e.message));
     return () => {
       live = false;
     };
-  }, [issue, phase, instructions, includeContext]);
+  }, [issue, phase, instructions, includeContext, layerKey]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -75,6 +77,7 @@ export function PromptPreview({
             </button>
           </span>
         </header>
+        {preview?.target && <p className="hint" style={{ margin: '8px 16px', overflowWrap: 'anywhere' }}>{preview.target.prNumber ? `PR #${preview.target.prNumber} · ` : ''}{preview.target.branch} → {preview.target.baseBranch}<br />{preview.target.worktreePath}</p>}
         <div className="plan-editor-body">
           {error ? (
             <p className="error" style={{ margin: 16 }}>

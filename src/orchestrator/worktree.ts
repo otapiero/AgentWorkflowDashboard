@@ -1,5 +1,5 @@
 import { existsSync, rmSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { execa } from 'execa';
 
 import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
@@ -192,6 +192,13 @@ async function removeManagedWorktree(config: Config, path: string): Promise<void
       `Deregistered the worktree but could not delete ${path}. Something is holding it open; close it and retry.`,
     );
   }
+}
+
+export async function removeLayerWorktree(config: Config, issue: number, number: number): Promise<void> {
+  if (!Number.isSafeInteger(issue) || issue <= 0 || !Number.isSafeInteger(number) || number <= 0) throw new Error('Invalid layer checkout identity');
+  const path = resolve(join(worktreesDir(), `${issue}-pr-${number}`));
+  if (dirname(path) !== resolve(worktreesDir())) throw new Error('Invalid layer checkout path');
+  await removeManagedWorktree(config, path);
 }
 
 export interface GitFacts {

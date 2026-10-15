@@ -1,6 +1,6 @@
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 
-import { mcHome, promptPath, runSnapshotPath, taskDir, worktreePath } from '../paths.ts';
+import { mcHome, runPhaseScript, runSnapshotPath, taskDir } from '../paths.ts';
 import { writePromptFile } from '../prompt.ts';
 import { readArtifacts, writeRunSnapshot } from '../artifacts.ts';
 import { isCustomRun } from '../../shared/custom-run.ts';
@@ -13,6 +13,8 @@ import { launchVscode, launchWt } from './launchers.ts';
 import { writeSpec, type SpawnSpec } from './spec.ts';
 import { launchT3, resolveT3Launch } from './t3.ts';
 import type { Config, PhaseConfig, SpawnRecord, TaskRecord } from '../../shared/types.ts';
+import { ensureLayerWorktree } from '../layer-worktrees.ts';
+import { assertLaunchReservation, withIssueLaunch } from '../launch-lock.ts';
 
 /**
  * Launching an agent crash-safely.
@@ -25,6 +27,7 @@ import type { Config, PhaseConfig, SpawnRecord, TaskRecord } from '../../shared/
  */
 
 export interface SpawnOptions {
+  layerKey?: string;
   customInstructions?: string;
   agent?: string;
   model?: string;
@@ -49,12 +52,17 @@ export async function spawnPhase(
   phase: PhaseConfig,
   options: SpawnOptions = {},
 ): Promise<SpawnRecord> {
-  const { agent, model, effort, profile, promptText } = resolveSpawnPlan(
+  return withIssueLaunch(task, token => launchPhase(config, task, phase, options, token));
+}
+
+async function launchPhase(config: Config, task: TaskRecord, phase: PhaseConfig, options: SpawnOptions, launchToken: string): Promise<SpawnRecord> {
+  const { target, agent, model, effort, profile, promptText } = resolveSpawnPlan(
     config,
     task,
     phase,
     getPhaseDefaults(),
     {
+      layerKey: options.layerKey,
       customInstructions: options.customInstructions,
       agent: options.agent,
       model: options.model,
@@ -64,35 +72,43 @@ export async function spawnPhase(
       artifacts: readArtifacts(task.issue),
     },
   );
-  writePromptFile(task.issue, promptText);
 
   const launcher = getSettings().launcher ?? config.launcher ?? 'wt';
+  if (launcher !== 't3') {
+    let script = '';
+    try { script = readFileSync(runPhaseScript(), 'utf8'); } catch { /* Explain the installation step below. */ }
+    if (!script.includes('# mc-launch-protocol: 2')) throw new Error('Installed phase scripts need updating. Run powershell -File scripts/install.ps1 before launching');
+  }
   const t3Plan = launcher === 't3'
     ? resolveT3Launch({ agent, profile, phase, model, effort })
     : undefined;
   if (t3Plan && !t3Plan.ok) throw new Error(t3Plan.error);
   if (launcher === 't3') validateT3Prompt(promptText);
   // Never snapshot a checkout while git is still populating it.
-  if (launcher === 't3' || launcher === 'vscode') {
+  if (target.layerKey) await ensureLayerWorktree(config, task, target);
+  else if (launcher === 't3' || launcher === 'vscode') {
     await ensureWorktree(config, task.issue, task.branch);
   }
+  assertLaunchReservation(task.issue, launchToken);
+  const promptFile = writePromptFile(task.issue, promptText, launchToken);
 
   // Snapshot the "before" picture for the runs whose output we capture. A
   // custom run counts: research and specs are exactly what should reach the
   // doc rail. Implement and the review fixers are not — their output is code.
   if (phase.id === 'plan' || isCustomRun(phase)) {
-    writeRunSnapshot(config, task.issue, phase.id);
+    writeRunSnapshot(config, task.issue, phase.id, target.worktreePath);
   }
 
   const spec: SpawnSpec = {
+    launchToken,
     issue: task.issue,
     phase: phase.id,
-    branch: task.branch,
-    worktree: worktreePath(task.issue),
-    baseBranch: config.repo.baseBranch,
+    branch: target.branch,
+    worktree: target.worktreePath,
+    baseBranch: target.baseBranch,
     repoPath: config.repo.path,
     mcHome: mcHome(),
-    promptFile: promptPath(task.issue),
+    promptFile,
     exe: profile.launch,
     args: buildAgentArgs(agent, profile, {
       instructions: STANDING_RULES,
@@ -100,7 +116,7 @@ export async function spawnPhase(
       effort: effort ?? undefined,
       variables: {
         taskDir: taskDir(task.issue),
-        worktree: worktreePath(task.issue),
+        worktree: target.worktreePath,
       },
     }),
     promptToken: PROMPT_TOKEN,
@@ -114,7 +130,7 @@ export async function spawnPhase(
     if (!t3Plan?.ok) throw new Error('T3 launch was not resolved.');
     let launched;
     try {
-      launched = await launchT3(config, task, phase, { ...t3Plan, prompt: promptText });
+      launched = await launchT3(config, task, phase, { ...t3Plan, prompt: promptText, target });
     } catch (error) {
       rmSync(runSnapshotPath(task.issue, phase.id), { force: true });
       throw error;
@@ -122,7 +138,7 @@ export async function spawnPhase(
     command = launched.command;
     threadId = launched.threadId;
   } else if (launcher === 'vscode') {
-    command = await launchVscode(config, task, phase, specFile);
+    command = await launchVscode(config, task, phase, specFile, target, launchToken);
   } else {
     command = launchWt(task, phase, config, specFile);
   }
@@ -132,6 +148,7 @@ export async function spawnPhase(
     : '';
 
   return {
+    ...(target.layerKey ? { layerKey: target.layerKey, workspacePath: target.worktreePath } : {}),
     phase: phase.id,
     agent: describeAgent(agent, model, effort),
     startedAt: new Date().toISOString(),

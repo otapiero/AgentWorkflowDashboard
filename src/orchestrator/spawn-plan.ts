@@ -2,6 +2,7 @@ import { resolveAgent } from './agents.ts';
 import { buildPrompt } from './prompt.ts';
 import { pipelineWith } from '../shared/custom-run.ts';
 import { STANDING_RULES } from './spawn/build.ts';
+import { resolveExecutionTarget, type ExecutionTarget } from './execution-target.ts';
 import type {
   AgentProfile,
   ArtifactRef,
@@ -19,6 +20,7 @@ import type {
  * than showing nothing at all.
  */
 export interface SpawnPlan {
+  target: ExecutionTarget;
   agent: string;
   model: string | null;
   effort: string | null;
@@ -28,6 +30,7 @@ export interface SpawnPlan {
 }
 
 export interface SpawnPlanOptions {
+  layerKey?: string;
   customInstructions?: string;
   agent?: string;
   model?: string;
@@ -52,6 +55,7 @@ export function resolveSpawnPlan(
   phaseDefaults: PhaseDefaults,
   options: SpawnPlanOptions = {},
 ): SpawnPlan {
+  const target = resolveExecutionTarget(config, task, options.layerKey, phase.id === 'plan');
   // The phase is spliced into the pipeline for the lookup, so a synthetic
   // phase's actor is reachable. A configured phase is already there, so this
   // is a no-op for every pipeline run.
@@ -76,6 +80,7 @@ export function resolveSpawnPlan(
   if (options.rawPrompt !== undefined) {
     const body = options.rawPrompt.trim();
     return {
+      target,
       agent,
       model,
       effort,
@@ -89,7 +94,7 @@ export function resolveSpawnPlan(
     throw new Error(`Phase '${phase.id}' has no command to render a prompt from.`);
   }
 
-  const promptText = buildPrompt(phase.command, task, {
+  let promptText = buildPrompt(phase.command, { ...task, branch: target.branch, worktree: target.worktreePath }, {
     customInstructions: options.customInstructions ?? task.overrides?.instructions,
     inlineInstructions: inline,
     artifacts: options.artifacts,
@@ -97,10 +102,11 @@ export function resolveSpawnPlan(
     repo: {
       owner: config.repo.owner,
       name: config.repo.name,
-      baseBranch: config.repo.baseBranch,
+      baseBranch: target.baseBranch,
       path: config.repo.path,
     },
   });
 
-  return { agent, model, effort, profile, command: phase.command, promptText };
+  if (target.prNumber) promptText = `Target PR #${target.prNumber}: ${target.branch} -> ${target.baseBranch}\nCheckout: ${target.worktreePath}\nStack: ${(task.stack?.layers ?? []).map(p => `#${p.number} (${p.headBranch} -> ${p.baseBranch})`).join(', ')}\nWork on this PR only. Preserve its actual base branch.\n\n${promptText}`;
+  return { target, agent, model, effort, profile, command: phase.command, promptText };
 }

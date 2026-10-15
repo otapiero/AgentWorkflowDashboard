@@ -21,7 +21,6 @@ import {
   taskDir,
   worktreePath,
 } from './paths.ts';
-import { worktreeExists } from './worktree.ts';
 import { writeMarker } from './markers.ts';
 import type { ArtifactRef, Config, PlanSnapshot, RunKind } from '../shared/types.ts';
 
@@ -190,13 +189,14 @@ async function gitStatusPaths(cwd: string): Promise<string[]> {
  * run's own sign-off marker — without that, a stale one from the previous run
  * would make the next poll collect before the agent had done anything.
  */
-export function writeRunSnapshot(config: Config, issue: number, kind: RunKind): void {
+export function writeRunSnapshot(config: Config, issue: number, kind: RunKind, workspacePath = worktreePath(issue)): void {
   rmSync(markerPath(issue, `${kind}.done`), { force: true });
 
   const snapshot: PlanSnapshot = {
+    workspacePath,
     takenAt: new Date().toISOString(),
     taskDirFiles: listDir(taskDir(issue)),
-    repoStatus: worktreeExists(issue) ? gitStatusPathsSync(worktreePath(issue)) : [],
+    repoStatus: existsSync(workspacePath) ? gitStatusPathsSync(workspacePath) : [],
     extraRoots: {},
   };
   for (const root of config.repo.artifactRoots ?? []) {
@@ -238,8 +238,8 @@ export async function collectArtifacts(
   for (const name of diffFiles(snap.taskDirFiles, listDir(dir))) {
     found.push({ origin: 'taskdir', abs: join(dir, name), base: name });
   }
-  if (worktreeExists(issue)) {
-    const wt = worktreePath(issue);
+  if (existsSync(snap.workspacePath ?? worktreePath(issue))) {
+    const wt = snap.workspacePath ?? worktreePath(issue);
     for (const rel of diffFiles(snap.repoStatus, await gitStatusPaths(wt))) {
       found.push({ origin: 'repo', abs: join(wt, rel), base: rel.split('/').pop()! });
     }
