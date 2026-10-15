@@ -12,8 +12,10 @@ there is no plan to port it.
 
 An issue can have several PR layers. Expand its Pull requests section to see
 their branch order, checks, reviews and dependencies. Select a layer before
-launching work or opening its checkout. Planning stays attached to the issue;
-PR work uses the selected layer's writable checkout and actual base branch.
+launching work. All layers share the issue's worktree. A launch switches that
+checkout to the selected PR branch and uses its actual base branch. Commit or
+stash uncommitted work before switching layers. Open Folder always opens the
+issue checkout without switching branches or requiring a PR selection.
 
 Attach a PR by URL if GitHub's issue links miss it. Detach superseded or invalid
 entries, and keep PRs from other repositories as companion links. Fork PRs can

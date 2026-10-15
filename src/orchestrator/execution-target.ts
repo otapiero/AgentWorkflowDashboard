@@ -1,7 +1,6 @@
-import { join } from 'node:path';
 import { prKey } from '../shared/pr-stack.ts';
 import type { Config, TaskRecord } from '../shared/types.ts';
-import { worktreePath, worktreesDir } from './paths.ts';
+import { worktreePath } from './paths.ts';
 
 export interface ExecutionTarget { branch: string; baseBranch: string; worktreePath: string; layerKey?: string; prNumber?: number; headSha?: string }
 
@@ -17,6 +16,6 @@ export function resolveExecutionTarget(config: Config, task: TaskRecord, layerKe
   if (layer.state !== 'OPEN') throw new Error('Only an open PR can be an execution target');
   if (layer.headRepository.toLowerCase() !== `${config.repo.owner}/${config.repo.name}`.toLowerCase()) throw new Error('Launching against a fork PR is not supported. Open the fork checkout manually');
   return { branch: layer.headBranch, baseBranch: layer.baseBranch,
-    worktreePath: task.branch === layer.headBranch ? worktreePath(task.issue) : join(worktreesDir(), `${task.issue}-pr-${layer.number}`),
+    worktreePath: worktreePath(task.issue),
     layerKey: key, prNumber: layer.number, headSha: layer.headSha };
 }

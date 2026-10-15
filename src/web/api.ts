@@ -121,7 +121,7 @@ export const api = {
     post<TaskWithDerived[]>('/api/phase-defaults', { phase, ...o }),
   setLauncher: (launcher: LauncherKind) =>
     post<TaskWithDerived[]>('/api/settings', { launcher }),
-  openCode: (issue: number, layerKey?: string) => post<{ ok: true }>(`/api/tasks/${issue}/open-code`, { layerKey }),
+  openCode: (issue: number) => post<{ ok: true }>(`/api/tasks/${issue}/open-code`),
   openArtifact: (issue: number, name: string) =>
     post<{ ok: true }>(`/api/tasks/${issue}/artifacts/${encodeURIComponent(name)}/open`),
   readArtifact: (issue: number, name: string) =>

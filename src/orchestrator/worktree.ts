@@ -231,11 +231,15 @@ export async function gatherGitFacts(
   }
 
   const path = worktreePath(issue);
+  // A stacked issue reuses this checkout across PR branches. Measure local
+  // changes against the checked-out branch, rather than the issue's original one.
+  const current = await git(['symbolic-ref', '--quiet', '--short', 'HEAD'], path);
+  const checkoutBranch = current.ok ? current.stdout.trim() : branch;
   const [status, ahead, pushed] = await Promise.all([
     git(['status', '--porcelain'], path),
-    git(['rev-list', '--count', `origin/${branch}..HEAD`], path),
+    git(['rev-list', '--count', `origin/${checkoutBranch}..HEAD`], path),
     git(
-      ['rev-list', '--count', `origin/${config.repo.baseBranch}..origin/${branch}`],
+      ['rev-list', '--count', `origin/${config.repo.baseBranch}..origin/${checkoutBranch}`],
       path,
     ),
   ]);

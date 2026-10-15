@@ -19,6 +19,8 @@ import { runPhaseScript, taskDir } from '../src/orchestrator/paths.ts';
 import { resolveSpawnPlan } from '../src/orchestrator/spawn-plan.ts';
 import type { Config, PhaseConfig, LauncherKind } from '../src/shared/types.ts';
 import type { PrLayer } from '../src/shared/pr-stack.ts';
+import { ensureWorktree } from '../src/orchestrator/worktree.ts';
+import { ensureLayerWorktree } from '../src/orchestrator/layer-worktrees.ts';
 let home: string;
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'mc-stack-launch-')); process.env.MC_HOME = home;
@@ -26,7 +28,7 @@ beforeEach(() => {
   writeFileSync(join(process.env.MC_CLAUDE_COMMANDS, 'implement.md'), '{{branch}} -> {{baseBranch}} in {{worktree}}');
   mkdirSync(dirname(runPhaseScript()), { recursive: true });
   writeFileSync(runPhaseScript(), readFileSync(resolve('assets/scripts/run-phase.ps1'), 'utf8'));
-  boundary.commands.length = 0; boundary.terminals.length = 0;
+  boundary.commands.length = 0; boundary.terminals.length = 0; vi.clearAllMocks();
 });
 afterEach(() => { delete process.env.MC_HOME; delete process.env.MC_CLAUDE_COMMANDS; rmSync(home, { recursive: true, force: true }); });
 
@@ -36,6 +38,16 @@ test('an outdated installed script is rejected before starting a terminal', asyn
   const phase = { id: 'implement', actor: 'codex', label: 'Implement', gate: { type: 'manual' } } as PhaseConfig;
   await expect(spawnPhase(config, newTask(1, 'Feature', 'alice'), phase, { rawPrompt: 'Inspect this' })).rejects.toThrow('Installed phase scripts need updating');
   expect(boundary.terminals).toHaveLength(0);
+});
+
+test('issue-level planning can create a new issue branch even when stack PRs already exist', async () => {
+  const config = { repo: { baseBranch: 'main' }, launcher: 'wt', agents: { codex: { launch: 'codex', promptMode: 'positional', instructionMode: 'inline' } }, pipeline: [] } as unknown as Config;
+  const phase = { id: 'plan', actor: 'codex', label: 'Plan', gate: { type: 'manual' } } as PhaseConfig;
+  const task = newTask(1, 'Feature', 'alice');
+  task.stack = { layers: [{ number: 11 }] as PrLayer[], discoveryComplete: false };
+  await spawnPhase(config, task, phase, { rawPrompt: 'Plan this issue' });
+  expect(ensureWorktree).toHaveBeenCalledWith(config, task.issue, task.branch);
+  expect(ensureLayerWorktree).not.toHaveBeenCalled();
 });
 
 test.each<LauncherKind>(['wt', 'vscode', 't3'])('%s launches the same selected layer that preview resolved', async launcher => {
