@@ -7,8 +7,8 @@ import { providerCacheSchema, safeParseT3 } from './schemas.ts';
  * Can this T3 provider instance actually run a turn?
  *
  * T3 exposes no provider list over REST — the snapshot carries projects and
- * threads only, and provider state lives on the WebSocket this integration
- * deliberately does not use. What T3 does publish is one readiness file per
+ * threads only, and provider state requires a separate live subscription.
+ * What T3 does publish is one readiness file per
  * instance under ~/.t3/caches, which it refreshes itself. Reading it is the
  * same discipline as reading server-runtime.json.
  *

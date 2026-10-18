@@ -62,7 +62,7 @@ t3:
   projectTitle: '{{repoName}}'
   # The T3 version this integration was verified against. `mc doctor` warns
   # when the running server differs; it never blocks.
-  pinnedVersion: '0.0.31'
+  pinnedVersion: '0.1.0'
 
 agents:
   # Verified against claude 2.1.x: prompt is positional, standing rules go

@@ -10,7 +10,8 @@ import { z } from 'zod';
  * whole degradation guarantee: an upstream change costs liveness, never
  * correctness.
  *
- * Recorded against T3 Code 0.0.31.
+ * Discovery, auth and provider files originated with T3 Code 0.0.31. The
+ * protocol 2 shell contract was verified against T3 Code 0.1.0.
  */
 
 export const serverRuntimeSchema = z.object({
@@ -175,7 +176,50 @@ export const snapshotSchema = z.object({
 });
 export type T3Snapshot = z.infer<typeof snapshotSchema>;
 
-export const dispatchResultSchema = z.object({ sequence: z.number() });
+const runStatusSchema = z.enum([
+  'idle', 'preparing', 'queued', 'starting', 'running', 'waiting',
+  'completed', 'interrupted', 'failed', 'cancelled', 'rolled_back',
+]);
+
+const shellThreadSchema = threadSchema.omit({ activities: true, session: true }).extend({
+  status: runStatusSchema,
+  activeRunId: z.string().nullable(),
+  activityRunStatus: z.enum(['preparing', 'starting', 'running', 'waiting']).nullable().optional(),
+  pendingRuntimeRequest: z.object({ id: z.string(), kind: z.string() }).nullable(),
+  lastError: z.string().nullable().optional(),
+});
+
+/** Protocol 2 exposes run state on the shell, rather than a V1 session. */
+export const shellSnapshotSchema = z.object({
+  schemaVersion: z.literal(2),
+  snapshotSequence: z.number(),
+  projects: snapshotSchema.shape.projects.removeDefault(),
+  threads: z.array(shellThreadSchema),
+  archivedThreads: z.array(shellThreadSchema),
+}).transform((shell): T3Snapshot => ({
+  snapshotSequence: shell.snapshotSequence,
+  projects: shell.projects,
+  threads: [...shell.threads, ...shell.archivedThreads].map((thread) => {
+    const status = thread.activityRunStatus ?? thread.status;
+    const sessionStatus: T3SessionStatus =
+      status === 'preparing' || status === 'queued' || status === 'starting' ? 'starting' :
+      status === 'running' || status === 'waiting' ? 'running' :
+      status === 'failed' ? 'error' :
+      status === 'interrupted' ? 'interrupted' :
+      status === 'idle' ? 'idle' : 'stopped';
+    return {
+      ...thread,
+      activities: thread.pendingRuntimeRequest
+        ? [{ id: thread.pendingRuntimeRequest.id, tone: 'approval' as const }] : [],
+      session: {
+        threadId: thread.id,
+        status: sessionStatus,
+        activeTurnId: thread.activeRunId,
+        lastError: thread.lastError ?? null,
+      },
+    };
+  }),
+}));
 
 /**
  * Parse a T3 response, or give up quietly.

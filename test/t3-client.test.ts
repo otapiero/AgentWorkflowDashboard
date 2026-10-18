@@ -4,13 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { T3Client } from '../src/orchestrator/t3/client.ts';
+import { toT3Fact } from '../src/orchestrator/t3/facts.ts';
+import type { ThreadLaunchInput } from '../src/orchestrator/t3/commands.ts';
 
 let home: string;
 let t3home: string;
 
 const descriptor = {
   environmentId: 'env-1',
-  serverVersion: '0.0.31',
+  serverVersion: '0.1.0',
   capabilities: { serverSelfUpdate: 'desktop-managed' },
 };
 
@@ -22,8 +24,10 @@ const tokenReply = {
 };
 
 const snapshot = {
+  schemaVersion: 2,
   snapshotSequence: 3,
-  projects: [{ id: 'p1', title: 'widgets', workspaceRoot: 'C:\\repo' }],
+  projects: [{ id: 'p1', title: 'widgets', workspaceRoot: 'C:\\src\\widgets' }],
+  archivedThreads: [],
   threads: [
     {
       id: 'thread-1',
@@ -31,8 +35,11 @@ const snapshot = {
       title: '#3060 plan',
       branch: 'alice/3060-thing',
       worktreePath: 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\worktrees\\issue-3060',
-      activities: [{ id: 'e1', tone: 'info' }],
-      session: { threadId: 'thread-1', status: 'running', activeTurnId: 'turn-1', lastError: null },
+      status: 'running',
+      activeRunId: 'run-1',
+      activityRunStatus: 'running',
+      pendingRuntimeRequest: null,
+      lastError: null,
     },
   ],
 };
@@ -54,11 +61,11 @@ function fakeServer(overrides: Record<string, { status?: number; body?: unknown 
       return new Response(JSON.stringify(descriptor), { status: 200 });
     }
     if (u.includes('/oauth/token')) return new Response(JSON.stringify(tokenReply), { status: 200 });
-    if (u.includes('/api/orchestration/snapshot')) {
+    if (u.includes('/api/orchestration/shell')) {
       return new Response(JSON.stringify(snapshot), { status: 200 });
     }
-    if (u.includes('/api/orchestration/dispatch')) {
-      return new Response(JSON.stringify({ sequence: 9 }), { status: 200 });
+    if (u.includes('/api/projects/mutate')) {
+      return new Response(JSON.stringify({ id: 'p2' }), { status: 200 });
     }
     return new Response('{}', { status: 404 });
   }) as unknown as typeof fetch;
@@ -96,13 +103,14 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
   rmSync(t3home, { recursive: true, force: true });
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('status', () => {
   test('reports the server version when everything is up', async () => {
     const { impl } = fakeServer();
     const status = await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).status();
-    expect(status).toMatchObject({ ok: true, serverVersion: '0.0.31' });
+    expect(status).toMatchObject({ ok: true, serverVersion: '0.1.0' });
   });
 
   test('reports T3 as down when there is no runtime file', async () => {
@@ -129,9 +137,11 @@ describe('fetchSnapshot', () => {
   test('sends the bearer token', async () => {
     const { impl, calls } = fakeServer();
     await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).fetchSnapshot();
-    const snapshotCall = calls.find((c) => c.url.includes('/api/orchestration/snapshot'));
+    const snapshotCall = calls.find((c) => c.url.includes('/api/orchestration/shell'));
     const headers = snapshotCall?.init?.headers as Record<string, string>;
     expect(headers.authorization).toBe('Bearer tok-1');
+    expect(headers['x-t3-orchestration-protocol']).toBe('2');
+    expect(toT3Fact(await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).fetchSnapshot(), 'thread-1')).toMatchObject({ sessionStatus: 'running', activeTurnId: 'run-1' });
   });
 
   test('T3 not running yields undefined, not a throw', async () => {
@@ -156,9 +166,9 @@ describe('fetchSnapshot', () => {
    */
   test('a malformed snapshot yields undefined and never throws', async () => {
     const { impl } = fakeServer({
-      '/api/orchestration/snapshot': {
+      '/api/orchestration/shell': {
         status: 200,
-        body: { threads: [{ id: 't1', projectId: 'p1', title: 'x', session: { threadId: 't1', status: 'teleporting' } }] },
+        body: { ...snapshot, threads: [{ ...snapshot.threads[0], status: 'teleporting' }] },
       },
     });
     const client = new T3Client({ fetchImpl: impl, credential: 'pair-abc' });
@@ -167,7 +177,7 @@ describe('fetchSnapshot', () => {
 
   test('a snapshot that is not JSON at all yields undefined and never throws', async () => {
     const impl = (async (url: string) => {
-      if (String(url).includes('/api/orchestration/snapshot')) {
+      if (String(url).includes('/api/orchestration/shell')) {
         return new Response('<html>gateway error</html>', { status: 200 });
       }
       if (String(url).includes('/oauth/token')) return new Response(JSON.stringify(tokenReply), { status: 200 });
@@ -180,7 +190,7 @@ describe('fetchSnapshot', () => {
   test('logs a validation failure at most once per client, not once per task', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { impl } = fakeServer({
-      '/api/orchestration/snapshot': { status: 200, body: { threads: 'nope' } },
+      '/api/orchestration/shell': { status: 200, body: { threads: 'nope' } },
     });
     const client = new T3Client({ fetchImpl: impl, credential: 'pair-abc' });
     await client.fetchSnapshot();
@@ -198,7 +208,7 @@ describe('fetchSnapshot', () => {
         tokenHits += 1;
         return new Response(JSON.stringify(tokenReply), { status: 200 });
       }
-      if (u.includes('/api/orchestration/snapshot')) {
+      if (u.includes('/api/orchestration/shell')) {
         snapshotHits += 1;
         // First call 401s (token went stale); the retry succeeds.
         return snapshotHits === 1
@@ -219,7 +229,7 @@ describe('fetchSnapshot', () => {
     const impl = (async (url: string) => {
       const u = String(url);
       if (u.includes('/oauth/token')) return new Response(JSON.stringify(tokenReply), { status: 200 });
-      if (u.includes('/api/orchestration/snapshot')) {
+      if (u.includes('/api/orchestration/shell')) {
         snapshotHits += 1;
         return new Response('{}', { status: 401 });
       }
@@ -233,36 +243,132 @@ describe('fetchSnapshot', () => {
   });
 });
 
-describe('dispatch', () => {
-  test('posts the command and returns the sequence', async () => {
+describe('project creation', () => {
+  test('uses project mutations and refuses a successful HTML fallback', async () => {
     const { impl, calls } = fakeServer();
-    const result = await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).dispatch({
-      type: 'thread.turn.start',
-    });
-    expect(result).toEqual({ ok: true, sequence: 9 });
-
-    const call = calls.find((c) => c.url.includes('/api/orchestration/dispatch'));
-    expect(call?.init?.method).toBe('POST');
-    expect(JSON.parse(String(call?.init?.body)).type).toBe('thread.turn.start');
+    const client = new T3Client({ fetchImpl: impl, credential: 'pair-abc' });
+    const command = { type: 'project.create', commandId: 'cmd-1', projectId: 'p2', title: 'widgets', workspaceRoot: 'C:\\src\\widgets' };
+    await expect(client.createProject(command)).resolves.toEqual({ ok: true });
+    expect(JSON.parse(String(calls.find(c => c.url.endsWith('/api/projects/mutate'))?.init?.body))).toEqual(command);
+    const htmlFetch = (async (url, init) => String(url).endsWith('/api/projects/mutate')
+      ? new Response('<html>app</html>', { headers: { 'content-type': 'text/html' } })
+      : impl(url, init)) as typeof fetch;
+    const result = await new T3Client({ fetchImpl: htmlFetch, credential: 'pair-abc' }).createProject(command);
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('JSON') });
   });
 
-  test('a rejected dispatch surfaces T3s message verbatim rather than throwing', async () => {
-    const { impl } = fakeServer({
-      '/api/orchestration/dispatch': {
-        status: 422,
-        body: { message: "provider instance 'opencode' is not configured" },
-      },
-    });
-    const result = await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).dispatch({});
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('expected failure');
-    expect(result.error).toContain('opencode');
+  test('preserves upstream mutation rejection details', async () => {
+    const { impl } = fakeServer({ '/api/projects/mutate': { status: 422, body: { message: 'Workspace root is already registered' } } });
+    const result = await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).createProject({ type: 'project.create' });
+    expect(result).toMatchObject({ ok: false, error: expect.stringContaining('Workspace root is already registered') });
+  });
+});
+
+test.each([
+  ['preparing', 'starting'], ['queued', 'starting'], ['starting', 'starting'],
+  ['running', 'running'], ['waiting', 'running'], ['completed', 'stopped'],
+  ['interrupted', 'interrupted'], ['failed', 'error'], ['cancelled', 'stopped'],
+  ['rolled_back', 'stopped'], ['idle', 'idle'],
+])('maps V2 %s to %s without losing active-run liveness', async (status, sessionStatus) => {
+  const { impl } = fakeServer({ '/api/orchestration/shell': { body: { ...snapshot,
+    threads: [{ ...snapshot.threads[0], status, activeRunId: null, activityRunStatus: null }],
+  } } });
+  const result = await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).fetchSnapshot();
+  expect(toT3Fact(result, 'thread-1')?.sessionStatus).toBe(sessionStatus);
+});
+
+test('includes archived runs and maps pending requests and background activity', async () => {
+  const { impl } = fakeServer({ '/api/orchestration/shell': { body: { ...snapshot,
+    threads: [], archivedThreads: [{ ...snapshot.threads[0], status: 'completed', activeRunId: null,
+      activityRunStatus: 'waiting', pendingRuntimeRequest: { id: 'request-1', kind: 'approval' },
+      archivedAt: '2026-10-18T10:00:00Z' }],
+  } } });
+  const result = await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).fetchSnapshot();
+  expect(toT3Fact(result, 'thread-1')).toMatchObject({ sessionStatus: 'running', awaitingApproval: true, settled: true });
+});
+
+test('status and launch diagnostics explain HTML and schema failures instead of asking to reconnect', async () => {
+  const base = fakeServer();
+  const impl = (async (url, init) => String(url).endsWith('/api/orchestration/shell')
+    ? new Response('<html>app</html>', { headers: { 'content-type': 'text/html' } })
+    : base.impl(url, init)) as typeof fetch;
+  const client = new T3Client({ fetchImpl: impl, credential: 'pair-abc' });
+  await expect(client.status()).resolves.toMatchObject({ ok: false, reason: 'snapshot-unavailable', detail: expect.stringContaining('JSON') });
+  await expect(client.requireSnapshot()).rejects.toThrow(/JSON/);
+});
+
+test('a failed HTTP error body loses liveness without throwing out of the poller', async () => {
+  const base = fakeServer();
+  const impl = (async (url, init) => String(url).endsWith('/api/orchestration/shell')
+    ? new Response(new ReadableStream({ start(controller) { controller.error(new Error('connection reset')); } }), { status: 503 })
+    : base.impl(url, init)) as typeof fetch;
+  const client = new T3Client({ fetchImpl: impl, credential: 'pair-abc' });
+  await expect(client.fetchSnapshot()).resolves.toBeUndefined();
+  await expect(client.requireSnapshot()).rejects.toThrow(/503/);
+});
+
+describe('protocol 2 thread launch', () => {
+  const input: ThreadLaunchInput = {
+    commandId: 'cmd-1', threadId: 'thread-2', projectId: 'p1', title: 'Plan',
+    modelSelection: { instanceId: 'codex', model: 'gpt-5.6-sol' },
+    runtimeMode: 'approval-required' as const, interactionMode: 'plan' as const,
+    workspaceStrategy: { type: 'existing_worktree' as const, worktreePath: 'C:\\src\\widgets', branch: 'alice/feature' },
+    initialMessage: { messageId: 'msg-1', text: 'Plan the feature.', attachments: [] },
+  };
+  function socketServer(reply: (request: any) => unknown) {
+    const sockets: Array<{ url: string; closed: boolean; sent: any[] }> = [];
+    class Socket extends EventTarget {
+      closed = false;
+      sent: any[] = [];
+      constructor(readonly url: string) {
+        super(); sockets.push(this);
+        queueMicrotask(() => this.dispatchEvent(new Event('open')));
+      }
+      send(data: string) {
+        const request = JSON.parse(data); this.sent.push(request);
+        if (request._tag !== 'Request') return;
+        const result = reply(request);
+        if (result !== undefined) queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(result) })));
+      }
+      close() { this.closed = true; }
+    }
+    vi.stubGlobal('WebSocket', Socket);
+    const { impl, calls } = fakeServer({ '/api/auth/websocket-ticket': { body: { ticket: 'ticket-1', expiresAt: '2026-10-18T12:00:00Z' } } });
+    return { sockets, impl, calls };
+  }
+
+  test('launches over a ticket-authenticated RPC socket and closes it after a correlated reply', async () => {
+    const { sockets, impl, calls } = socketServer(request => ({ _tag: 'Exit', requestId: request.id,
+      exit: { _tag: 'Success', value: request.tag === 'orchestration.launchThread' ? { threadId: 'thread-2' } : {} } }));
+    await expect(new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).launchThread(input)).resolves.toBe('thread-2');
+    const ticketCall = calls.find(c => c.url.endsWith('/api/auth/websocket-ticket'));
+    expect(ticketCall?.init?.method).toBe('POST');
+    expect(new Headers(ticketCall?.init?.headers).get('authorization')).toBe('Bearer tok-1');
+    const socket = sockets[0]!;
+    const url = new URL(socket.url);
+    expect(url.pathname).toBe('/ws');
+    expect(url.searchParams.get('wsTicket')).toBe('ticket-1');
+    expect(url.searchParams.get('orchestrationProtocol')).toBe('2');
+    expect(socket.sent[0].payload).toEqual(input);
+    expect(socket.closed).toBe(true);
   });
 
-  test('dispatching while T3 is down fails with a reason instead of throwing', async () => {
-    rmSync(join(t3home, 'userdata', 'server-runtime.json'));
-    const { impl } = fakeServer();
-    const result = await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).dispatch({});
-    expect(result.ok).toBe(false);
+  test('surfaces RPC failures and never retries a potentially accepted launch', async () => {
+    const { sockets, impl } = socketServer(request => ({ _tag: 'Exit', requestId: request.id,
+      exit: { _tag: 'Failure', cause: [{ _tag: 'Fail', error: { _tag: 'LaunchError', message: 'Failed to launch thread', cause: { stage: 'resolve-worktree', cause: 'Worktree is not registered' } } }] } }));
+    await expect(new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).launchThread(input)).rejects.toThrow(/Worktree is not registered/);
+    expect(sockets).toHaveLength(1);
+    expect(sockets[0]?.closed).toBe(true);
+  });
+
+  test('times out an uncorrelated reply and closes the socket', async () => {
+    vi.useFakeTimers();
+    const { sockets, impl } = socketServer(() => ({ _tag: 'Exit', requestId: 'someone-else', exit: { _tag: 'Success', value: { threadId: 'wrong' } } }));
+    const launch = new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).launchThread(input);
+    const assertion = expect(launch).rejects.toMatchObject({ message: expect.stringContaining('timed out'), threadId: 'thread-2' });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await assertion;
+    expect(sockets[0]?.closed).toBe(true);
+    vi.useRealTimers();
   });
 });

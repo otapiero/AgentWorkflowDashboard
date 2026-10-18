@@ -2,8 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   buildModelSelection,
-  buildThreadCreateCommand,
-  buildTurnStartCommand,
+  validateT3Prompt,
 } from '../src/orchestrator/t3/commands.ts';
 import type { AgentProfile } from '../src/shared/types.ts';
 
@@ -54,94 +53,7 @@ describe('buildModelSelection', () => {
   });
 });
 
-/**
- * The thread is created by its own dispatch, not by thread.turn.start's
- * `bootstrap.createThread`.
- *
- * The plan's one-dispatch design was refused by a live T3 0.0.32:
- *
- *   OrchestrationCommandInvariantError, commandType 'thread.turn.start',
- *   "Thread 'b21d313d-…' does not exist for command 'thread.turn.start'."
- *
- * The bootstrap field is in the schema and every field we sent matched it, but
- * the dispatch path does not act on it. `thread.create` takes exactly the same
- * fields, so creating explicitly and then starting the turn is both what the
- * server asks for and one command per concern.
- */
-describe('buildThreadCreateCommand', () => {
-  const input = {
-    commandId: 'cmd-1',
-    threadId: 'thread-1',
-    projectId: 'proj-1',
-    title: '#3060 plan',
-    worktreePath: 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\worktrees\\issue-3060',
-    branch: 'alice/3060-thing',
-    modelSelection: { instanceId: 'codex', model: 'gpt-5.6-sol' },
-    modes: { runtimeMode: 'approval-required' as const, interactionMode: 'plan' as const },
-    createdAt: '2026-08-07T09:00:00.000Z',
-  };
-
-  test('is a thread.create naming the thread the turn will use', () => {
-    const command = buildThreadCreateCommand(input) as any;
-    expect(command.type).toBe('thread.create');
-    expect(command.threadId).toBe('thread-1');
-    expect(command.projectId).toBe('proj-1');
-  });
-
-  test('binds the thread to Mission Controls worktree, not one T3 chose', () => {
-    // This is what lets worktreePath(issue) stay a pure function of the issue
-    // number, so markers, artifacts and badges keep working unchanged.
-    const command = buildThreadCreateCommand(input) as any;
-    expect(command.worktreePath).toBe(
-      'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\worktrees\\issue-3060',
-    );
-    expect(command.branch).toBe('alice/3060-thing');
-  });
-
-  test('sends both modes explicitly', () => {
-    // T3's decoding default for runtimeMode is full-access, so an omission
-    // grants more than the phase asked for.
-    const command = buildThreadCreateCommand(input) as any;
-    expect(command.runtimeMode).toBe('approval-required');
-    expect(command.interactionMode).toBe('plan');
-  });
-});
-
-describe('buildTurnStartCommand', () => {
-  const input = {
-    commandId: 'cmd-1',
-    threadId: 'thread-1',
-    messageId: 'msg-1',
-    prompt: 'Plan issue 3060.',
-    modelSelection: { instanceId: 'codex', model: 'gpt-5.6-sol' },
-    modes: { runtimeMode: 'approval-required' as const, interactionMode: 'plan' as const },
-    createdAt: '2026-08-07T09:00:00.000Z',
-  };
-
-  test('is a thread.turn.start carrying the rendered prompt verbatim', () => {
-    const command = buildTurnStartCommand(input) as any;
-    expect(command.type).toBe('thread.turn.start');
-    expect(command.threadId).toBe('thread-1');
-    expect(command.message.role).toBe('user');
-    expect(command.message.text).toBe('Plan issue 3060.');
-    expect(command.message.attachments).toEqual([]);
-  });
-
-  test('rejects oversized input before dispatch without truncating user instructions', () => {
-    expect(() => buildTurnStartCommand({ ...input, prompt: 'x'.repeat(120001) })).toThrow(/120,000/);
-  });
-
-  test('never asks T3 to bootstrap anything', () => {
-    // The thread already exists by the time this is sent, and prepareWorktree
-    // hard-codes path: null and picks its own directory, which would make the
-    // checkout location a lookup rather than a derivation.
-    const command = buildTurnStartCommand(input) as any;
-    expect(command.bootstrap).toBeUndefined();
-  });
-
-  test('sends both modes explicitly', () => {
-    const command = buildTurnStartCommand(input) as any;
-    expect(command.runtimeMode).toBe('approval-required');
-    expect(command.interactionMode).toBe('plan');
-  });
+test('rejects oversized prompts without truncating instructions', () => {
+  expect(() => validateT3Prompt('x'.repeat(120_000))).not.toThrow();
+  expect(() => validateT3Prompt('x'.repeat(120_001))).toThrow(/120,000/);
 });
