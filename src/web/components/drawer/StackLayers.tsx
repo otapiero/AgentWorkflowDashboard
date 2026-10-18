@@ -10,7 +10,7 @@ export function StackLayers({ task, baseBranch, repository, onStack }: { task: T
   const [error, setError] = useState<string | null>(null);
   const stack = task.stack;
   const view = buildStack(stack?.layers ?? [], baseBranch, stack?.discoveryComplete ?? false);
-  const selected = stack?.selectedKey ?? (view.layers.length === 1 ? prKey(view.layers[0]!) : null);
+  const selected = stack?.selectedKey ?? null;
   async function change(operation: StackOperation) {
     const previous = stack;
     if (operation.action === 'select' && stack) onStack({ ...stack, selectedKey: operation.key });
@@ -22,6 +22,9 @@ export function StackLayers({ task, baseBranch, repository, onStack }: { task: T
   return <details className="stack-panel" open={view.layers.length > 1 || undefined}>
     <summary>Pull requests{view.layers.length > 0 ? ` (${view.layers.length})` : ''}</summary>
     {stack && !stack.discoveryComplete && <p className="hint">Discovering stack layers. Existing PRs stay visible until discovery finishes.</p>}
+    {(view.layers.length > 0 || selected !== null) && <label className="stack-select">
+      <input type="radio" name={`layer-${task.issue}`} checked={selected === null} disabled={busy} onChange={() => void change({ action: 'select', key: null })} />Issue worktree
+    </label>}
     <ol className="stack-layers" aria-label="PR layers">
       {view.layers.map(p => <li key={prKey(p)} className={selected === prKey(p) ? 'is-selected' : ''}>
         <label className="stack-select">

@@ -56,16 +56,23 @@ test('a phase launch previews the prompt the agent would receive', async ({ page
 
 test('stack selection targets the child PR without changing the issue phase or refreshing GitHub', async ({ page }) => {
   const drawer = await openTask(page, 103);
-  await expect(drawer.getByRole('list', { name: 'PR layers' }).getByRole('listitem')).toHaveCount(2);
-  let reconciles = 0;
-  page.on('request', request => { if (/\/api\/(reconcile|tasks)$/.test(request.url())) reconciles++; });
-  await drawer.getByRole('radio').nth(1).check();
-  await expect(drawer.getByRole('radio').nth(1)).toBeChecked();
-  expect(reconciles).toBe(0);
+  await expect(drawer.getByRole('list', { name: 'PR layers' }).getByRole('listitem')).toHaveCount(3);
   await drawer.getByRole('button', { name: 'Implement', exact: true }).click();
-  await expect(drawer).toContainText('Target PR #8: alice/layer-8');
+  await expect(drawer.getByRole('button', { name: 'Launch Implement', exact: true })).toBeDisabled();
+  await drawer.getByRole('radio', { name: 'Issue worktree', exact: true }).check();
+  await expect(drawer.getByRole('button', { name: 'Launch Implement', exact: true })).toBeEnabled();
   await drawer.getByRole('button', { name: /Preview prompt/ }).click();
   const preview = page.getByRole('dialog', { name: 'Prompt for Implement' });
+  await expect(preview).toContainText('alice/103-fix-sign-in-redirect');
+  await expect(preview).not.toContainText('Work on this PR only');
+  await preview.getByRole('button', { name: /Back to editing/ }).click();
+  let reconciles = 0;
+  page.on('request', request => { if (/\/api\/(reconcile|tasks)$/.test(request.url())) reconciles++; });
+  await drawer.getByRole('radio', { name: '#8 Complete redirect flow', exact: true }).check();
+  await expect(drawer.getByRole('radio', { name: '#8 Complete redirect flow', exact: true })).toBeChecked();
+  expect(reconciles).toBe(0);
+  await expect(drawer).toContainText('Target PR #8: alice/layer-8');
+  await drawer.getByRole('button', { name: /Preview prompt/ }).click();
   await expect(preview).toContainText('alice/layer-8');
   await expect(preview).toContainText('alice/layer-7');
   await expect(preview).toContainText('issue-103');

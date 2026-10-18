@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
+import { resolveExecutionTarget } from '../src/orchestrator/execution-target.ts';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -93,6 +94,19 @@ test('switches a clean issue checkout between stack branches without creating an
   await ensureLayerWorktree(config, task, target);
   expect(readFileSync(join(target.worktreePath, 'file.txt'), 'utf8')).toBe('child');
   expect((await git('worktree', 'list', '--porcelain')).match(/^worktree /gm)).toHaveLength(2);
+});
+
+test('issue targeting keeps the checked-out branch even with a saved historical PR selection', async () => {
+  const task = newTask(1, 'Feature', 'alice');
+  await ensureLayerWorktree(config, task, target);
+  writeFileSync(join(target.worktreePath, 'notes.txt'), 'Keep this');
+  task.stack = { layers: [], selectedKey: 'github.com/acme/widgets/10', discoveryComplete: false };
+  const issueTarget = resolveExecutionTarget(config, task);
+  expect(issueTarget.branch).toBe('alice/child');
+  expect(issueTarget.layerKey).toBeUndefined();
+  await ensureLayerWorktree(config, task, issueTarget);
+  expect(readFileSync(join(target.worktreePath, 'notes.txt'), 'utf8')).toBe('Keep this');
+  expect(await git('branch', '--show-current')).toBe('main');
 });
 
 test('preserves dirty files and the current branch when a different stack layer is requested', async () => {

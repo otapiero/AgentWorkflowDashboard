@@ -98,10 +98,10 @@ for (const fixture of FIXTURES) {
   const task = newTask(fixture.issue, fixture.title, 'alice');
   task.manualPhase = fixture.manualPhase ?? null;
   if (fixture.issue === 103) {
-    task.stack = { discoveryComplete: true, layers: [7, 8].map(number => ({
+    task.stack = { discoveryComplete: true, selectedKey: 'github.com/acme/widgets/6', layers: [6, 7, 8].map(number => ({
       host: 'github.com', repository: 'acme/widgets', number,
       title: number === 7 ? 'Prepare redirect handling' : 'Complete redirect flow',
-      url: `https://github.com/acme/widgets/pull/${number}`, state: 'OPEN',
+      url: `https://github.com/acme/widgets/pull/${number}`, state: number === 6 ? 'MERGED' : 'OPEN',
       headRepository: 'acme/widgets', baseRepository: 'acme/widgets', headBranch: `alice/layer-${number}`,
       baseBranch: number === 7 ? 'main' : 'alice/layer-7', headSha: 'a'.repeat(40),
       checks: number === 7 ? 'failure' : 'success',

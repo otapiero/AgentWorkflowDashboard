@@ -64,8 +64,9 @@ test.each<LauncherKind>(['wt', 'vscode', 't3'])('%s launches the same selected l
   const task = newTask(1, 'Feature', 'alice');
   const p = { host: 'github.com', repository: 'acme/widgets', number: 11, state: 'OPEN', headRepository: 'acme/widgets', headBranch: 'alice/child', baseBranch: 'alice/parent', headSha: 'a'.repeat(40), available: true, checkedAt: new Date().toISOString() } as PrLayer;
   task.stack = { layers: [p], discoveryComplete: true };
-  const preview = resolveSpawnPlan(config, task, phase, {});
-  const record = await spawnPhase(config, task, phase);
+  const options = { layerKey: 'github.com/acme/widgets/11' };
+  const preview = resolveSpawnPlan(config, task, phase, {}, options);
+  const record = await spawnPhase(config, task, phase, options);
   const runDir = join(taskDir(1), 'runs', readdirSync(join(taskDir(1), 'runs'))[0]!);
   const spec = JSON.parse(readFileSync(join(runDir, 'spawn.json'), 'utf8'));
   expect(spec).toMatchObject({ branch: preview.target.branch, baseBranch: preview.target.baseBranch, worktree: preview.target.worktreePath });

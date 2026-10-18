@@ -23,10 +23,9 @@ test('resolves the child branch and actual base while leaving the issue branch i
   expect(resolveExecutionTarget(config, task, prKey(task.stack.layers[1]!)).worktreePath).toBe(target.worktreePath);
   expect(task.branch).not.toBe(target.branch);
 });
-test('rejects unknown, unavailable, stale, fork and missing multi-layer targets', () => {
+test('rejects unknown, unavailable, stale and fork targets when explicitly requested', () => {
   const task = newTask(1, 'Feature', 'alice');
   task.stack = { layers: [p, { ...p, number: 12 }], discoveryComplete: true };
-  expect(() => resolveExecutionTarget(config, task)).toThrow('Select');
   expect(() => resolveExecutionTarget(config, task, 'unknown')).toThrow('belong');
   for (const change of [{ available: false }, { headRepository: 'alice/widgets' }, { checkedAt: '2000-01-01T00:00:00Z' }]) {
     task.stack.layers = [{ ...p, ...change }];

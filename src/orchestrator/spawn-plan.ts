@@ -55,7 +55,7 @@ export function resolveSpawnPlan(
   phaseDefaults: PhaseDefaults,
   options: SpawnPlanOptions = {},
 ): SpawnPlan {
-  const target = resolveExecutionTarget(config, task, options.layerKey, phase.id === 'plan');
+  const target = resolveExecutionTarget(config, task, options.layerKey);
   // The phase is spliced into the pipeline for the lookup, so a synthetic
   // phase's actor is reachable. A configured phase is already there, so this
   // is a no-op for every pipeline run.
