@@ -53,7 +53,7 @@ export function LaunchCompose({
   // otherwise ride along into Implement.
   const isCustom = isCustomRun(phase);
   const layers = task.stack?.layers ?? [];
-  const selectedKey = phase.id === 'plan' ? undefined : task.stack?.selectedKey ?? (layers.length === 1 ? prKey(layers[0]!) : undefined);
+  const selectedKey = phase.id === 'plan' ? undefined : task.stack?.selectedKey ?? undefined;
   const selectedLayer = layers.find(p => prKey(p) === selectedKey);
   const [includeContext, setIncludeContext] = useState(true);
   const [text, setText] = useState(isCustom ? '' : (task.overrides?.instructions ?? ''));
@@ -122,7 +122,8 @@ export function LaunchCompose({
   // A phase run's text is optional garnish on a command file; a custom run's
   // text is the entire instruction, so there has to be some.
   const empty = text.trim() === '';
-  const blocked = busy !== null || (isCustom && empty) || (phase.id !== 'plan' && layers.length > 0 && (!selectedLayer || !selectedLayer.available || selectedLayer.state !== 'OPEN'));
+  const invalidTarget = selectedKey !== undefined && (!selectedLayer || !selectedLayer.available || selectedLayer.state !== 'OPEN');
+  const blocked = busy !== null || (isCustom && empty) || invalidTarget;
 
   async function launch() {
     if (isCustom && empty) return;
@@ -142,7 +143,7 @@ export function LaunchCompose({
   return (
     <section className="section">
       {selectedLayer && <p className="hint">Target PR #{selectedLayer.number}: {selectedLayer.headBranch} → {selectedLayer.baseBranch}</p>}
-      {phase.id !== 'plan' && layers.length > 1 && !selectedLayer && <p className="hint">Select a PR layer above before launching.</p>}
+      {invalidTarget && <p className="hint">The selected PR must be open with available metadata. Select Issue worktree above to run without a PR target.</p>}
       <div className="compose-head">
         <button className="btn is-sm is-ghost" onClick={onBack} aria-label="Back to phases">
           ←

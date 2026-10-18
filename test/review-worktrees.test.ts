@@ -139,20 +139,21 @@ test('retries a deregistered review using its rescue receipt even when the broke
 });
 
 test('a later review of the same PR preserves the earlier local commit bundle', async () => {
+  // Seed an earlier rescue directly. The full first-review lifecycle is already
+  // covered above; this case exercises preserving it during the next finish.
+  const rescuePath = join(home, 'reviews', 'pr-42', 'rescued-from-worktree');
+  mkdirSync(rescuePath, { recursive: true });
+  const bundle = join(rescuePath, 'commits.bundle');
+  await git('bundle', 'create', bundle, 'HEAD');
+  const firstHead = await git('rev-parse', 'HEAD');
   const reviews = createReviewWorktrees(config, { open: async () => {} });
   const opened = await reviews.open(pr);
-  writeFileSync(join(opened.workspacePath, 'widgets.txt'), 'first review commit');
-  await execa('git', ['commit', '-am', 'First review'], { cwd: opened.workspacePath });
-  const firstHead = (await execa('git', ['rev-parse', 'HEAD'], { cwd: opened.workspacePath })).stdout;
-  const first = await reviews.finish(42);
-  const bundle = join(first.rescuePath, 'commits.bundle');
-  await reviews.open(pr);
   writeFileSync(join(opened.workspacePath, 'widgets.txt'), 'second review commit');
   await execa('git', ['commit', '-am', 'Second review'], { cwd: opened.workspacePath });
   const secondHead = (await execa('git', ['rev-parse', 'HEAD'], { cwd: opened.workspacePath })).stdout;
   await reviews.finish(42);
   expect(await git('bundle', 'list-heads', bundle)).toContain(firstHead);
-  expect(await git('bundle', 'list-heads', join(first.rescuePath, 'commits-2.bundle'))).toContain(secondHead);
+  expect(await git('bundle', 'list-heads', join(rescuePath, 'commits-2.bundle'))).toContain(secondHead);
 });
 
 test('refuses to adopt or remove an unrelated directory and rejects invalid PR numbers', async () => {

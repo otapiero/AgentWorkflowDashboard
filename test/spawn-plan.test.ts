@@ -95,6 +95,18 @@ afterEach(() => {
 });
 
 describe('resolveSpawnPlan', () => {
+  test.each(['OPEN', 'MERGED', 'CLOSED'] as const)('issue runs render without a PR target when attached PRs are %s', state => {
+    const p = { host: 'github.com', repository: 'acme/widgets', number: 11, state, available: false } as import('../src/shared/pr-stack.ts').PrLayer;
+    const t = task({ stack: { layers: [p, { ...p, number: 12 }], discoveryComplete: false, selectedKey: 'github.com/acme/widgets/11' } });
+    const plan = resolveSpawnPlan(config(), t, implementPhase(), {});
+    expect(plan.target).toMatchObject({ branch: 'alice/3060-Add-progress-bar', baseBranch: 'dev' });
+    expect(plan.target.layerKey).toBeUndefined();
+    expect(plan.promptText).toContain('Implement #3060');
+    const raw = resolveSpawnPlan(config(), t, customPhase({ pipeline: config().pipeline, agentNames: ['claude'] }), {}, { rawPrompt: 'Inspect this checkout' });
+    expect(raw.promptText).toBe('Inspect this checkout');
+    expect(raw.target.layerKey).toBeUndefined();
+  });
+
   test('layer preview uses its actual branch, base and checkout, including raw custom runs', () => {
     writeFileSync(join(commands, 'mc-implementer.md'), '{{branch}} base {{baseBranch}} at {{worktree}}');
     const p = { host: 'github.com', repository: 'acme/widgets', number: 11, state: 'OPEN', headRepository: 'acme/widgets', headBranch: 'alice/child', baseBranch: 'alice/parent', headSha: 'a'.repeat(40), available: true, checkedAt: new Date().toISOString() } as import('../src/shared/pr-stack.ts').PrLayer;
