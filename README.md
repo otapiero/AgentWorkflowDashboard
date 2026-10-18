@@ -211,6 +211,11 @@ The **Agents** panel also picks the launcher:
   PID guess for those phases. Mission Control never starts T3's server and never modifies
   T3 itself; it attaches to the one the desktop application already runs.
 
+  Requires T3 orchestration protocol 2, verified with T3 Code 0.1.0. Status uses
+  `GET /api/orchestration/shell` with `x-t3-orchestration-protocol: 2`. Launches use
+  `orchestration.launchThread` over a short-lived authenticated WebSocket. The old
+  `/api/orchestration/snapshot` and `/api/orchestration/dispatch` routes are no longer used.
+
   One-time setup:
 
   1. Install T3 Code: `winget install T3Tools.T3Code`
@@ -236,9 +241,7 @@ The **Agents** panel also picks the launcher:
   loop using Copilot's models, and needs the `opencode` CLI installed and authenticated
   against a Copilot Pro, Pro+, Business or Enterprise subscription.
 
-  T3 0.0.31 has no preview panel, so the board is not surfaced inside T3; open it in a
-  browser as usual. See
-  [the finding](docs/superpowers/notes/2026-08-07-t3-preview-panel-finding.md).
+  Open the board in a browser as usual. Mission Control does not configure a T3 preview.
 
 ## Headless orchestrator
 

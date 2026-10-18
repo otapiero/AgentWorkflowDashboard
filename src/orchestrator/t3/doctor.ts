@@ -48,6 +48,9 @@ export function formatT3Doctor(input: T3DoctorInput): string[] {
         lines.push('    Fix: Settings -> This environment -> Authorized clients -> Create link,');
         lines.push('    then replace ~/.mission-control/t3-credential with the new "This machine" URL.');
         break;
+      case 'snapshot-unavailable':
+        lines.push(`  - T3 session status is unavailable: ${status.detail}`);
+        break;
       default:
         lines.push(`  - T3 is unreachable: ${status.detail}`);
     }

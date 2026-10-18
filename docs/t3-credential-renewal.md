@@ -25,7 +25,7 @@ Set-Content -Path "$env:USERPROFILE\.mc\t3-credential" -NoNewline -Value "<paste
 4. Force the exchange and confirm:
 
 ```powershell
-Remove-Item "$env:USERPROFILE\.mc\t3-token.json" -ErrorAction SilentlyContinue
+Remove-Item "$env:USERPROFILE\.mission-control\t3-token.json" -ErrorAction SilentlyContinue
 cd c:\Users\ouriel\source\repos\otapiero\AgentWorkflowDashboard
 npm run mc -- doctor
 ```
@@ -64,7 +64,7 @@ This trips people up, so it is worth thirty seconds.
 | File | What it is | Lifetime |
 | --- | --- | --- |
 | `~/.mc/t3-credential` | The pairing link you paste | **single use, ~3 min** |
-| `~/.mc/t3-token.json` | The access token it buys | **30 days** |
+| `~/.mission-control/t3-token.json` | The access token it buys | **30 days** |
 
 The pairing link is a *bootstrap* credential — T3's own words: bootstrap
 methods "are not the long-lived credential used for ordinary authenticated
@@ -133,17 +133,19 @@ There is no scope picker. T3 grants the client 6 scopes, which includes the
 Check what the stored token thinks:
 
 ```powershell
-node -e "const t=require(process.env.USERPROFILE+'/.mc/t3-token.json'); console.log('expires', new Date(t.expiresAtMs).toISOString(), '| scope', t.scope)"
+node -e "const t=require(process.env.USERPROFILE+'/.mission-control/t3-token.json'); console.log('expires', new Date(t.expiresAtMs).toISOString(), '| scope', t.scope)"
 ```
 
 Hit the API with it directly:
 
 ```powershell
-$tok = (Get-Content "$env:USERPROFILE\.mc\t3-token.json" | ConvertFrom-Json).accessToken
-curl -s -o NUL -w "%{http_code}`n" http://127.0.0.1:3773/api/orchestration/snapshot -H "authorization: Bearer $tok"
+$tok = (Get-Content "$env:USERPROFILE\.mission-control\t3-token.json" | ConvertFrom-Json).accessToken
+Invoke-RestMethod http://127.0.0.1:3773/api/orchestration/shell -Headers @{ Authorization = "Bearer $tok"; "x-t3-orchestration-protocol" = "2" } | Select-Object schemaVersion, snapshotSequence
 ```
 
-`200` means the token is good. `401` means renew.
+A JSON response with `schemaVersion: 2` and a snapshot sequence confirms access.
+`401` means renew. An HTML response indicates an unsupported route or API version;
+re-pairing will not fix that. T3 0.1.0 replaced the old `/api/orchestration/snapshot` route.
 
 ---
 

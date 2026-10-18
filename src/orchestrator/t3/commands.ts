@@ -5,7 +5,7 @@ import type { ModelOptionDescriptor } from './instances.ts';
  * The commands Mission Control sends to T3 Code, as plain data.
  *
  * Pure by design: every payload here was checked against the schemas in T3
- * 0.0.31's shipped bundle, and keeping them free of I/O is what lets that
+ * 0.1.0's shipped bundle, and keeping them free of I/O is what lets that
  * check be a unit test rather than an integration one.
  *
  * All ids are caller-supplied. T3 treats them as opaque non-empty strings, so
@@ -191,24 +191,20 @@ function newestRelease(family: string[], name: string): string | undefined {
   })[0];
 }
 
-export function buildProjectCreateCommand(input: {
+export interface ThreadLaunchInput {
   commandId: string;
+  threadId: string;
   projectId: string;
   title: string;
-  workspaceRoot: string;
-  createdAt: string;
-}): unknown {
-  return {
-    type: 'project.create',
-    commandId: input.commandId,
-    projectId: input.projectId,
-    title: input.title,
-    workspaceRoot: input.workspaceRoot,
-    createdAt: input.createdAt,
-  };
+  modelSelection: ModelSelection;
+  runtimeMode: T3PhaseModes['runtimeMode'];
+  interactionMode: T3PhaseModes['interactionMode'];
+  workspaceStrategy: { type: 'existing_worktree'; worktreePath: string; branch: string };
+  initialMessage: { messageId: string; text: string; attachments: [] };
 }
 
-export interface ThreadCreateInput {
+/** Bind the existing issue checkout before T3 prepares and starts the run. */
+export function buildThreadLaunchInput(input: {
   commandId: string;
   threadId: string;
   projectId: string;
@@ -217,32 +213,11 @@ export interface ThreadCreateInput {
   branch: string;
   modelSelection: ModelSelection;
   modes: T3PhaseModes;
-  createdAt: string;
-}
-
-/**
- * Create the thread the turn will run in.
- *
- * This is a separate dispatch rather than `thread.turn.start`'s
- * `bootstrap.createThread`, because a live T3 0.0.32 refused the one-dispatch
- * form:
- *
- *   OrchestrationCommandInvariantError, commandType 'thread.turn.start',
- *   "Thread 'b21d313d-…' does not exist for command 'thread.turn.start'."
- *
- * The bootstrap field is in T3's schema and every field sent matched it, so
- * this is not a payload error — the dispatch path simply does not act on
- * bootstrap. `thread.create` takes exactly the same fields, so creating first
- * is both what the server asks for and one command per concern.
- *
- * The worktree already exists, because Mission Control created it, and T3 is
- * never asked to prepare one: `prepareWorktree` hard-codes path: null and picks
- * its own directory under ~/.t3/worktrees, which would turn the checkout
- * location into a lookup instead of a derivation from the issue number.
- */
-export function buildThreadCreateCommand(input: ThreadCreateInput): unknown {
+  messageId: string;
+  prompt: string;
+}): ThreadLaunchInput {
+  validateT3Prompt(input.prompt);
   return {
-    type: 'thread.create',
     commandId: input.commandId,
     threadId: input.threadId,
     projectId: input.projectId,
@@ -250,45 +225,8 @@ export function buildThreadCreateCommand(input: ThreadCreateInput): unknown {
     modelSelection: input.modelSelection,
     runtimeMode: input.modes.runtimeMode,
     interactionMode: input.modes.interactionMode,
-    branch: input.branch,
-    worktreePath: input.worktreePath,
-    createdAt: input.createdAt,
-  };
-}
-
-export interface TurnStartInput {
-  commandId: string;
-  threadId: string;
-  messageId: string;
-  prompt: string;
-  modelSelection: ModelSelection;
-  modes: T3PhaseModes;
-  createdAt: string;
-}
-
-/**
- * Start the turn in a thread that already exists.
- *
- * Both modes are sent explicitly even though the thread already carries them:
- * T3's decoding default for `runtimeMode` is `full-access`, so an omitted field
- * does not mean "inherit", it means "no restrictions".
- */
-export function buildTurnStartCommand(input: TurnStartInput): unknown {
-  validateT3Prompt(input.prompt);
-  return {
-    type: 'thread.turn.start',
-    commandId: input.commandId,
-    threadId: input.threadId,
-    message: {
-      messageId: input.messageId,
-      role: 'user',
-      text: input.prompt,
-      attachments: [],
-    },
-    modelSelection: input.modelSelection,
-    runtimeMode: input.modes.runtimeMode,
-    interactionMode: input.modes.interactionMode,
-    createdAt: input.createdAt,
+    workspaceStrategy: { type: 'existing_worktree', worktreePath: input.worktreePath, branch: input.branch },
+    initialMessage: { messageId: input.messageId, text: input.prompt, attachments: [] },
   };
 }
 

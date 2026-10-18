@@ -9,10 +9,13 @@ vi.mock('execa', () => ({ execa: (exe: string, args: string[]) => {
 vi.mock('../src/orchestrator/layer-worktrees.ts', () => ({ ensureLayerWorktree: vi.fn(async () => undefined) }));
 vi.mock('../src/orchestrator/worktree.ts', () => ({ ensureWorktree: vi.fn(async () => undefined) }));
 vi.mock('../src/orchestrator/t3/instances.ts', () => ({ readInstanceReadiness: () => ({ instanceId: 'codex', ready: true, models: ['gpt-test'], reason: null }) }));
-vi.mock('../src/orchestrator/t3/client.ts', () => ({ T3Client: class {
-  async fetchSnapshot() { return { projects: [{ id: 'project', workspaceRoot: 'C:\\src\\widgets' }], threads: [] }; }
-  async dispatch(command: Record<string, unknown>) { boundary.commands.push(command); return { ok: true }; }
-} }));
+vi.mock('../src/orchestrator/t3/client.ts', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/orchestrator/t3/client.ts')>(),
+  T3Client: class {
+    async requireSnapshot() { return { projects: [{ id: 'project', workspaceRoot: 'C:\\src\\widgets' }], threads: [] }; }
+    async launchThread(input: Record<string, unknown>) { boundary.commands.push(input); return input.threadId; }
+  },
+}));
 import { spawnPhase } from '../src/orchestrator/spawn/phase.ts';
 import { newTask } from '../src/orchestrator/state.ts';
 import { runPhaseScript, taskDir } from '../src/orchestrator/paths.ts';
@@ -69,7 +72,7 @@ test.each<LauncherKind>(['wt', 'vscode', 't3'])('%s launches the same selected l
   expect(readFileSync(spec.promptFile, 'utf8')).toBe(preview.promptText);
   expect(record.workspacePath).toBe(preview.target.worktreePath);
   if (launcher === 't3') {
-    expect(boundary.commands.find(c => c.type === 'thread.create')).toMatchObject({ branch: 'alice/child', worktreePath: preview.target.worktreePath });
+    expect(boundary.commands[0]).toMatchObject({ workspaceStrategy: { type: 'existing_worktree', branch: 'alice/child', worktreePath: preview.target.worktreePath } });
   } else if (launcher === 'vscode') {
     const workspace = JSON.parse(readFileSync(join(runDir, 'workspace.code-workspace'), 'utf8'));
     expect(workspace.folders).toEqual([{ path: preview.target.worktreePath }]);

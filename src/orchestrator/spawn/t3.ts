@@ -6,9 +6,7 @@ import { ensureWorktree } from '../worktree.ts';
 import { T3Client } from '../t3/client.ts';
 import {
   buildModelSelection,
-  buildProjectCreateCommand,
-  buildThreadCreateCommand,
-  buildTurnStartCommand,
+  buildThreadLaunchInput,
   offeredEfforts,
   resolveInstanceModel,
   type ModelSelection,
@@ -116,9 +114,9 @@ export function resolveT3Launch(input: {
  * created here exactly as the vscode path does. T3 is never asked to create
  * one — it needs the worktree's path, not its authorship.
  *
- * Unlike wt and vscode this does not detach a terminal, so the dispatch is
- * awaited: an agent that could not start should fail the spawn loudly rather
- * than leaving a card that claims a run began.
+ * Await T3's launch acceptance before recording the spawn. T3 then prepares
+ * and starts the durable run asynchronously; the shell snapshot reports its
+ * progress and any preparation failure.
  */
 export async function launchT3(
   config: Config,
@@ -128,8 +126,6 @@ export async function launchT3(
   client: T3Client = new T3Client(),
 ): Promise<{ command: string; threadId: string }> {
   if (!plan.target?.layerKey) await ensureWorktree(config, task.issue, task.branch);
-
-  const createdAt = new Date().toISOString();
 
   // The project is resolved once, lazily, and reused so every task's threads
   // group under one entry in T3's sidebar.
@@ -143,67 +139,38 @@ export async function launchT3(
   let projectId = getT3ProjectId();
 
   if (!projectId) {
-    projectId = findProjectForWorkspace(await client.fetchSnapshot(), config.repo.path);
+    projectId = findProjectForWorkspace(await client.requireSnapshot(), config.repo.path);
     if (projectId) setT3ProjectId(projectId);
   }
 
   if (!projectId) {
     projectId = randomUUID();
-    const created = await client.dispatch(
-      buildProjectCreateCommand({
-        commandId: randomUUID(),
-        projectId,
-        title: config.t3?.projectTitle ?? config.repo.name,
-        workspaceRoot: config.repo.path,
-        createdAt,
-      }),
-    );
+    const created = await client.createProject({
+      type: 'project.create',
+      commandId: randomUUID(),
+      projectId,
+      title: config.t3?.projectTitle ?? config.repo.name,
+      workspaceRoot: config.repo.path,
+    });
     if (!created.ok) throw new Error(`Could not create the T3 project: ${created.error}`);
     setT3ProjectId(projectId);
-
-    // T3 0.0.31 has no preview panel, so the Mission Control project script is
-    // deliberately not pushed here. See
-    // docs/superpowers/notes/2026-08-07-t3-preview-panel-finding.md; the block
-    // to add if a later release gains one is in Task 12 Step 5 of the plan.
   }
 
-  // Create the thread, then start the turn in it. T3 rejects a turn for a
-  // thread it does not already hold, and does not act on thread.turn.start's
-  // own `bootstrap.createThread` over this path.
-  const threadId = randomUUID();
-  const thread = await client.dispatch(
-    buildThreadCreateCommand({
-      commandId: randomUUID(),
-      threadId,
-      projectId,
-      title: `#${task.issue} ${phase.id}`,
-      worktreePath: plan.target?.worktreePath ?? worktreePath(task.issue),
-      branch: plan.target?.branch ?? task.branch,
-      modelSelection: plan.modelSelection,
-      modes: plan.modes,
-      createdAt,
-    }),
-  );
-  if (!thread.ok) throw new Error(`Could not create the T3 thread: ${thread.error}`);
-
-  const result = await client.dispatch(
-    buildTurnStartCommand({
-      commandId: randomUUID(),
-      threadId,
-      messageId: randomUUID(),
-      // The same rendered text writePromptFile just persisted. Passing it
-      // through rather than re-reading keeps the prompt file exactly what it
-      // is for the other launchers: a record, not a channel.
-      prompt: plan.prompt,
-      modelSelection: plan.modelSelection,
-      modes: plan.modes,
-      createdAt,
-    }),
-  );
-  if (!result.ok) throw new Error(`T3 did not start the phase: ${result.error}`);
+  const threadId = await client.launchThread(buildThreadLaunchInput({
+    commandId: randomUUID(),
+    threadId: randomUUID(),
+    projectId,
+    title: `#${task.issue} ${phase.id}`,
+    worktreePath: plan.target?.worktreePath ?? worktreePath(task.issue),
+    branch: plan.target?.branch ?? task.branch,
+    modelSelection: plan.modelSelection,
+    modes: plan.modes,
+    messageId: randomUUID(),
+    prompt: plan.prompt,
+  }));
 
   return {
-    command: `t3 dispatch thread.turn.start (thread ${threadId})`,
+    command: `t3 orchestration.launchThread (thread ${threadId})`,
     threadId,
   };
 }

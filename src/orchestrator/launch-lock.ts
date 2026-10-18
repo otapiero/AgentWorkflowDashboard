@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { taskDir } from './paths.ts';
 import { readLiveSpawn } from './markers.ts';
 import { latestThreadId, toT3Fact } from './t3/facts.ts';
-import { T3Client } from './t3/client.ts';
+import { T3Client, UnconfirmedT3LaunchError } from './t3/client.ts';
 import type { TaskRecord } from '../shared/types.ts';
 import { randomUUID } from 'node:crypto';
 
@@ -31,9 +31,9 @@ export async function withIssueLaunch<T>(task: TaskRecord, launch: (token: strin
     const pending = JSON.parse(readFileSync(file, 'utf8')) as Reservation;
     if (pending.handedOff) {
       if (!pending.threadId) throw new Error('An issue run is already starting. Use Cancel pending launch if its terminal did not open');
-      const snapshot = await new T3Client().fetchSnapshot();
+      const snapshot = await new T3Client().requireSnapshot();
       const live = toT3Fact(snapshot, pending.threadId);
-      if (!snapshot || (live && !live.settled && (live.activeTurnId || live.sessionStatus === 'running' || live.sessionStatus === 'starting'))) throw new Error('An issue run is already active in T3');
+      if (live && !live.settled && (live.activeTurnId || live.sessionStatus === 'running' || live.sessionStatus === 'starting')) throw new Error('An issue run is already active in T3');
       assertLaunchReservation(task.issue, pending.token);
       rmSync(file);
     } else {
@@ -56,9 +56,8 @@ export async function withIssueLaunch<T>(task: TaskRecord, launch: (token: strin
     if (readLiveSpawn(task.issue)) throw new Error('An issue run is already active');
     const thread = latestThreadId(task);
     if (thread) {
-      const snapshot = await new T3Client().fetchSnapshot();
+      const snapshot = await new T3Client().requireSnapshot();
       const live = toT3Fact(snapshot, thread);
-      if (!snapshot) throw new Error('Cannot establish whether the existing T3 run is active. Reconnect T3 before launching');
       if (live && !live.settled && (live.activeTurnId || live.sessionStatus === 'running' || live.sessionStatus === 'starting')) throw new Error('An issue run is already active in T3');
     }
     const result = await launch(token);
@@ -71,6 +70,15 @@ export async function withIssueLaunch<T>(task: TaskRecord, launch: (token: strin
     }
     return result;
   } catch (error) {
+    if (error instanceof UnconfirmedT3LaunchError) {
+      // A lost reply is not proof that T3 rejected the command. Retain the
+      // allocated id so the next attempt checks that exact run first.
+      try {
+        assertLaunchReservation(task.issue, token);
+        writeFileSync(file, JSON.stringify({ token, handedOff: true, expires: Date.now() + 60_000, threadId: error.threadId }));
+      } catch { /* Never overwrite a successor's reservation. */ }
+      throw error;
+    }
     try { assertLaunchReservation(task.issue, token); rmSync(file, { force: true }); } catch { /* Never remove a successor's reservation. */ }
     throw error;
   }
