@@ -18,16 +18,25 @@ function queryProcessStart(pid: number): string | null {
     return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] ?? null;
   } catch { return null; }
 }
-let ownProcessStart: string | undefined;
+// .NET ticks (100 ns) from 0001-01-01 to the Unix epoch.
+const TICKS_AT_UNIX_EPOCH = 621355968000000000n;
+// Node stamps its time origin ~40 ms after Windows records the process start.
+// A PID reused by a later process cannot fall inside this window: the earlier
+// owner had to boot and take the lease before it died.
+const START_TOLERANCE_TICKS = 10_000_000n;
 function processStart(pid: number): string | null {
-  // This process cannot change its PID/start identity. Foreign processes still
-  // require a fresh query because a PID may have been reused between checks.
-  if (pid === process.pid && ownProcessStart !== undefined) return ownProcessStart;
-  const value = queryProcessStart(pid);
-  // Only a real answer is remembered: a cold PowerShell that timed out once
-  // must not leave notes unavailable for the rest of this process's life.
-  if (pid === process.pid && value !== null) ownProcessStart = value;
-  return value;
+  // Our own start is known without spawning PowerShell, which costs a second
+  // or more on every launch. Foreign PIDs still need a fresh query because a
+  // PID may have been reused between checks.
+  if (pid === process.pid && process.platform === 'win32') {
+    return String(BigInt(Math.round(performance.timeOrigin)) * 10000n + TICKS_AT_UNIX_EPOCH);
+  }
+  return queryProcessStart(pid);
+}
+function sameStart(a: string, b: string): boolean {
+  if (process.platform !== 'win32' || !/^\d+$/.test(a) || !/^\d+$/.test(b)) return a === b;
+  const gap = BigInt(a) - BigInt(b);
+  return (gap < 0n ? -gap : gap) <= START_TOLERANCE_TICKS;
 }
 function readOwner(path: string): Owner | null {
   try {
@@ -42,7 +51,7 @@ function isDead(owner: Owner): boolean {
   try { process.kill(owner.pid, 0); }
   catch (error) { return (error as NodeJS.ErrnoException).code === 'ESRCH'; }
   const currentStart = processStart(owner.pid);
-  return currentStart !== null && currentStart !== owner.processStart;
+  return currentStart !== null && !sameStart(currentStart, owner.processStart);
 }
 function locked(): Error & { code: string } {
   return Object.assign(new Error('Notes are already open for this project. Use the existing Mission Control server. If ownership metadata is damaged or recovery was interrupted, close all servers before repairing notes.json.lock and notes.json.lock.recovery.'), { code: 'NOTES_ALREADY_OPEN' });
@@ -58,9 +67,7 @@ export async function acquireNotesLease(home: string, onCompromised?: (error: Er
   const target = join(home, 'notes.json');
   const directory = `${target}.lock`;
   const metadata = join(directory, 'owner.json');
-  // The first PowerShell of a session can be slow enough to time out; the
-  // second starts warm.
-  const start = processStart(process.pid) ?? processStart(process.pid);
+  const start = processStart(process.pid);
   if (!start) throw new Error('Cannot establish the notes lease process start identity');
   const owner: Owner = { token: randomUUID(), pid: process.pid, processStart: start };
   let compromised = false;

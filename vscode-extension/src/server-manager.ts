@@ -65,7 +65,7 @@ export class ServerManager {
       if (installationError) return { kind: 'configuration-error', message: installationError };
       this.throwIfAborted();
       // We cannot recognise our own server by PID. `npm start` forks
-      // cmd -> tsx -> node, so `child.pid` is the npm wrapper's while /health
+      // cmd -> node, so `child.pid` is the npm wrapper's while /health
       // reports the leaf node's — they never match, and the old equality check
       // meant ownership was never recorded and the server could never be
       // restarted. An injected id is the identity that survives the fork chain.

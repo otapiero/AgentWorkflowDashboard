@@ -33,7 +33,7 @@
     "dev:server": "tsx watch src/server/index.ts",
     "dev:web": "vite",
     "build": "vite build",
-    "start": "tsx src/server/index.ts",
+    "start": "node --import tsx src/server/index.ts",
     "mc": "tsx src/orchestrator/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
