@@ -1,15 +1,16 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const execa = vi.hoisted(() => vi.fn());
 vi.mock('execa', () => ({ execa }));
 
-import { taskDir, planPath } from '../src/orchestrator/paths.ts';
+import { taskDir, planPath, statePath } from '../src/orchestrator/paths.ts';
 import { reconcileAll } from '../src/orchestrator/poller.ts';
 import { loadState, newTask, saveState } from '../src/orchestrator/state.ts';
 import type { Config } from '../src/shared/types.ts';
+import type { PrLayer } from '../src/shared/pr-stack.ts';
 
 const config: Config = {
   repo: { path: 'C:\\src\\widgets', owner: 'acme', name: 'widgets', baseBranch: 'main', branchPrefix: 'alice' },
@@ -69,4 +70,39 @@ test('a previous implementation run suppresses plan review after its markers are
   expect(results[0]!.derived.displayPhase).toBe('plan');
   expect(results[0]!.derived.badges.map(badge => badge.kind)).not.toContain('plan-ready');
   expect(results[0]!.derived.needsYou).toBe(false);
+});
+
+test('timestamp-only stack observations do not write state, but changed checks do', async () => {
+  saveState({ version: 1, tasks: [newTask(42, 'Add widget', 'alice')] });
+  execa.mockResolvedValue({ stdout: '' });
+  const layer: PrLayer = {
+    host: 'github.com', repository: 'acme/widgets', number: 7,
+    title: 'Add widget', url: 'https://github.com/acme/widgets/pull/7', state: 'OPEN',
+    headRepository: 'acme/widgets', baseRepository: 'acme/widgets',
+    headBranch: 'alice/widget', baseBranch: 'main', headSha: 'a'.repeat(40),
+    checks: 'pending', review: { decision: 'NONE', unresolvedThreads: 0, copilotUnresolved: 0 },
+    available: true, source: 'attached', checkedAt: '2026-10-01T00:00:00Z',
+  };
+  const collector = {
+    invalidate() {},
+    async collect() {
+      return { ok: true, rateLimit: null, unavailable: new Set<number>(),
+        stacks: new Map([[42, { layers: [{ ...layer }], discoveryComplete: true }]]),
+        byIssue: new Map([[42, { pr: { exists: true, number: 7, url: layer.url, state: layer.state }, checks: layer.checks, review: layer.review }]]),
+      };
+    },
+  };
+  await reconcileAll(config, collector);
+  const original = readFileSync(statePath(), 'utf8');
+  const oldTime = new Date('2020-01-01T00:00:00Z');
+  utimesSync(statePath(), oldTime, oldTime);
+  layer.checkedAt = '2026-10-01T00:01:00Z';
+  const { results } = await reconcileAll(config, collector);
+  expect(results[0]!.stack!.layers[0]!.checkedAt).toBe('2026-10-01T00:01:00Z');
+  expect(readFileSync(statePath(), 'utf8')).toBe(original);
+  expect(statSync(statePath()).mtimeMs).toBe(oldTime.getTime());
+
+  layer.checks = 'failure';
+  await reconcileAll(config, collector);
+  expect(loadState().tasks[0]!.stack!.layers[0]!.checks).toBe('failure');
 });

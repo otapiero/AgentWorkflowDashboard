@@ -115,8 +115,9 @@ export function SetupTab({ task, config, busy, run, onClose }: TabProps) {
             disabled={busy !== null}
             onClick={() =>
               run('forget', async () => {
-                await api.forget(task.issue);
+                const tasks = await api.forget(task.issue);
                 onClose();
+                return tasks;
               })
             }
           >

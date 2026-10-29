@@ -6,13 +6,13 @@ import type { BoardConfig } from '../api.ts';
 import { AgentPicker } from './AgentPicker.tsx';
 import type { AgentSelection } from './AgentPicker.tsx';
 import { AgentChip, IconCheck, IconCode, IconTerminal, IconThreads, IconX } from './bits.tsx';
-import type { LauncherKind, PhaseConfig } from '../../shared/types.ts';
+import type { LauncherKind, PhaseConfig, TaskWithDerived } from '../../shared/types.ts';
 
 interface Props {
   config: BoardConfig;
   focusPhase: string | null;
   onClose: () => void;
-  onChanged: () => void;
+  onChanged: (tasks: TaskWithDerived[]) => void;
 }
 
 const LAUNCHERS: { kind: LauncherKind; name: string; blurb: string; icon: ReactNode }[] = [
@@ -68,13 +68,12 @@ export function Settings({ config, focusPhase, onClose, onChanged }: Props) {
       ?.scrollIntoView({ block: 'center' });
   }, [focusPhase]);
 
-  async function act(label: string, action: () => Promise<unknown>) {
+  async function act(label: string, action: () => Promise<TaskWithDerived[]>) {
     setBusy(label);
     setError(null);
     setSaved(null);
     try {
-      await action();
-      onChanged();
+      onChanged(await action());
       setSaved(label);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

@@ -21,6 +21,7 @@ interface Props {
   config: BoardConfig;
   onClose: () => void;
   onChanged: () => void;
+  onTasksChanged: (tasks: TaskWithDerived[]) => void;
   initialTab?: DrawerTab;
   notes: NotesController;
   onNewNote: (issue: number) => void;
@@ -54,7 +55,7 @@ function clampWidth(px: number): number {
  * is "launch something", and remembering you were last on History is not a
  * service.
  */
-export function Drawer({ task, config, onClose, onChanged, initialTab = 'run', notes, onNewNote, onEditNote, onOpenTaskNotes, onViewTaskNotes, revealedNote }: Props) {
+export function Drawer({ task, config, onClose, onChanged, onTasksChanged, initialTab = 'run', notes, onNewNote, onEditNote, onOpenTaskNotes, onViewTaskNotes, revealedNote }: Props) {
   const [tab, setTab] = useState<DrawerTab>(initialTab);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,15 +108,17 @@ export function Drawer({ task, config, onClose, onChanged, initialTab = 'run', n
       setBusy(label);
       setError(null);
       try {
-        await action();
-        onChanged();
+        const result = await action();
+        // Board mutations already reconciled on the server. Opening an editor
+        // needs no reconcile, and launches have their own delayed marker refresh.
+        if (Array.isArray(result)) onTasksChanged(result);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
         setBusy(null);
       }
     },
-    [onChanged],
+    [onTasksChanged],
   );
 
   const issueUrl = `https://github.com/${config.repo.owner}/${config.repo.name}/issues/${task.issue}`;

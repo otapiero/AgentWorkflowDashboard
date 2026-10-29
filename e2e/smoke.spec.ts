@@ -92,6 +92,22 @@ test('the command palette finds a task by title and opens it', async ({ page }) 
   await expect(page.getByRole('dialog', { name: 'Issue 102' })).toBeVisible();
 });
 
+test('moving a task uses the returned board without a second reconcile', async ({ page }) => {
+  const drawer = await openTask(page, 101);
+  await drawer.getByRole('tab', { name: 'Setup' }).click();
+  const reconciles: string[] = [];
+  page.on('request', request => { if (request.url().endsWith('/api/reconcile')) reconciles.push(request.url()); });
+  try {
+    const response = page.waitForResponse(response => response.url().endsWith('/api/tasks/101/move'));
+    await drawer.locator('select').filter({ has: page.getByRole('option', { name: 'Follow real status', exact: true }) }).selectOption('plan');
+    await response;
+    await expect(page.getByRole('region', { name: /^Plan, 2 tasks$/ }).getByRole('button', { name: /^Issue 101,/ })).toBeVisible();
+    expect(reconciles).toEqual([]);
+  } finally {
+    await page.request.post('/api/tasks/101/move', { data: { phase: null } });
+  }
+});
+
 test('a note saved from the panel survives a reload', async ({ page }) => {
   const body = `Check the progress bar on narrow screens ${Date.now()}`;
   const panel = await notesPanel(page);

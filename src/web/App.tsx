@@ -204,9 +204,14 @@ export function App() {
 
   const refresh = useCallback(() => {
     setReviewsRefresh(value => value + 1);
-    api.reconcile().then(setTasks).catch((e: Error) => setError(e.message));
+    api.reconcile().then(handleTasks).catch((e: Error) => setError(e.message));
     api.config().then(setConfig).catch(() => {});
-  }, []);
+  }, [handleTasks]);
+
+  const settingsChanged = useCallback((next: TaskWithDerived[]) => {
+    handleTasks(next);
+    loadConfig();
+  }, [handleTasks, loadConfig]);
 
   // Kept rather than inlined as `tasks`: Board and the rail both read it, and
   // it stays the seam if filtering ever returns.
@@ -406,7 +411,7 @@ export function App() {
       {importing && (
         <ImportDrawer
           onBoard={onBoard}
-          onImported={setTasks}
+          onImported={handleTasks}
           onClose={() => setImporting(false)}
         />
       )}
@@ -416,7 +421,7 @@ export function App() {
           config={config}
           focusPhase={settingsPhase}
           onClose={() => setSettingsOpen(false)}
-          onChanged={refresh}
+          onChanged={settingsChanged}
         />
       )}
 
@@ -426,6 +431,7 @@ export function App() {
           config={config}
           onClose={() => setSelected(null)}
           onChanged={refresh}
+          onTasksChanged={handleTasks}
           initialTab={initialTab}
           notes={notes}
           onNewNote={newNote}
