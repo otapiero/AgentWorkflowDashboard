@@ -1,8 +1,6 @@
 import { existsSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { execa } from 'execa';
-
-import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
+import { runGit } from './git.ts';
 import { reviewWorktreePath, worktreePath, worktreesDir } from './paths.ts';
 import type { Config } from '../shared/types.ts';
 
@@ -65,11 +63,7 @@ async function git(
   cwd: string,
 ): Promise<{ stdout: string; ok: boolean }> {
   try {
-    const { stdout } = await execa('git', args, {
-      cwd,
-      reject: true,
-      timeout: SUBPROCESS_TIMEOUT_MS,
-    });
+    const { stdout } = await runGit(args, cwd);
     return { stdout, ok: true };
   } catch {
     return { stdout: '', ok: false };

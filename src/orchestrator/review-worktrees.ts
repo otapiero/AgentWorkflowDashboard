@@ -7,6 +7,7 @@ import type { Config } from '../shared/types.ts';
 import type { ReviewCleanupResult, ReviewRequest, ReviewWorktree } from '../shared/review-requests.ts';
 import { rescueAndRemoveWorktree } from './cleanup.ts';
 import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
+import { runGit } from './git.ts';
 import { reviewDir, reviewWorktreePath, reviewsDir } from './paths.ts';
 import { removeReviewWorktree } from './worktree.ts';
 
@@ -53,7 +54,7 @@ export function createReviewWorktrees(config: Config, deps: {
   const remove = deps.remove ?? removeReviewWorktree;
   const pending = new Map<number, Promise<unknown>>();
   const git = async (args: string[], cwd = config.repo.path) =>
-    (await execa('git', args, { cwd, timeout: SUBPROCESS_TIMEOUT_MS })).stdout.trim();
+    (await runGit(args, cwd)).stdout.trim();
 
   // Requests from multiple tabs must not create and remove the same checkout at once.
   async function serialized<T>(number: number, action: () => Promise<T>): Promise<T> {

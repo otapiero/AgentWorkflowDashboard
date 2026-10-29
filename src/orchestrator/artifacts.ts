@@ -9,9 +9,10 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { execa, execaSync } from 'execa';
+import { execaSync } from 'execa';
 
 import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
+import { runGit } from './git.ts';
 import {
   artifactsDir,
   artifactsManifestPath,
@@ -169,10 +170,7 @@ function gitStatusPathsSync(cwd: string): string[] {
 
 async function gitStatusPaths(cwd: string): Promise<string[]> {
   try {
-    const { stdout } = await execa('git', STATUS_ARGS, {
-      cwd,
-      timeout: SUBPROCESS_TIMEOUT_MS,
-    });
+    const { stdout } = await runGit(STATUS_ARGS, cwd);
     return parsePorcelainPaths(stdout);
   } catch {
     return [];

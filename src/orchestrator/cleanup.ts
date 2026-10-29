@@ -1,8 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
-import { execa } from 'execa';
+import { runGit } from './git.ts';
 
-import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
 import { taskDir, worktreePath } from './paths.ts';
 import { removeWorktree } from './worktree.ts';
 import type { Config, Phase } from '../shared/types.ts';
@@ -137,11 +136,7 @@ function orphanFiles(worktree: string, relative = ''): string[] {
 
 async function git(args: string[], cwd: string): Promise<{ stdout: string; ok: boolean }> {
   try {
-    const { stdout } = await execa('git', args, {
-      cwd,
-      reject: true,
-      timeout: SUBPROCESS_TIMEOUT_MS,
-    });
+    const { stdout } = await runGit(args, cwd);
     return { stdout, ok: true };
   } catch {
     return { stdout: '', ok: false };
