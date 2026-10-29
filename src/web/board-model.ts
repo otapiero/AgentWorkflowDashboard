@@ -1,5 +1,8 @@
 import type { Phase, TaskWithDerived } from '../shared/types.ts';
 
+/** The board retains display data, not duplicate spawn histories and PR stacks. */
+export type BoardTask = Pick<TaskWithDerived, 'issue' | 'title' | 'derived' | 'pinned' | 'unreachable'>;
+
 export interface LaneCount {
   id: Phase;
   count: number;
@@ -34,6 +37,19 @@ export function laneLayout(counts: LaneCount[]): LaneLayout[] {
 }
 
 /** The tasks the rail shows. Board order is kept — it is a filter, not a sort. */
-export function attentionTasks(tasks: TaskWithDerived[]): TaskWithDerived[] {
+export function attentionTasks(tasks: BoardTask[]): BoardTask[] {
   return tasks.filter((t) => t.derived.needsYou);
+}
+
+/** Cards do not display observation times. Keep their input identity stable
+ * while App retains the complete fresh observations for the details drawer. */
+export function reuseBoardTasks(previous: BoardTask[], incoming: TaskWithDerived[]): BoardTask[] {
+  const byIssue = new Map(previous.map(task => [task.issue, task]));
+  const display = ({ issue, title, derived, pinned, unreachable }: BoardTask): BoardTask => ({ issue, title, derived, pinned, unreachable });
+  const next = incoming.map(task => {
+    const old = byIssue.get(task.issue);
+    const rendered = display(task);
+    return old && JSON.stringify(display(old)) === JSON.stringify(rendered) ? old : rendered;
+  });
+  return next.length === previous.length && next.every((task, index) => task === previous[index]) ? previous : next;
 }

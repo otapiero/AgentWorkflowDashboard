@@ -1,10 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { execa } from 'execa';
+import { runGit } from './git.ts';
 import type { Config, TaskRecord } from '../shared/types.ts';
 import type { ExecutionTarget } from './execution-target.ts';
 import { taskDir, worktreePath, worktreesDir } from './paths.ts';
-import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
 import { rescueAndRemoveWorktree } from './cleanup.ts';
 import { removeLayerWorktree } from './worktree.ts';
 
@@ -19,7 +18,7 @@ export function ownedLayerWorktrees(issue: number): OwnedLayer[] {
 }
 
 export async function ensureLayerWorktree(config: Config, task: TaskRecord, target: ExecutionTarget): Promise<void> {
-  const git = async (args: string[], cwd = config.repo.path) => (await execa('git', args, { cwd, timeout: SUBPROCESS_TIMEOUT_MS })).stdout.trim();
+  const git = async (args: string[], cwd = config.repo.path) => (await runGit(args, cwd)).stdout.trim();
   if (resolve(target.worktreePath) !== resolve(worktreePath(task.issue))) throw new Error('Stack layers must use the issue worktree');
   await git(['check-ref-format', '--branch', target.branch]);
   const exists = existsSync(target.worktreePath);

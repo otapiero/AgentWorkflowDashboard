@@ -1,7 +1,10 @@
 import { Card } from './Card.tsx';
 import { AgentChip, IconCheck, IconPullRequest } from './bits.tsx';
 import type { BoardConfig } from '../api.ts';
-import type { PhaseConfig, TaskWithDerived } from '../../shared/types.ts';
+import type { PhaseConfig } from '../../shared/types.ts';
+import type { BoardTask } from '../board-model.ts';
+import { usePagedItems } from '../use-paged-items.ts';
+import { ListPagination } from './ListPagination.tsx';
 
 /** Done keeps its history short on the board: the rest is in the Done view. */
 const DONE_PREVIEW = 8;
@@ -18,13 +21,14 @@ export function DoneList({
   limit,
   onShowAll,
 }: {
-  tasks: TaskWithDerived[];
+  tasks: BoardTask[];
   selectedIssue: number | null;
   onOpen: (issue: number) => void;
   limit?: number;
   onShowAll?: () => void;
 }) {
-  const shown = limit === undefined ? tasks : tasks.slice(0, limit);
+  const page = usePagedItems(tasks, limit ?? 50, 'done', null, task => task.issue);
+  const shown = page.items;
   return (
     <div className="done-list">
       {shown.map((task) => {
@@ -54,13 +58,14 @@ export function DoneList({
           Show {tasks.length - shown.length} more
         </button>
       )}
+      {limit === undefined && <ListPagination label="Finished task pages" {...page} />}
     </div>
   );
 }
 
 interface Props {
   phase: PhaseConfig;
-  tasks: TaskWithDerived[];
+  tasks: BoardTask[];
   config: BoardConfig;
   selectedIssue: number | null;
   noteCounts: Record<number, number>;

@@ -1,17 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api, subscribe } from './api.ts';
 import type { BoardConfig, PollMeta } from './api.ts';
 import { needsYouIssues, newlyNeedsYou } from './notify.ts';
 import { AttentionRail } from './components/AttentionRail.tsx';
 import { Board, boardLanes } from './components/Board.tsx';
-import { CommandPalette } from './components/CommandPalette.tsx';
 import type { PaletteItem } from './components/CommandPalette.tsx';
-import { Drawer } from './components/Drawer.tsx';
-import { ImportDrawer } from './components/ImportDrawer.tsx';
 import { DoneList } from './components/Lane.tsx';
-import { Settings } from './components/Settings.tsx';
 import { ReviewRequests } from './components/ReviewRequests.tsx';
+import { ConnectionStatus } from './components/ConnectionStatus.tsx';
+import { reuseBoardTasks, type BoardTask } from './board-model.ts';
 import {
   BrandMark,
   IconBell,
@@ -31,18 +29,14 @@ import { useNotes } from './use-notes.ts';
 import { noteCounts, notesProjectId } from './notes-model.ts';
 import type { NotesScope } from './notes-model.ts';
 import { NotesPanel } from './components/notes/NotesPanel.tsx';
-import { NoteEditor } from './components/notes/NoteEditor.tsx';
 import type { DrawerTab } from './components/drawer/types.ts';
 import { THEMES, useTheme } from './theme.ts';
 
-/** Compact "Ns" / "Nm" for the last-checked heartbeat. */
-function ago(from: string, nowMs: number): string {
-  const secs = Math.max(0, Math.round((nowMs - Date.parse(from)) / 1000));
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m`;
-  return `${Math.floor(mins / 60)}h`;
-}
+const Drawer = lazy(() => import('./components/Drawer.tsx').then(module => ({ default: module.Drawer })));
+const ImportDrawer = lazy(() => import('./components/ImportDrawer.tsx').then(module => ({ default: module.ImportDrawer })));
+const Settings = lazy(() => import('./components/Settings.tsx').then(module => ({ default: module.Settings })));
+const NoteEditor = lazy(() => import('./components/notes/NoteEditor.tsx').then(module => ({ default: module.NoteEditor })));
+const CommandPalette = lazy(() => import('./components/CommandPalette.tsx').then(module => ({ default: module.CommandPalette })));
 
 function readFlag(key: string, fallback: boolean): boolean {
   try {
@@ -75,6 +69,7 @@ function noteHeading(note: Note): string {
 export function App() {
   const [config, setConfig] = useState<BoardConfig | null>(null);
   const [tasks, setTasks] = useState<TaskWithDerived[]>([]);
+  const [boardTasks, setBoardTasks] = useState<BoardTask[]>([]);
   const [connected, setConnected] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [view, setView] = useState<'board' | 'done'>('board');
@@ -90,15 +85,15 @@ export function App() {
   const theme = useTheme();
   const projectId = config ? notesProjectId(config.repo.owner, config.repo.name) : '';
   const notes = useNotes(projectId);
-  const setNotesOpen = (open: boolean) => { setNotesOpenState(open); writeFlag('mc-notes-panel', open); };
-  const openTask = (issue: number) => { setInitialTab('run'); setSelected(issue); };
-  const openTaskNotes = (issue: number) => { setInitialTab('notes'); setSelected(issue); };
+  const setNotesOpen = useCallback((open: boolean) => { setNotesOpenState(open); writeFlag('mc-notes-panel', open); }, []);
+  const openTask = useCallback((issue: number) => { setInitialTab('run'); setSelected(issue); }, []);
+  const openTaskNotes = useCallback((issue: number) => { setInitialTab('notes'); setSelected(issue); }, []);
   const newNote = (taskIssue: number | null) => setEditor({ note: null, taskIssue });
   const editNote = (note: Note) => setEditor({ note, taskIssue: note.taskIssue });
   /** Show the panel scoped to one task, e.g. from the drawer's "View in all notes". */
   const viewTaskNotes = (issue: number) => { setSelected(null); setNotesOpen(true); setNotesScope({ kind: 'task', issue }); setNotesQuery(''); };
   /** Bring one note into view in the panel. */
-  const revealNote = (note: Note) => { setNotesOpen(true); setNotesScope({ kind: 'all' }); setNotesQuery(''); setRevealedNote(note); };
+  const revealNote = (note: Note) => { setNotesOpen(true); setNotesScope({ kind: 'all' }); setNotesQuery(''); setRevealedNote({ ...note }); };
   function savedNote(note: Note) {
     setEditor(null); setRevealedNote(note); setNotesQuery('');
     setNotesScope(note.taskIssue === null ? { kind: 'general' } : { kind: 'task', issue: note.taskIssue });
@@ -110,7 +105,6 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollMeta, setPollMeta] = useState<PollMeta | null>(null);
-  const [now, setNow] = useState(() => Date.now());
   const [notifyOn, setNotifyOn] = useState(
     () => typeof localStorage !== 'undefined' && localStorage.getItem('mc-notify') === 'on',
   );
@@ -133,6 +127,7 @@ export function App() {
   // that just flipped into needs-you. The first push only sets the baseline.
   const handleTasks = useCallback((next: TaskWithDerived[]) => {
     setTasks(next);
+    setBoardTasks(previous => reuseBoardTasks(previous, next));
     const current = needsYouIssues(next);
     if (!initialized.current) {
       initialized.current = true;
@@ -159,12 +154,6 @@ export function App() {
     [handleTasks, notes.onConnection, notes.onOpen, notes.onNotes, notes.onNotesStatus],
   );
   useEffect(() => { void notes.refreshTasks(); }, [tasks, notes.refreshTasks]);
-
-  // A local clock so "checked Ns ago" advances between pushes.
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   // Ctrl+K opens the palette from anywhere; N starts a note when no field or
   // dialog has the keyboard.
@@ -204,19 +193,27 @@ export function App() {
 
   const refresh = useCallback(() => {
     setReviewsRefresh(value => value + 1);
-    api.reconcile().then(setTasks).catch((e: Error) => setError(e.message));
+    api.reconcile().then(handleTasks).catch((e: Error) => setError(e.message));
     api.config().then(setConfig).catch(() => {});
-  }, []);
+  }, [handleTasks]);
+
+  const settingsChanged = useCallback((next: TaskWithDerived[]) => {
+    handleTasks(next);
+    loadConfig();
+  }, [handleTasks, loadConfig]);
 
   // Kept rather than inlined as `tasks`: Board and the rail both read it, and
   // it stays the seam if filtering ever returns.
-  const visible = tasks;
+  const visible = boardTasks;
   const selectedTask = tasks.find((t) => t.issue === selected) ?? null;
 
-  function editDefault(phaseId: string) {
+  const editDefault = useCallback((phaseId: string) => {
     setSettingsPhase(phaseId);
     setSettingsOpen(true);
-  }
+  }, []);
+
+  const counts = useMemo(() => noteCounts(notes.notes), [notes.notes]);
+  const doneTasks = useMemo(() => boardTasks.filter(task => task.derived.displayPhase === 'done'), [boardTasks]);
 
   if (!config) {
     return (
@@ -235,12 +232,10 @@ export function App() {
   }
 
   const onBoard = new Set(tasks.map((t) => t.issue));
-  const counts = noteCounts(notes.notes);
-  const doneTasks = tasks.filter((t) => t.derived.displayPhase === 'done');
   const phaseLabel = new Map(boardLanes(config).map((p) => [p.id, p.label]));
   const repoUrl = `https://github.com/${config.repo.owner}/${config.repo.name}`;
 
-  const paletteItems: PaletteItem[] = [
+  const paletteItems: PaletteItem[] = paletteOpen ? [
     { id: 'a-import', group: 'Actions', label: 'New task from issue', icon: <IconPlus />, run: () => setImporting(true) },
     { id: 'a-note', group: 'Actions', label: 'New note', hint: 'N', icon: <IconNote />, run: () => newNote(selected) },
     { id: 'a-notes', group: 'Actions', label: notesOpen ? 'Hide notes panel' : 'Show notes panel', icon: <IconSidebar />, run: () => setNotesOpen(!notesOpen) },
@@ -249,7 +244,7 @@ export function App() {
     ...THEMES.map((t): PaletteItem => ({ id: `a-theme-${t.id}`, group: 'Actions', label: `Theme: ${t.label}`, hint: theme.choice === t.id ? 'current' : t.hint, icon: <IconContrast />, run: () => theme.choose(t.id) })),
     ...tasks.map((t): PaletteItem => ({ id: `t-${t.issue}`, group: 'Tasks', label: t.title, hint: `#${t.issue} · ${phaseLabel.get(t.derived.displayPhase) ?? t.derived.displayPhase}`, icon: <IconTask />, run: () => openTask(t.issue) })),
     ...notes.notes.filter((n) => n.status === 'active').map((n): PaletteItem => ({ id: `n-${n.id}`, group: 'Notes', label: noteHeading(n), hint: n.taskIssue === null ? 'General' : `#${n.taskIssue}`, icon: <IconNote />, run: () => revealNote(n) })),
-  ];
+  ] : [];
 
   return (
     <div className="app">
@@ -312,30 +307,7 @@ export function App() {
           <button className="btn is-sm is-primary" onClick={() => setImporting(true)}>
             <IconPlus /> New from issue
           </button>
-          <button
-            type="button"
-            className="conn-status"
-            onClick={refresh}
-            title={
-              pollMeta?.rateLimit
-                ? `${connected ? 'Live' : 'Offline'}. Last checked GitHub ${ago(pollMeta.checkedAt, now)} ago; ${pollMeta.rateLimit.remaining} of ${pollMeta.rateLimit.limit} API calls left this hour. Click to re-check now.`
-                : `${connected ? 'Live' : 'Offline'}. Click to re-check GitHub now.`
-            }
-          >
-            <span className={`conn-dot${connected ? ' is-on' : ' is-off'}`} />
-            {pollMeta ? (
-              <>
-                <span>{ago(pollMeta.checkedAt, now)}</span>
-                {pollMeta.rateLimit && (
-                  <span className={pollMeta.rateLimit.remaining < 500 ? 'is-low' : undefined}>
-                    · {pollMeta.rateLimit.remaining.toLocaleString()} API
-                  </span>
-                )}
-              </>
-            ) : (
-              <span>{connected ? 'live' : 'offline'}</span>
-            )}
-          </button>
+          <ConnectionStatus connected={connected} pollMeta={pollMeta} onRefresh={refresh} />
         </div>
       </header>
 
@@ -361,11 +333,13 @@ export function App() {
               <AttentionRail
                 tasks={visible}
                 notes={notes.notes}
-                now={now}
                 config={config}
                 selectedIssue={selected}
                 onOpen={openTask}
-                onOpenNote={(note) => (note.taskIssue === null ? revealNote(note) : openTaskNotes(note.taskIssue))}
+                onOpenNote={(note) => {
+                  if (note.taskIssue === null) revealNote(note);
+                  else { setRevealedNote({ ...note }); openTaskNotes(note.taskIssue); }
+                }}
               />
             </Board>
           ) : (
@@ -403,40 +377,43 @@ export function App() {
         )}
       </div>
 
-      {importing && (
-        <ImportDrawer
-          onBoard={onBoard}
-          onImported={setTasks}
-          onClose={() => setImporting(false)}
-        />
-      )}
+      <Suspense fallback={<p className="note" role="status">Loading…</p>}>
+        {importing && (
+          <ImportDrawer
+            onBoard={onBoard}
+            onImported={handleTasks}
+            onClose={() => setImporting(false)}
+          />
+        )}
 
-      {settingsOpen && (
-        <Settings
-          config={config}
-          focusPhase={settingsPhase}
-          onClose={() => setSettingsOpen(false)}
-          onChanged={refresh}
-        />
-      )}
+        {settingsOpen && (
+          <Settings
+            config={config}
+            focusPhase={settingsPhase}
+            onClose={() => setSettingsOpen(false)}
+            onChanged={settingsChanged}
+          />
+        )}
 
-      {selectedTask && (
-        <Drawer
-          task={selectedTask}
-          config={config}
-          onClose={() => setSelected(null)}
-          onChanged={refresh}
-          initialTab={initialTab}
-          notes={notes}
-          onNewNote={newNote}
-          onEditNote={editNote}
-          onOpenTaskNotes={openTaskNotes}
-          onViewTaskNotes={viewTaskNotes}
-          revealedNote={revealedNote}
-        />
-      )}
-      {editor && <NoteEditor controller={notes} note={editor.note} taskIssue={editor.taskIssue} onClose={() => setEditor(null)} onSaved={savedNote} />}
-      {paletteOpen && <CommandPalette items={paletteItems} onClose={() => setPaletteOpen(false)} />}
+        {selectedTask && (
+          <Drawer
+            task={selectedTask}
+            config={config}
+            onClose={() => setSelected(null)}
+            onChanged={refresh}
+            onTasksChanged={handleTasks}
+            initialTab={initialTab}
+            notes={notes}
+            onNewNote={newNote}
+            onEditNote={editNote}
+            onOpenTaskNotes={openTaskNotes}
+            onViewTaskNotes={viewTaskNotes}
+            revealedNote={revealedNote}
+          />
+        )}
+        {editor && <NoteEditor controller={notes} note={editor.note} taskIssue={editor.taskIssue} onClose={() => setEditor(null)} onSaved={savedNote} />}
+        {paletteOpen && <CommandPalette items={paletteItems} onClose={() => setPaletteOpen(false)} />}
+      </Suspense>
     </div>
   );
 }

@@ -1,13 +1,13 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { useMemo, type CSSProperties, type ReactNode } from 'react';
 
 import { Lane, laneDomId } from './Lane.tsx';
-import { laneLayout } from '../board-model.ts';
+import { laneLayout, type BoardTask } from '../board-model.ts';
 import type { BoardConfig } from '../api.ts';
-import type { PhaseConfig, Phase, TaskWithDerived } from '../../shared/types.ts';
+import type { PhaseConfig, Phase } from '../../shared/types.ts';
 
 interface Props {
   config: BoardConfig;
-  tasks: TaskWithDerived[];
+  tasks: BoardTask[];
   selectedIssue: number | null;
   noteCounts: Record<number, number>;
   onOpen: (issue: number) => void;
@@ -49,13 +49,17 @@ export function Board({
   onShowDone,
   children,
 }: Props) {
-  const lanes = boardLanes(config);
-
-  const byPhase = new Map<Phase, TaskWithDerived[]>();
-  for (const task of tasks) {
-    const phase = task.derived.displayPhase;
-    byPhase.set(phase, [...(byPhase.get(phase) ?? []), task]);
-  }
+  const lanes = useMemo(() => boardLanes(config), [config]);
+  const byPhase = useMemo(() => {
+    const groups = new Map<Phase, BoardTask[]>();
+    for (const task of tasks) {
+      const phase = task.derived.displayPhase;
+      const group = groups.get(phase);
+      if (group) group.push(task);
+      else groups.set(phase, [task]);
+    }
+    return groups;
+  }, [tasks]);
 
   const layout = laneLayout(
     lanes.map((phase) => ({ id: phase.id, count: (byPhase.get(phase.id) ?? []).length })),

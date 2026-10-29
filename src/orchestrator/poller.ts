@@ -73,6 +73,10 @@ export function pinnedFor(
   return resolveAgent(config, task, derived.displayPhase, phaseDefaults);
 }
 
+function stackSignature(stack: TaskRecord['stack']): string | undefined {
+  return JSON.stringify(stack, (key, value) => key === 'checkedAt' ? undefined : value);
+}
+
 /**
  * Recompute the whole board from durable facts.
  *
@@ -146,7 +150,7 @@ export async function reconcileAll(
           task.prUrl !== updated.prUrl ||
           task.prState !== updated.prState ||
           task.mergedAt !== updated.mergedAt ||
-          JSON.stringify(task.stack) !== JSON.stringify(updated.stack) ||
+          stackSignature(task.stack) !== stackSignature(updated.stack) ||
           task.lastReconciledAt === null
         ) {
           const index = state.tasks.findIndex((t) => t.issue === task.issue);

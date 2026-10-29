@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { execa } from 'execa';
 
 import { SUBPROCESS_TIMEOUT_MS } from './exec.ts';
+import { runGit } from './git.ts';
 import { render } from './prompt.ts';
 import { projectHome, projectSlug, setActiveProject } from './paths.ts';
 
@@ -46,10 +47,7 @@ interface RepoView {
 export async function detectRepo(cwd: string): Promise<DetectedRepo> {
   let path: string;
   try {
-    const out = await execa('git', ['rev-parse', '--show-toplevel'], {
-      cwd,
-      timeout: SUBPROCESS_TIMEOUT_MS,
-    });
+    const out = await runGit(['rev-parse', '--show-toplevel'], cwd);
     path = resolve(out.stdout.trim());
   } catch {
     throw new Error(

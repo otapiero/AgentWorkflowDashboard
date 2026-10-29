@@ -1,13 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
 import { api } from '../api.ts';
 import type { BoardConfig } from '../api.ts';
 import { AgentChip } from './bits.tsx';
 import { RunTab } from './drawer/RunTab.tsx';
-import { PlanTab } from './drawer/PlanTab.tsx';
-import { HistoryTab } from './drawer/HistoryTab.tsx';
-import { SetupTab } from './drawer/SetupTab.tsx';
 import type { DrawerTab, TabProps } from './drawer/types.ts';
 import type { TaskWithDerived } from '../../shared/types.ts';
 import type { Note } from '../../shared/notes.ts';
@@ -16,11 +13,16 @@ import { noteCounts } from '../notes-model.ts';
 import { NotesTab } from './drawer/NotesTab.tsx';
 import { StackLayers } from './drawer/StackLayers.tsx';
 
+const PlanTab = lazy(() => import('./drawer/PlanTab.tsx').then(module => ({ default: module.PlanTab })));
+const HistoryTab = lazy(() => import('./drawer/HistoryTab.tsx').then(module => ({ default: module.HistoryTab })));
+const SetupTab = lazy(() => import('./drawer/SetupTab.tsx').then(module => ({ default: module.SetupTab })));
+
 interface Props {
   task: TaskWithDerived;
   config: BoardConfig;
   onClose: () => void;
   onChanged: () => void;
+  onTasksChanged: (tasks: TaskWithDerived[]) => void;
   initialTab?: DrawerTab;
   notes: NotesController;
   onNewNote: (issue: number) => void;
@@ -54,7 +56,7 @@ function clampWidth(px: number): number {
  * is "launch something", and remembering you were last on History is not a
  * service.
  */
-export function Drawer({ task, config, onClose, onChanged, initialTab = 'run', notes, onNewNote, onEditNote, onOpenTaskNotes, onViewTaskNotes, revealedNote }: Props) {
+export function Drawer({ task, config, onClose, onChanged, onTasksChanged, initialTab = 'run', notes, onNewNote, onEditNote, onOpenTaskNotes, onViewTaskNotes, revealedNote }: Props) {
   const [tab, setTab] = useState<DrawerTab>(initialTab);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,15 +109,17 @@ export function Drawer({ task, config, onClose, onChanged, initialTab = 'run', n
       setBusy(label);
       setError(null);
       try {
-        await action();
-        onChanged();
+        const result = await action();
+        // Board mutations already reconciled on the server. Opening an editor
+        // needs no reconcile, and launches have their own delayed marker refresh.
+        if (Array.isArray(result)) onTasksChanged(result);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
       } finally {
         setBusy(null);
       }
     },
-    [onChanged],
+    [onTasksChanged],
   );
 
   const issueUrl = `https://github.com/${config.repo.owner}/${config.repo.name}/issues/${task.issue}`;
@@ -220,11 +224,13 @@ export function Drawer({ task, config, onClose, onChanged, initialTab = 'run', n
         )}
 
         <div className="drawer-body">
-          {tab === 'run' && <RunTab {...tabProps} />}
-          {tab === 'plan' && <PlanTab {...tabProps} />}
-          {tab === 'notes' && <NotesTab key={task.issue} issue={task.issue} controller={notes} repoUrl={`https://github.com/${config.repo.owner}/${config.repo.name}`} onNew={onNewNote} onEdit={onEditNote} onOpenTask={onOpenTaskNotes} onViewAll={onViewTaskNotes} revealed={revealedNote} />}
-          {tab === 'history' && <HistoryTab {...tabProps} />}
-          {tab === 'setup' && <SetupTab {...tabProps} />}
+          <Suspense fallback={<p className="note" role="status">Loading task details…</p>}>
+            {tab === 'run' && <RunTab {...tabProps} />}
+            {tab === 'plan' && <PlanTab {...tabProps} />}
+            {tab === 'notes' && <NotesTab key={task.issue} issue={task.issue} controller={notes} repoUrl={`https://github.com/${config.repo.owner}/${config.repo.name}`} onNew={onNewNote} onEdit={onEditNote} onOpenTask={onOpenTaskNotes} onViewAll={onViewTaskNotes} revealed={revealedNote} />}
+            {tab === 'history' && <HistoryTab {...tabProps} />}
+            {tab === 'setup' && <SetupTab {...tabProps} />}
+          </Suspense>
         </div>
       </aside>
     </>
