@@ -103,8 +103,27 @@ test('moving a task uses the returned board without a second reconcile', async (
     await response;
     await expect(page.getByRole('region', { name: /^Plan, 2 tasks$/ }).getByRole('button', { name: /^Issue 101,/ })).toBeVisible();
     expect(reconciles).toEqual([]);
+    // An empty mutation result is authoritative even without an SSE push.
+    await page.route('**/api/tasks/101/move', route => route.fulfill({ json: [] }));
+    await drawer.locator('select').filter({ has: page.getByRole('option', { name: 'Follow real status', exact: true }) }).selectOption('');
+    await expect(page.getByText('No tasks yet. Use “New from issue” to add one.')).toBeVisible();
+    expect(reconciles).toEqual([]);
   } finally {
     await page.request.post('/api/tasks/101/move', { data: { phase: null } });
+  }
+});
+
+test('saving launcher settings reloads configuration without reconciling twice', async ({ page }) => {
+  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Agents & launch' });
+  const reconciles: string[] = [];
+  page.on('request', request => { if (request.url().endsWith('/api/reconcile')) reconciles.push(request.url()); });
+  try {
+    await settings.getByRole('radio', { name: /VS Code/ }).click();
+    await expect(settings.getByRole('radio', { name: /VS Code/ })).toHaveAttribute('aria-checked', 'true');
+    expect(reconciles).toEqual([]);
+  } finally {
+    await page.request.post('/api/settings', { data: { launcher: 'wt' } });
   }
 });
 
@@ -151,4 +170,22 @@ test('the notes task filter opens inside the window', async ({ page }) => {
   const width = page.viewportSize()!.width;
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(width);
+});
+
+test('saving a plan still requests exactly one board reconcile', async ({ page }) => {
+  const { content } = await (await page.request.get('/api/tasks/102/plan')).json();
+  const drawer = await openTask(page, 102);
+  await drawer.getByRole('tab', { name: 'Plan', exact: true }).click();
+  await drawer.getByRole('button', { name: 'Open documents', exact: true }).click();
+  const documents = page.getByRole('dialog', { name: 'Documents for #102' });
+  const reconciles: string[] = [];
+  page.on('request', request => { if (request.url().endsWith('/api/reconcile')) reconciles.push(request.url()); });
+  try {
+    await documents.locator('textarea').fill(`${content}\nUpdated widget plan.\n`);
+    await documents.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(documents.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+    await expect.poll(() => reconciles.length).toBe(1);
+  } finally {
+    await page.request.put('/api/tasks/102/plan', { data: { content } });
+  }
 });

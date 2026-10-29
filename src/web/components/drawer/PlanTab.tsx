@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 
 import { api } from '../../api.ts';
-import { DocumentWorkbench } from '../DocumentWorkbench.tsx';
 import type { DocId } from '../../doc-model.ts';
 import type { TabProps } from './types.ts';
+
+const DocumentWorkbench = lazy(() => import('../DocumentWorkbench.tsx').then(module => ({ default: module.DocumentWorkbench })));
 
 export function PlanTab({ task, busy, run, onChanged }: TabProps) {
   const [plan, setPlan] = useState<string | null>(null);
@@ -86,16 +87,18 @@ export function PlanTab({ task, busy, run, onChanged }: TabProps) {
       )}
 
       {open && (
-        <DocumentWorkbench
-          issue={task.issue}
-          artifacts={task.derived.artifacts}
-          initial={open}
-          onClose={() => setOpen(null)}
-          onPlanSaved={(content) => {
-            setPlan(content);
-            onChanged();
-          }}
-        />
+        <Suspense fallback={<p className="note" role="status">Loading documents…</p>}>
+          <DocumentWorkbench
+            issue={task.issue}
+            artifacts={task.derived.artifacts}
+            initial={open}
+            onClose={() => setOpen(null)}
+            onPlanSaved={(content) => {
+              setPlan(content);
+              onChanged();
+            }}
+          />
+        </Suspense>
       )}
     </>
   );

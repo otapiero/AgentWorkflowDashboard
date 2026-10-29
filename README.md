@@ -100,6 +100,14 @@ npm start       # serves the built UI from Fastify on http://127.0.0.1:4317
 npm run dev     # Vite dev server + Fastify
 ```
 
+After a frontend update, run `npm run build` once. Ordinary launches with
+`npm start` or `start-mission-control.bat` reuse that build. Backend-only changes
+need a server restart.
+
+The Done view shows 50 tasks per page, and notes show 20 per page in each active
+or settled section. Note search covers the complete saved text, and opening a
+note shows its full body even when its card only shows a short preview.
+
 Then open http://127.0.0.1:4317. Stop the app with Ctrl+C — it loses nothing,
 because state is re-derived from git/GitHub and the workspace on the next start.
 Agent terminals opened by a spawn run independently and keep going after the app

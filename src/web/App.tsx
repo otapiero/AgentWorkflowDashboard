@@ -1,16 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api, subscribe } from './api.ts';
 import type { BoardConfig, PollMeta } from './api.ts';
 import { needsYouIssues, newlyNeedsYou } from './notify.ts';
 import { AttentionRail } from './components/AttentionRail.tsx';
 import { Board, boardLanes } from './components/Board.tsx';
-import { CommandPalette } from './components/CommandPalette.tsx';
 import type { PaletteItem } from './components/CommandPalette.tsx';
-import { Drawer } from './components/Drawer.tsx';
-import { ImportDrawer } from './components/ImportDrawer.tsx';
 import { DoneList } from './components/Lane.tsx';
-import { Settings } from './components/Settings.tsx';
 import { ReviewRequests } from './components/ReviewRequests.tsx';
 import { ConnectionStatus } from './components/ConnectionStatus.tsx';
 import { reuseBoardTasks, type BoardTask } from './board-model.ts';
@@ -33,9 +29,14 @@ import { useNotes } from './use-notes.ts';
 import { noteCounts, notesProjectId } from './notes-model.ts';
 import type { NotesScope } from './notes-model.ts';
 import { NotesPanel } from './components/notes/NotesPanel.tsx';
-import { NoteEditor } from './components/notes/NoteEditor.tsx';
 import type { DrawerTab } from './components/drawer/types.ts';
 import { THEMES, useTheme } from './theme.ts';
+
+const Drawer = lazy(() => import('./components/Drawer.tsx').then(module => ({ default: module.Drawer })));
+const ImportDrawer = lazy(() => import('./components/ImportDrawer.tsx').then(module => ({ default: module.ImportDrawer })));
+const Settings = lazy(() => import('./components/Settings.tsx').then(module => ({ default: module.Settings })));
+const NoteEditor = lazy(() => import('./components/notes/NoteEditor.tsx').then(module => ({ default: module.NoteEditor })));
+const CommandPalette = lazy(() => import('./components/CommandPalette.tsx').then(module => ({ default: module.CommandPalette })));
 
 function readFlag(key: string, fallback: boolean): boolean {
   try {
@@ -92,7 +93,7 @@ export function App() {
   /** Show the panel scoped to one task, e.g. from the drawer's "View in all notes". */
   const viewTaskNotes = (issue: number) => { setSelected(null); setNotesOpen(true); setNotesScope({ kind: 'task', issue }); setNotesQuery(''); };
   /** Bring one note into view in the panel. */
-  const revealNote = (note: Note) => { setNotesOpen(true); setNotesScope({ kind: 'all' }); setNotesQuery(''); setRevealedNote(note); };
+  const revealNote = (note: Note) => { setNotesOpen(true); setNotesScope({ kind: 'all' }); setNotesQuery(''); setRevealedNote({ ...note }); };
   function savedNote(note: Note) {
     setEditor(null); setRevealedNote(note); setNotesQuery('');
     setNotesScope(note.taskIssue === null ? { kind: 'general' } : { kind: 'task', issue: note.taskIssue });
@@ -373,41 +374,43 @@ export function App() {
         )}
       </div>
 
-      {importing && (
-        <ImportDrawer
-          onBoard={onBoard}
-          onImported={handleTasks}
-          onClose={() => setImporting(false)}
-        />
-      )}
+      <Suspense fallback={<p className="note" role="status">Loading…</p>}>
+        {importing && (
+          <ImportDrawer
+            onBoard={onBoard}
+            onImported={handleTasks}
+            onClose={() => setImporting(false)}
+          />
+        )}
 
-      {settingsOpen && (
-        <Settings
-          config={config}
-          focusPhase={settingsPhase}
-          onClose={() => setSettingsOpen(false)}
-          onChanged={settingsChanged}
-        />
-      )}
+        {settingsOpen && (
+          <Settings
+            config={config}
+            focusPhase={settingsPhase}
+            onClose={() => setSettingsOpen(false)}
+            onChanged={settingsChanged}
+          />
+        )}
 
-      {selectedTask && (
-        <Drawer
-          task={selectedTask}
-          config={config}
-          onClose={() => setSelected(null)}
-          onChanged={refresh}
-          onTasksChanged={handleTasks}
-          initialTab={initialTab}
-          notes={notes}
-          onNewNote={newNote}
-          onEditNote={editNote}
-          onOpenTaskNotes={openTaskNotes}
-          onViewTaskNotes={viewTaskNotes}
-          revealedNote={revealedNote}
-        />
-      )}
-      {editor && <NoteEditor controller={notes} note={editor.note} taskIssue={editor.taskIssue} onClose={() => setEditor(null)} onSaved={savedNote} />}
-      {paletteOpen && <CommandPalette items={paletteItems} onClose={() => setPaletteOpen(false)} />}
+        {selectedTask && (
+          <Drawer
+            task={selectedTask}
+            config={config}
+            onClose={() => setSelected(null)}
+            onChanged={refresh}
+            onTasksChanged={handleTasks}
+            initialTab={initialTab}
+            notes={notes}
+            onNewNote={newNote}
+            onEditNote={editNote}
+            onOpenTaskNotes={openTaskNotes}
+            onViewTaskNotes={viewTaskNotes}
+            revealedNote={revealedNote}
+          />
+        )}
+        {editor && <NoteEditor controller={notes} note={editor.note} taskIssue={editor.taskIssue} onClose={() => setEditor(null)} onSaved={savedNote} />}
+        {paletteOpen && <CommandPalette items={paletteItems} onClose={() => setPaletteOpen(false)} />}
+      </Suspense>
     </div>
   );
 }

@@ -31,22 +31,22 @@
 
 **Interfaces:** Consume existing mutation task-array responses; pass task updates separately from explicit reconcile requests. Compare stack content without checkedAt.
 
-- [ ] Add and run failing regression tests for duplicate action requests and timestamp-only state-file writes.
-- [ ] Consume mutation results, retain document/manual reconcile behavior, reload settings configuration independently.
-- [ ] Ignore checkedAt when comparing persisted stacks; preserve meaningful changes.
-- [ ] Run targeted tests and deliberately break the write invariant once.
-- [ ] Commit the task and record verification.
+- [x] Add and run failing regression tests for duplicate action requests and timestamp-only state-file writes.
+- [x] Consume mutation results, retain document/manual reconcile behavior, reload settings configuration independently.
+- [x] Ignore checkedAt when comparing persisted stacks; preserve meaningful changes.
+- [x] Run targeted tests and deliberately break the write invariant once.
+- [x] Commit the task and record verification.
 
 ### Task 2: Git concurrency
 
-**Files:** `src/orchestrator/worktree.ts`, a focused scheduling helper if needed, `test/git-concurrency.test.ts`.
+**Files:** `src/orchestrator/git.ts`, `src/orchestrator/worktree.ts`, other asynchronous Git callers, `test/git-concurrency.test.ts`.
 
-**Interfaces:** Keep existing Git result semantics; bound every worktree-module subprocess across concurrent callers.
+**Interfaces:** Keep existing Git result semantics; share one process budget across asynchronous Git callers.
 
-- [ ] Write and run a failing concurrency/error-recovery test using deferred external-command results.
-- [ ] Add a four-slot queue with finally-based release.
-- [ ] Verify task Git facts and fallback behavior under queueing; deliberately bypass the limit and observe failure.
-- [ ] Commit the task and record verification.
+- [x] Write and run a failing concurrency/error-recovery test using deferred external-command results.
+- [x] Add a four-slot queue with finally-based release.
+- [x] Verify task Git facts and fallback behavior under queueing; deliberately bypass the limit and observe failure.
+- [x] Commit the task and record verification.
 
 ### Task 3: Rendering
 
@@ -54,10 +54,10 @@
 
 **Interfaces:** Preserve fresh task metadata while reusing unchanged render data; keep seconds and minute clocks below App.
 
-- [ ] Add regression coverage for task identity, actual changed cards, and clock isolation.
-- [ ] Isolate the clocks, stabilize callbacks/counts, group lanes in linear time, and memoize cards with stable inputs.
-- [ ] Run regressions and prove an identity invariant by mutation.
-- [ ] Commit the task and record verification.
+- [x] Add regression coverage for task identity, actual changed cards, and clock isolation.
+- [x] Isolate the clocks, stabilize callbacks/counts, group lanes in linear time, and memoize cards with stable inputs.
+- [x] Run regressions and prove an identity invariant by mutation.
+- [x] Commit the task and record verification.
 
 ### Task 4: Historical lists and final checks
 
@@ -65,8 +65,8 @@
 
 **Interfaces:** Page task/note rendering; search full retained collections; reveal targets regardless of page; lazily load large UI modules without changing note contracts.
 
-- [ ] Add failing tests for bounded lists and off-page note reveal/search.
-- [ ] Implement pagination, bounded previews, and lazy loading.
-- [ ] Prove pagination/reveal invariants by mutation and run production browser checks.
+- [x] Add failing tests for bounded lists and off-page note reveal/search.
+- [x] Implement pagination, bounded previews, and lazy loading.
+- [x] Prove pagination/reveal invariants by mutation and run production browser checks.
 - [ ] Run `npm run typecheck`, `npm test`, `npm --prefix vscode-extension run verify`, and `npm run test:e2e`.
 - [ ] Obtain one independent whole-branch review, fix material findings, commit, push, create and link the PR.

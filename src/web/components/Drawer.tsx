@@ -1,13 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
 import { api } from '../api.ts';
 import type { BoardConfig } from '../api.ts';
 import { AgentChip } from './bits.tsx';
 import { RunTab } from './drawer/RunTab.tsx';
-import { PlanTab } from './drawer/PlanTab.tsx';
-import { HistoryTab } from './drawer/HistoryTab.tsx';
-import { SetupTab } from './drawer/SetupTab.tsx';
 import type { DrawerTab, TabProps } from './drawer/types.ts';
 import type { TaskWithDerived } from '../../shared/types.ts';
 import type { Note } from '../../shared/notes.ts';
@@ -15,6 +12,10 @@ import type { NotesController } from '../use-notes.ts';
 import { noteCounts } from '../notes-model.ts';
 import { NotesTab } from './drawer/NotesTab.tsx';
 import { StackLayers } from './drawer/StackLayers.tsx';
+
+const PlanTab = lazy(() => import('./drawer/PlanTab.tsx').then(module => ({ default: module.PlanTab })));
+const HistoryTab = lazy(() => import('./drawer/HistoryTab.tsx').then(module => ({ default: module.HistoryTab })));
+const SetupTab = lazy(() => import('./drawer/SetupTab.tsx').then(module => ({ default: module.SetupTab })));
 
 interface Props {
   task: TaskWithDerived;
@@ -223,11 +224,13 @@ export function Drawer({ task, config, onClose, onChanged, onTasksChanged, initi
         )}
 
         <div className="drawer-body">
-          {tab === 'run' && <RunTab {...tabProps} />}
-          {tab === 'plan' && <PlanTab {...tabProps} />}
-          {tab === 'notes' && <NotesTab key={task.issue} issue={task.issue} controller={notes} repoUrl={`https://github.com/${config.repo.owner}/${config.repo.name}`} onNew={onNewNote} onEdit={onEditNote} onOpenTask={onOpenTaskNotes} onViewAll={onViewTaskNotes} revealed={revealedNote} />}
-          {tab === 'history' && <HistoryTab {...tabProps} />}
-          {tab === 'setup' && <SetupTab {...tabProps} />}
+          <Suspense fallback={<p className="note" role="status">Loading task details…</p>}>
+            {tab === 'run' && <RunTab {...tabProps} />}
+            {tab === 'plan' && <PlanTab {...tabProps} />}
+            {tab === 'notes' && <NotesTab key={task.issue} issue={task.issue} controller={notes} repoUrl={`https://github.com/${config.repo.owner}/${config.repo.name}`} onNew={onNewNote} onEdit={onEditNote} onOpenTask={onOpenTaskNotes} onViewAll={onViewTaskNotes} revealed={revealedNote} />}
+            {tab === 'history' && <HistoryTab {...tabProps} />}
+            {tab === 'setup' && <SetupTab {...tabProps} />}
+          </Suspense>
         </div>
       </aside>
     </>

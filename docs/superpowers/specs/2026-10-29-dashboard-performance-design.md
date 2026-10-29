@@ -7,7 +7,7 @@ Implement the approved rendering, refresh, Git concurrency, and history optimiza
 - Own the seconds clock inside the connection indicator and the minute clock inside the attention rail. Reuse unchanged task objects and stable card props so unrelated updates do not rerender task cards.
 - Consume mutation responses and server pushes instead of issuing another full reconcile after an endpoint already reconciled. Explicit manual refresh and document saves still reconcile. Settings changes reload configuration. Agent launch keeps the server's delayed marker refresh.
 - Ignore observational timestamps when deciding whether a PR stack needs persistence. Persist real changes, including available/stale transitions, checks, reviews, membership, and selections.
-- Limit worktree module Git subprocesses to four at once across concurrent callers. Release capacity on errors and keep existing subprocess timeouts and result semantics.
+- Limit asynchronous Git subprocesses to four at once across scans, artifact reads, checkout operations, and cleanup. Release capacity on errors and keep existing subprocess timeouts and result semantics.
 - Paginate completed tasks and active/settled notes. Keep search over the entire collection, reveal saved/reopened notes even beyond the current page, and bound note preview text rendered into the DOM. Defer history/document/editor code until opened.
 
 ## Compatibility and limits
