@@ -131,6 +131,7 @@ test('note pages preserve full-text search, off-page reveal, and complete editor
   await expect(editor.getByPlaceholder('What do you want to remember?')).toHaveValue(/full-search-tail-0$/);
   await editor.getByRole('button', { name: 'Close note editor' }).click();
   await pages.getByRole('button', { name: 'Previous', exact: true }).click();
+  await panel.getByRole('button', { name: 'Hide notes', exact: true }).click();
   await page.keyboard.press('Control+k');
   const palette = page.getByRole('dialog', { name: 'Command palette' });
   await palette.getByLabel('Search tasks, notes and commands').fill('Widget note 00');
@@ -139,4 +140,51 @@ test('note pages preserve full-text search, off-page reveal, and complete editor
   await panel.getByRole('searchbox', { name: 'Search notes' }).fill('full-search-tail-20');
   await expect(panel.locator('.notes-card')).toHaveCount(1);
   await expect(panel.getByRole('heading', { name: 'Widget note 20', exact: true })).toBeVisible();
+});
+
+test('an attention-rail note opens on its page in the task drawer', async ({ page }) => {
+  const projectId = 'acme__widgets';
+  for (let index = 0; index < 21; index++) {
+    const created = await page.request.post('/api/notes', { data: {
+      projectId, clientRequestId: crypto.randomUUID(), taskIssue: 101,
+      title: `Linked reminder ${String(index).padStart(2, '0')}`, body: 'Review widget behavior.',
+    } });
+    expect(created.ok()).toBe(true);
+  }
+  await page.clock.install({ time: new Date(Date.now() + 3 * 86_400_000) });
+  await page.goto('/');
+  const rail = page.getByRole('region', { name: /items need you/ });
+  await rail.getByRole('button', { name: 'Linked reminder 00', exact: true }).click();
+  const drawer = page.getByRole('dialog', { name: 'Issue 101' });
+  await expect(drawer.getByRole('heading', { name: 'Linked reminder 00', exact: true })).toBeVisible();
+});
+
+test('saving a filtered settled task note reveals it after clearing the filter', async ({ page }) => {
+  const projectId = 'acme__widgets';
+  for (let index = 0; index < 21; index++) {
+    const created = await page.request.post('/api/notes', { data: {
+      projectId, clientRequestId: crypto.randomUUID(), taskIssue: 102,
+      title: `Linked archive ${String(index).padStart(2, '0')}`, body: 'Archived widget findings.',
+    } });
+    expect(created.ok()).toBe(true);
+    const { note } = await created.json();
+    const settled = await page.request.patch(`/api/notes/${note.id}`, { data: {
+      projectId, expectedRevision: note.revision, status: 'settled',
+    } });
+    expect(settled.ok()).toBe(true);
+  }
+  await page.goto('/');
+  await page.getByRole('button', { name: /^Issue 102,/ }).first().click();
+  const drawer = page.getByRole('dialog', { name: 'Issue 102' });
+  await drawer.getByRole('tab', { name: /^Notes/ }).click();
+  const search = drawer.getByRole('searchbox', { name: 'Search task notes' });
+  await search.fill('Linked archive 00');
+  await drawer.getByRole('button', { name: /Settled notes/ }).click();
+  await drawer.locator('.notes-card').getByRole('button', { name: 'Open', exact: true }).click();
+  const editor = page.getByRole('dialog', { name: 'Edit note' });
+  await editor.getByPlaceholder('What do you want to remember?').fill('Updated archived widget findings.');
+  await editor.getByPlaceholder('What do you want to remember?').press('Control+Enter');
+  await expect(editor).toBeHidden();
+  await expect(search).toHaveValue('');
+  await expect(drawer.getByRole('heading', { name: 'Linked archive 00', exact: true })).toBeVisible();
 });

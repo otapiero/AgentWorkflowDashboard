@@ -68,5 +68,10 @@
 - [x] Add failing tests for bounded lists and off-page note reveal/search.
 - [x] Implement pagination, bounded previews, and lazy loading.
 - [x] Prove pagination/reveal invariants by mutation and run production browser checks.
-- [ ] Run `npm run typecheck`, `npm test`, `npm --prefix vscode-extension run verify`, and `npm run test:e2e`.
-- [ ] Obtain one independent whole-branch review, fix material findings, commit, push, create and link the PR.
+- [x] Run `npm run typecheck`, `npm test`, `npm --prefix vscode-extension run verify`, and `npm run test:e2e`.
+- [x] Obtain one independent whole-branch review, fix material findings, commit, push, create and link the PR.
+
+## Results
+
+App typecheck and 686 tests passed. Extension verify passed typecheck, 145 tests, and build. Production build and 16 Chromium checks passed. Independent review found three note-reveal edge cases; all reproduced in browser regressions and were fixed. Source mutations verified the new invariants.
+

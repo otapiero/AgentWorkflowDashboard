@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 /** A filter change resets the page; an explicit reveal can jump beyond it. */
 export function usePagedItems<T>(items: readonly T[], pageSize: number, resetKey: string,
   target: T | null | undefined, keyOf: (item: T) => string | number) {
-  const [position, setPosition] = useState({ page: 0, resetKey, target });
+  const [position, setPosition] = useState<{ page: number; resetKey: string; target: T | null | undefined }>({ page: 0, resetKey, target: null });
   let page = position.resetKey === resetKey ? position.page : 0;
   if (target && position.target !== target) {
     const index = items.findIndex(item => keyOf(item) === keyOf(target));

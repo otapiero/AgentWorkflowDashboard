@@ -336,7 +336,10 @@ export function App() {
                 config={config}
                 selectedIssue={selected}
                 onOpen={openTask}
-                onOpenNote={(note) => (note.taskIssue === null ? revealNote(note) : openTaskNotes(note.taskIssue))}
+                onOpenNote={(note) => {
+                  if (note.taskIssue === null) revealNote(note);
+                  else { setRevealedNote({ ...note }); openTaskNotes(note.taskIssue); }
+                }}
               />
             </Board>
           ) : (
