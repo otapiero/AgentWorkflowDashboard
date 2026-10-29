@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { attentionTasks, laneLayout } from '../src/web/board-model.ts';
+import { attentionTasks, laneLayout, reuseBoardTasks } from '../src/web/board-model.ts';
 import type { DerivedState, Phase, TaskWithDerived } from '../src/shared/types.ts';
 
 function task(issue: number, needsYou: boolean): TaskWithDerived {
@@ -62,4 +62,16 @@ describe('attentionTasks', () => {
     const result = attentionTasks([task(1, false), task(2, true), task(3, true)]);
     expect(result.map((t) => t.issue)).toEqual([2, 3]);
   });
+});
+
+test('reuses unchanged render data across observations, but keeps changed and reordered tasks', () => {
+  const previous = [task(1, false), task(2, true)];
+  const observed = previous.map(t => ({ ...structuredClone(t), lastReconciledAt: '2026-10-29T00:00:00Z' }));
+  expect(reuseBoardTasks(previous, observed)).toBe(previous);
+  const changed = { ...observed[1]!, title: 'Updated widget' };
+  const next = reuseBoardTasks(previous, [changed, observed[0]!]);
+  expect(next[0]).toMatchObject({ issue: 2, title: 'Updated widget' });
+  expect(next[0]).not.toHaveProperty('integration');
+  expect(next[1]).toBe(previous[0]);
+  expect(reuseBoardTasks(next, [])).toEqual([]);
 });

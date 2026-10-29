@@ -1,7 +1,8 @@
 import { Card } from './Card.tsx';
 import { AgentChip, IconCheck, IconPullRequest } from './bits.tsx';
 import type { BoardConfig } from '../api.ts';
-import type { PhaseConfig, TaskWithDerived } from '../../shared/types.ts';
+import type { PhaseConfig } from '../../shared/types.ts';
+import type { BoardTask } from '../board-model.ts';
 
 /** Done keeps its history short on the board: the rest is in the Done view. */
 const DONE_PREVIEW = 8;
@@ -18,7 +19,7 @@ export function DoneList({
   limit,
   onShowAll,
 }: {
-  tasks: TaskWithDerived[];
+  tasks: BoardTask[];
   selectedIssue: number | null;
   onOpen: (issue: number) => void;
   limit?: number;
@@ -60,7 +61,7 @@ export function DoneList({
 
 interface Props {
   phase: PhaseConfig;
-  tasks: TaskWithDerived[];
+  tasks: BoardTask[];
   config: BoardConfig;
   selectedIssue: number | null;
   noteCounts: Record<number, number>;

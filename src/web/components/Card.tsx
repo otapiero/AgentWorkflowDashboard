@@ -1,4 +1,6 @@
-import type { Badge, TaskWithDerived } from '../../shared/types.ts';
+import { memo } from 'react';
+import type { Badge } from '../../shared/types.ts';
+import type { BoardTask } from '../board-model.ts';
 import {
   AgentChip,
   IconAlert,
@@ -20,7 +22,7 @@ import {
  */
 export type CardState = 'live' | 'fault' | 'attention' | 'nominal' | 'idle';
 
-export function cardState(task: TaskWithDerived): CardState {
+export function cardState(task: BoardTask): CardState {
   const { derived } = task;
   if (derived.badges.some((b) => b.kind === 'live')) return 'live';
   if (derived.badges.some((b) => b.tone === 'bad')) return 'fault';
@@ -29,7 +31,7 @@ export function cardState(task: TaskWithDerived): CardState {
   return 'nominal';
 }
 
-function StatusLine({ task, state }: { task: TaskWithDerived; state: CardState }) {
+function StatusLine({ task, state }: { task: BoardTask; state: CardState }) {
   const { derived } = task;
   if (state === 'live') {
     const live = derived.badges.find((b) => b.kind === 'live');
@@ -96,14 +98,14 @@ function BadgeItem({ badge }: { badge: Badge }) {
 }
 
 interface Props {
-  task: TaskWithDerived;
+  task: BoardTask;
   selected: boolean;
   noteCount: number;
   onOpen: (issue: number) => void;
   onOpenNotes: (issue: number) => void;
 }
 
-export function Card({ task, selected, noteCount, onOpen, onOpenNotes }: Props) {
+export const Card = memo(function Card({ task, selected, noteCount, onOpen, onOpenNotes }: Props) {
   const state = cardState(task);
   // Secondary badges only — the status line already states the primary thing.
   const badges = task.derived.badges.filter((b) => b.kind !== 'live');
@@ -172,4 +174,4 @@ export function Card({ task, selected, noteCount, onOpen, onOpenNotes }: Props) 
       )}
     </div>
   );
-}
+});

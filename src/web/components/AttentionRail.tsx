@@ -1,16 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-import { attentionTasks } from '../board-model.ts';
+import { attentionTasks, type BoardTask } from '../board-model.ts';
 import type { BoardConfig } from '../api.ts';
 import { noteAgeDays, staleNotes } from '../notes-model.ts';
 import { IconAlert, IconChevron, IconClock, IconNote } from './bits.tsx';
-import type { TaskWithDerived } from '../../shared/types.ts';
 import type { Note } from '../../shared/notes.ts';
 
 interface Props {
-  tasks: TaskWithDerived[];
+  tasks: BoardTask[];
   notes: Note[];
-  now: number;
   config: BoardConfig;
   selectedIssue: number | null;
   onOpen: (issue: number) => void;
@@ -38,9 +36,21 @@ function readExpanded(): boolean {
   }
 }
 
-export function AttentionRail({ tasks, notes, now, config, selectedIssue, onOpen, onOpenNote }: Props) {
-  const needing = attentionTasks(tasks);
-  const stale = staleNotes(notes, now);
+export function AttentionRail({ tasks, notes, config, selectedIssue, onOpen, onOpenNote }: Props) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const update = () => setNow(Date.now());
+    const timer = window.setInterval(update, 60_000);
+    window.addEventListener('focus', update);
+    document.addEventListener('visibilitychange', update);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', update);
+      document.removeEventListener('visibilitychange', update);
+    };
+  }, []);
+  const needing = useMemo(() => attentionTasks(tasks), [tasks]);
+  const stale = useMemo(() => staleNotes(notes, now), [notes, now]);
   const total = needing.length + stale.length;
   const [expanded, setExpandedState] = useState(readExpanded);
   if (total === 0) return null;
