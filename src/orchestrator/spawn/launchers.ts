@@ -100,7 +100,7 @@ export function openArtifactInEditor(issue: number, name: string): void {
 /** Launch detached and fully disowned; the terminal must outlive the app. */
 function detach(exe: string, args: string[]): void {
   const child = execa(exe, args, { detached: true, stdio: 'ignore', cleanup: false });
-  child.unref();
+  child.nodeChildProcess.unref();
   child.catch(() => {
     // Fire-and-forget; failures surface through reconciliation.
   });
