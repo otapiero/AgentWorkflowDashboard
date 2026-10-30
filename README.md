@@ -108,7 +108,10 @@ The Done view shows 50 tasks per page, and notes show 20 per page in each active
 or settled section. Note search covers the complete saved text, and opening a
 note shows its full body even when its card only shows a short preview.
 
-Then open http://127.0.0.1:4317. Stop the app with Ctrl+C — it loses nothing,
+Then open http://127.0.0.1:4317. The server answers only requests addressed
+to `127.0.0.1` or `localhost`, and refuses any browser request whose page is not
+the board itself, so other sites you visit cannot drive it. Document previews
+strip scripts from the Markdown agents write. Stop the app with Ctrl+C — it loses nothing,
 because state is re-derived from git/GitHub and the workspace on the next start.
 Agent terminals opened by a spawn run independently and keep going after the app
 closes.

@@ -47,6 +47,7 @@
   "dependencies": {
     "@fastify/static": "^10.1.8",
     "@modelcontextprotocol/server": "2.4.0",
+    "dompurify": "^3.4.17",
     "execa": "^10.2.1",
     "fastify": "^5.4.0",
     "js-yaml": "^5.5.0",

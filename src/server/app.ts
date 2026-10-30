@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
 
+import { registerRequestGuard } from './request-guard.ts';
 import { registerRoutes } from './routes.ts';
 import type { Broadcaster } from './sse.ts';
 import { projectSlug } from '../orchestrator/paths.ts';
@@ -30,6 +31,7 @@ export interface AppOptions {
  */
 export async function createApp({ config, broadcaster, refresh, health }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  registerRequestGuard(app);
   const notes = new NotesService({
     home: process.env.MC_HOME!,
     projectId: projectSlug(config.repo.owner, config.repo.name),
