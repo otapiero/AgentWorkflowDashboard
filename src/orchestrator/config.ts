@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import yaml from 'js-yaml';
+import { load } from 'js-yaml';
 import { z } from 'zod';
 
 import { configPath } from './paths.ts';
@@ -132,7 +132,7 @@ const configSchema = z
   });
 
 export function parseConfig(source: string): Config {
-  const raw = yaml.load(source);
+  const raw = load(source);
   const result = configSchema.safeParse(raw);
   if (!result.success) {
     const details = result.error.issues

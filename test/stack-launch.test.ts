@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 const boundary = vi.hoisted(() => ({ commands: [] as Record<string, unknown>[], terminals: [] as { exe: string; args: string[] }[] }));
 vi.mock('execa', () => ({ execa: (exe: string, args: string[]) => {
-  boundary.terminals.push({ exe, args }); return { unref() {}, catch() {} };
+  boundary.terminals.push({ exe, args }); return { nodeChildProcess: { unref() {} }, catch() {} };
 }, execaSync: vi.fn() }));
 vi.mock('../src/orchestrator/layer-worktrees.ts', () => ({ ensureLayerWorktree: vi.fn(async () => undefined) }));
 vi.mock('../src/orchestrator/worktree.ts', () => ({ ensureWorktree: vi.fn(async () => undefined) }));
