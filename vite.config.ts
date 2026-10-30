@@ -25,10 +25,8 @@ export default defineConfig({
     port: 4316,
     proxy: {
       // Trailing slash: a bare '/api' prefix also swallows the /api.ts module.
-      '/api/': {
-        target: `http://127.0.0.1:${SERVER_PORT}`,
-        changeOrigin: true,
-      },
+      // The browser's Host is kept so the server's same-origin check passes.
+      '/api/': `http://127.0.0.1:${SERVER_PORT}`,
     },
   },
   test: {

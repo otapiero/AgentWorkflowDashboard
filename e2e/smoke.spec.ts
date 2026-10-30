@@ -172,6 +172,28 @@ test('the notes task filter opens inside the window', async ({ page }) => {
   expect(box.x + box.width).toBeLessThanOrEqual(width);
 });
 
+test('the API refuses requests from another site', async ({ page }) => {
+  const response = await page.request.post('/api/reconcile', { headers: { Origin: 'https://attacker.example' } });
+  expect(response.status()).toBe(403);
+});
+
+test('the plan preview drops script from agent-written Markdown', async ({ page }) => {
+  const { content } = await (await page.request.get('/api/tasks/102/plan')).json();
+  const payload = '<img src="x" onerror="window.__planScript = true">\n\n<script>window.__planScript = true</script>\n';
+  await page.request.put('/api/tasks/102/plan', { data: { content: `${content}\n${payload}` } });
+  try {
+    const drawer = await openTask(page, 102);
+    await drawer.getByRole('tab', { name: 'Plan', exact: true }).click();
+    await drawer.getByRole('button', { name: 'Open documents', exact: true }).click();
+    const preview = page.getByRole('dialog', { name: 'Documents for #102' }).locator('.doc-prose');
+    await expect(preview.locator('img')).toHaveCount(1);
+    await expect(preview.locator('[onerror], script')).toHaveCount(0);
+    expect(await page.evaluate(() => (window as { __planScript?: boolean }).__planScript)).toBeUndefined();
+  } finally {
+    await page.request.put('/api/tasks/102/plan', { data: { content } });
+  }
+});
+
 test('saving a plan still requests exactly one board reconcile', async ({ page }) => {
   const { content } = await (await page.request.get('/api/tasks/102/plan')).json();
   const drawer = await openTask(page, 102);

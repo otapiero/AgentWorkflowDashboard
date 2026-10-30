@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 
 import type { DocMode } from '../../doc-model.ts';
@@ -17,8 +18,9 @@ interface DocPanesProps {
 /**
  * Editor, preview, or both.
  *
- * Rendered Markdown is injected directly: content is locally authored in a
- * single-user local tool, the same trust model the plan editor has always used.
+ * Rendered Markdown is sanitized before it is injected. Agents write these
+ * documents from GitHub issue text, which anyone who can file an issue
+ * controls, and a script running here could drive the whole API.
  */
 export function DocPanes({
   mode,
@@ -97,7 +99,7 @@ export function DocPanes({
         >
           <div
             className="doc-prose"
-            dangerouslySetInnerHTML={{ __html: marked.parse(text) as string }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(text) as string) }}
           />
         </div>
       )}
