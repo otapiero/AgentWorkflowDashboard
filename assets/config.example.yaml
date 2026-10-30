@@ -34,12 +34,8 @@ launcher: wt
 #
 # Pinning a task to 'done' is you saying the work is finished, and that is what
 # retires its checkout -- not a merged PR, which is GitHub's opinion about the
-# code rather than yours about the work. Before the checkout goes, anything
-# git still reports as uncommitted -- scratch notes, exported fixtures,
-# research an agent wrote beside the code -- is copied into the task's own
-# directory, so an automatic cleanup can never destroy work that was never
-# committed. Ignored local files are rescued too; disposable node_modules
-# directories are excluded from the backup and removed with the checkout.
+# code rather than yours about the work. Nothing is copied out first:
+# uncommitted and ignored files are removed with the checkout.
 #
 # deleteBranch force-deletes: these repositories squash-merge, so the branch's
 # own commits never land in the base branch and `git branch -d` would refuse

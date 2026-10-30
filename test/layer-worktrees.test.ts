@@ -29,16 +29,16 @@ beforeEach(async () => {
 });
 afterEach(async () => { delete process.env.MC_HOME; rmSync(root, { recursive: true, force: true }); });
 
-test('rescues legacy layer checkouts created before shared issue worktrees', async () => {
+test('removes legacy layer checkouts created before shared issue worktrees, copying nothing', async () => {
   const legacy = join(worktreesDir(), '1-pr-11');
   mkdirSync(worktreesDir(), { recursive: true });
   await git('worktree', 'add', legacy, target.branch);
   mkdirSync(taskDir(1), { recursive: true });
   writeFileSync(join(taskDir(1), 'layer-worktrees.json'), JSON.stringify([{ path: legacy, branch: target.branch, number: 11 }]));
-  writeFileSync(join(legacy, 'notes.txt'), 'Keep this');
+  writeFileSync(join(legacy, 'notes.txt'), 'scratch');
   await cleanupLayerWorktrees(config, 1);
   expect(existsSync(legacy)).toBe(false);
-  expect(readFileSync(join(taskDir(1), 'pr-11', 'rescued-from-worktree', 'notes.txt'), 'utf8')).toBe('Keep this');
+  expect(existsSync(join(taskDir(1), 'pr-11'))).toBe(false);
 });
 
 test.each([false, true])('legacy upgrade preserves files and refuses dirty checkouts: dirty=%s', async dirty => {
