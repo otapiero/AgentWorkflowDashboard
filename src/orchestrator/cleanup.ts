@@ -2,29 +2,18 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync,
 import { basename, extname, join } from 'node:path';
 import { runGit } from './git.ts';
 
-import { taskDir, worktreePath } from './paths.ts';
 import { removeWorktree } from './worktree.ts';
 import type { Config, Phase } from '../shared/types.ts';
 
 /**
- * Retiring a finished task's checkout.
+ * Retiring checkouts.
  *
- * A merged PR means the work has landed, so its worktree is dead weight — but
- * "dead weight" is not the same as "safe to delete". A worktree routinely
- * accumulates files that were never committed: scratch notes, exported
- * fixtures, research an agent wrote beside the code. `git worktree remove
- * --force` destroys those without a word.
- *
- * So the order here is rescue, then remove. Anything git still reports as
- * uncommitted is copied into the task's own directory — the same place the doc
- * rail reads from — before the checkout goes. Nothing that was never in git
- * is ever lost to an automatic action.
+ * Marking a task done is the operator saying the work is finished, so its
+ * checkout is removed outright and nothing is copied out of it. Review
+ * checkouts are different: they hold a reviewer's local edits and notes, so
+ * finishing a review saves whatever git is not carrying before the checkout
+ * goes (see rescueAndRemoveWorktree).
  */
-
-/** Where rescued files land, alongside the task's other durable artifacts. */
-export function rescueDir(issue: number): string {
-  return join(taskDir(issue), 'rescued-from-worktree');
-}
 
 /**
  * The paths out of `git status --porcelain`.
@@ -68,14 +57,6 @@ export function parseRescuePaths(stdout: string): string[] {
  * of one file each is worse to read than a flat list. Basename collisions are
  * suffixed rather than overwritten; two files called notes.md are two files.
  */
-export function rescueFiles(
-  issue: number,
-  worktree: string,
-  paths: readonly string[],
-): string[] {
-  return rescueFilesTo(rescueDir(issue), worktree, paths);
-}
-
 function rescueFilesTo(destination: string, worktree: string, paths: readonly string[]): string[] {
   const rescued: string[] = [];
   const used = new Set<string>();
@@ -120,7 +101,6 @@ export function shouldCleanupOnDone(
 
 export interface CleanupResult {
   issue: number;
-  rescued: string[];
   branchDeleted: boolean;
 }
 
@@ -144,21 +124,18 @@ async function git(args: string[], cwd: string): Promise<{ stdout: string; ok: b
 }
 
 /**
- * Rescue, remove the worktree, then drop the local branch.
+ * Remove the worktree, uncommitted files and all, then drop the local branch.
  *
  * The branch is force-deleted because these repositories squash-merge: the
  * branch's own commits never appear in the base branch, so `git branch -d`
- * refuses every merged branch it is ever handed. GitHub reporting the PR as
- * MERGED is the authority that the work landed, and that is what got us here.
+ * refuses every merged branch it is ever handed.
  */
 export async function cleanupDoneTask(
   config: Config,
   issue: number,
   branch: string,
 ): Promise<CleanupResult> {
-  const rescued = await rescueAndRemoveWorktree(
-    worktreePath(issue), taskDir(issue), branch, () => removeWorktree(config, issue),
-  );
+  await removeWorktree(config, issue);
 
   let branchDeleted = false;
   if (config.cleanup?.deleteBranch ?? true) {
@@ -166,10 +143,10 @@ export async function cleanupDoneTask(
     branchDeleted = result.ok;
   }
 
-  return { issue, rescued, branchDeleted };
+  return { issue, branchDeleted };
 }
 
-/** Shared rescue and retry receipt for issue and review checkouts. */
+/** Rescue and retry receipt for review checkouts. */
 export async function rescueAndRemoveWorktree(
   worktree: string,
   directory: string,

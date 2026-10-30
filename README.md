@@ -20,8 +20,8 @@ issue checkout without switching branches or requiring a PR selection.
 Attach a PR by URL if GitHub's issue links miss it. Detach superseded or invalid
 entries, and keep PRs from other repositories as companion links. Fork PRs can
 be displayed but cannot be launched through this app. Merging one layer leaves
-the remaining layers active; marking the issue Done rescues uncommitted files
-and cleans up its owned checkouts. Rebasing, retargeting and merging stay manual.
+the remaining layers active; marking the issue Done removes its owned
+checkouts. Rebasing, retargeting and merging stay manual.
 
 Status reads share batched GitHub GraphQL requests, with at most 20 selections
 per batch and one status selection per unique PR. Discovery uses metadata only
@@ -132,9 +132,8 @@ Finish review only manages the local checkout; submit your review on GitHub.
 
 Merged PRs rest in the **Merged** column until you click **Mark Done** in the
 task's Run tab. Mark Done moves the card to Done and removes its worktree,
-saving uncommitted and ignored files in the task's `rescued-from-worktree` folder
-first. Disposable `node_modules` directories are excluded from the backup.
-If cleanup fails, the card stays in Merged and the drawer shows an error so
+including any uncommitted files, so commit or move anything you want to keep
+first. If cleanup fails, the card stays in Merged and the drawer shows an error so
 you can retry. Tasks you previously pinned to Done stay there.
 
 ## Choosing agent, model and effort
@@ -171,12 +170,8 @@ path); it then appears automatically in every agent picker.
 ### Marking a task done retires its checkout
 
 Pin a task to **done** (drawer → Setup → Placement) and Mission Control removes
-its worktree and drops the local branch. Before the checkout goes, anything git
-still reports as uncommitted is copied into the task's own directory under
-`tasks/<issue>/rescued-from-worktree/` — scratch notes, exported fixtures,
-research an agent wrote beside the code. Cleanup never destroys work that was
-never committed. Gitignored files are left alone, so build output and
-`node_modules` are not dragged along.
+its worktree and drops the local branch. Nothing is copied out first:
+uncommitted and gitignored files go with the checkout.
 
 A merged PR does **not** trigger this. That is GitHub's opinion about the code;
 marking the task done is yours about the work, and you may still want the

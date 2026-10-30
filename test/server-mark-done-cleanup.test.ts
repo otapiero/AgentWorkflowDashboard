@@ -50,7 +50,7 @@ function app(over: Partial<Config> = {}) {
     health: createHealthResponse('0.1.0', '2026-08-05T00:00:00.000Z'),
     cleanup: async (_cfg, issue, branch): Promise<CleanupResult> => {
       calls.push({ issue, branch });
-      return { issue, rescued: ['notes.md'], branchDeleted: true };
+      return { issue, branchDeleted: true };
     },
   });
   return instance;

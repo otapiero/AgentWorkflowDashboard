@@ -95,13 +95,9 @@ export function registerTaskRoutes(
       if (phase && shouldCleanupOnDone(config, phase, worktreeExists(task.issue) || ownedLayerWorktrees(task.issue).some(p => p.path))) {
         try {
           await cleanupLayerWorktrees(config, task.issue);
-          const result = worktreeExists(task.issue) ? await cleanupTask(config, task.issue, task.branch) : { rescued: [], branchDeleted: false };
-          const extras = [
-            result.rescued.length ? `rescued ${result.rescued.length} file(s)` : null,
-            result.branchDeleted ? `deleted ${task.branch}` : null,
-          ].filter(Boolean);
+          const result = worktreeExists(task.issue) ? await cleanupTask(config, task.issue, task.branch) : { branchDeleted: false };
           console.log(
-            `[mc] #${task.issue} marked done - removed its worktree${extras.length ? ` (${extras.join(', ')})` : ''}`,
+            `[mc] #${task.issue} marked done - removed its worktree${result.branchDeleted ? ` (deleted ${task.branch})` : ''}`,
           );
         } catch (e) {
           console.error(`[mc] worktree cleanup failed for #${task.issue}:`, e);

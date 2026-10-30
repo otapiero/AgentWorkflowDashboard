@@ -4,7 +4,6 @@ import { runGit } from './git.ts';
 import type { Config, TaskRecord } from '../shared/types.ts';
 import type { ExecutionTarget } from './execution-target.ts';
 import { taskDir, worktreePath, worktreesDir } from './paths.ts';
-import { rescueAndRemoveWorktree } from './cleanup.ts';
 import { removeLayerWorktree } from './worktree.ts';
 
 interface OwnedLayer { path: string; branch: string; number: number }
@@ -75,7 +74,6 @@ export async function ensureLayerWorktree(config: Config, task: TaskRecord, targ
 export async function cleanupLayerWorktrees(config: Config, issue: number): Promise<void> {
   for (const entry of ownedLayerWorktrees(issue)) {
     if (!existsSync(entry.path)) continue;
-    await rescueAndRemoveWorktree(entry.path, join(taskDir(issue), `pr-${entry.number}`), entry.branch,
-      () => removeLayerWorktree(config, issue, entry.number));
+    await removeLayerWorktree(config, issue, entry.number);
   }
 }
