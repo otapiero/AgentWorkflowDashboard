@@ -433,6 +433,13 @@ export interface Config {
   server: { port: number };
   /** How a spawn opens its terminal. Default 'wt'. */
   launcher?: LauncherKind;
+  /** VS Code windows opened from the PR review queue. Independent of the task launcher. */
+  review?: {
+    /** Named VS Code profile. Defaults to 'PR Review', created empty if absent. */
+    vscodeProfile?: string;
+    /** Skip workspace trust for review windows only. Default true. */
+    disableWorkspaceTrust?: boolean;
+  };
   /**
    * What to retire when a task finishes. Absent means on: configs written
    * before this existed should still get the behaviour.

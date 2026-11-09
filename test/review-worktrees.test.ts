@@ -1,11 +1,24 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execa } from 'execa';
+import { dump } from 'js-yaml';
 
+import { parseConfig } from '../src/orchestrator/config.ts';
 import { createReviewWorktrees } from '../src/orchestrator/review-worktrees.ts';
 import type { Config } from '../src/shared/types.ts';
+
+// Keep real git processes, but capture the editor launch instead of opening UI.
+const editorLaunches = vi.hoisted(() => [] as string[][]);
+vi.mock('execa', async importOriginal => {
+  const actual = await importOriginal<typeof import('execa')>();
+  return { ...actual, execa: (file: string, args: string[], options: object) => {
+    if (file !== 'code') return actual.execa(file, args, options);
+    editorLaunches.push(args);
+    return Promise.resolve({});
+  } };
+});
 
 let root: string;
 let home: string;
@@ -42,6 +55,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  editorLaunches.length = 0;
   home = mkdtempSync(join(root, 'project-'));
   process.env.MC_HOME = home;
 });
@@ -53,6 +67,25 @@ afterEach(async () => {
 });
 
 afterAll(() => { rmSync(root, { recursive: true, force: true }); });
+
+test.each([
+  { review: undefined, flags: ['--disable-workspace-trust', '--new-window', '--profile', 'PR Review'] },
+  { review: { vscodeProfile: 'Team Review' }, flags: ['--disable-workspace-trust', '--new-window', '--profile', 'Team Review'] },
+  { review: { vscodeProfile: 'Team Review', disableWorkspaceTrust: false }, flags: ['--new-window', '--profile', 'Team Review'] },
+])('uses review settings from config for new and reopened VS Code windows: $review', async ({ review, flags }) => {
+  const parsed = parseConfig(dump({
+    ...config, review,
+    pipeline: [{ id: 'merge', label: 'Merge', actor: 'you', gate: { type: 'manual' } }],
+  }));
+  const reviews = createReviewWorktrees(parsed);
+  await reviews.open(pr);
+  await reviews.open(pr);
+  expect(editorLaunches).toHaveLength(2);
+  const workspace = editorLaunches[0]!.at(-1)!;
+  expect(editorLaunches).toEqual([[...flags, workspace], [...flags, workspace]]);
+  const settings = JSON.parse(readFileSync(workspace, 'utf8')).settings;
+  expect(settings['extensions.ignoreRecommendations']).toBe(true);
+});
 
 test('opens the PR head detached even when its branch is in another worktree, and reuses local changes', async () => {
   const issueTree = join(home, 'issue-checkout');

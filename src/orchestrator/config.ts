@@ -95,6 +95,10 @@ const configSchema = z
     pipeline: z.array(phaseSchema).min(1),
     server: z.object({ port: z.number().int().positive() }),
     launcher: z.enum(['wt', 'vscode', 't3']).optional(),
+    review: z.object({
+      vscodeProfile: z.string().trim().min(1).optional(),
+      disableWorkspaceTrust: z.boolean().optional(),
+    }).optional(),
     cleanup: z
       .object({
         onDone: z.boolean().optional(),
