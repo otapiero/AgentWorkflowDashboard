@@ -38,9 +38,11 @@ function describe(record: ReviewRecord): ReviewWorktree {
   return { ...pr, workspacePath: reviewWorktreePath(pr.number), worktreeExists: existsSync(reviewWorktreePath(pr.number)) };
 }
 
-async function openInVscode(workspace: string): Promise<void> {
-  // Keep VS Code's workspace trust protection for code being reviewed.
-  await execa('code', ['--new-window', workspace], {
+async function openInVscode(workspace: string, options: Config['review']): Promise<void> {
+  const args = ['--new-window', '--profile', options?.vscodeProfile ?? 'PR Review', workspace];
+  // Scope this to the review window instead of changing global trust settings.
+  if (options?.disableWorkspaceTrust ?? true) args.unshift('--disable-workspace-trust');
+  await execa('code', args, {
     detached: true, stdio: 'ignore', cleanup: false, timeout: SUBPROCESS_TIMEOUT_MS,
   });
 }
@@ -50,7 +52,7 @@ export function createReviewWorktrees(config: Config, deps: {
   open?: (workspace: string) => Promise<void>;
   remove?: typeof removeReviewWorktree;
 } = {}) {
-  const openEditor = deps.open ?? openInVscode;
+  const openEditor = deps.open ?? (workspace => openInVscode(workspace, config.review));
   const remove = deps.remove ?? removeReviewWorktree;
   const pending = new Map<number, Promise<unknown>>();
   const git = async (args: string[], cwd = config.repo.path) =>
@@ -103,7 +105,11 @@ export function createReviewWorktrees(config: Config, deps: {
       }
       const workspace = join(reviewDir(pr.number), `Review PR ${pr.number}.code-workspace`);
       writeFileSync(workspace, JSON.stringify({
-        folders: [{ path }], settings: { 'window.title': `Review PR #${pr.number} · ${config.repo.name} · ${'${activeEditorShort}'}` },
+        folders: [{ path }],
+        settings: {
+          'window.title': `Review PR #${pr.number} · ${config.repo.name} · ${'${activeEditorShort}'}`,
+          'extensions.ignoreRecommendations': true,
+        },
       }, null, 2), 'utf8');
       await openEditor(workspace);
       return describe(record!);

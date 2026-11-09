@@ -30,6 +30,13 @@ github:
 # Also switchable live from the Agents settings panel.
 launcher: wt
 
+# PR review windows use a separate, initially empty VS Code profile.
+# Add CodeTour and GitHub Copilot Chat for guided reviews and agent chat. See README.
+review:
+  vscodeProfile: 'PR Review'
+  # Applies only to windows opened from the review queue.
+  disableWorkspaceTrust: true
+
 # What to retire when you mark a task done.
 #
 # Pinning a task to 'done' is you saying the work is finished, and that is what

@@ -130,6 +130,42 @@ commits in `commits.bundle`, and removes the checkout. Disposable `node_modules`
 directories are excluded. If cleanup fails, the review stays available to retry.
 Finish review only manages the local checkout; submit your review on GitHub.
 
+Review windows use the **PR Review** VS Code profile by default. VS Code creates
+it empty on first launch. Built-in Git and diff tools remain available. For
+guided reviews and Copilot agent chat, set it up once:
+
+```powershell
+code --new-window --profile "PR Review"
+code --profile "PR Review" --install-extension vsls-contrib.codetour
+code --profile "PR Review" --install-extension GitHub.copilot-chat
+```
+
+If VS Code already bundles Copilot Chat, it reports it as installed. No extra
+extension is needed for agent chat. For chat without inline completions or next
+edit suggestions, add these to the PR Review profile's user settings:
+
+```json
+{
+  "github.copilot.enable": { "*": false },
+  "github.copilot.nextEditSuggestions.enabled": false
+}
+```
+
+The profile has its own settings and extension list. No dashboard companion is
+needed. To select another profile, edit the project's `config.yaml` and restart
+the dashboard:
+
+```yaml
+review:
+  vscodeProfile: 'PR Review'
+  disableWorkspaceTrust: true
+```
+
+Review launches skip the trust prompt using `--disable-workspace-trust` for that
+window. Set `disableWorkspaceTrust: false` to keep VS Code's normal trust checks
+for reviews. Review workspaces suppress extension recommendations. These options
+apply only to the review queue, independently of the task launcher.
+
 Merged PRs rest in the **Merged** column until you click **Mark Done** in the
 task's Run tab. Mark Done moves the card to Done and removes its worktree,
 including any uncommitted files, so commit or move anything you want to keep
