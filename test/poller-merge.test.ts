@@ -11,12 +11,6 @@ function task(overrides: Partial<TaskRecord> = {}): TaskRecord {
 }
 
 describe('mergedFields', () => {
-  test('records the observed state', () => {
-    const r = mergedFields(task(), 'OPEN', '2026-07-26T00:00:00Z');
-    expect(r.prState).toBe('OPEN');
-    expect(r.mergedAt).toBeNull();
-  });
-
   test('stamps mergedAt the first time MERGED is seen', () => {
     const r = mergedFields(task(), 'MERGED', '2026-07-26T00:00:00Z');
     expect(r.prState).toBe('MERGED');

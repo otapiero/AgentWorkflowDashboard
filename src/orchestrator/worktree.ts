@@ -12,11 +12,11 @@ import type { Config } from '../shared/types.ts';
 
 // --- pure parsers --------------------------------------------------------
 
-export function countPorcelainChanges(stdout: string): number {
+function countPorcelainChanges(stdout: string): number {
   return stdout.split(/\r?\n/).filter((line) => line.trim() !== '').length;
 }
 
-export function parseCount(stdout: string): number {
+function parseCount(stdout: string): number {
   const value = Number.parseInt(stdout.trim(), 10);
   return Number.isNaN(value) ? 0 : value;
 }

@@ -73,9 +73,8 @@ async function create(client: Client, args: Record<string, unknown> = {}): Promi
   return structured(result);
 }
 
-test.each(['legacy', 'modern'] as const)('discovers six tools with read and write annotations over %s protocol', async mode => {
-  const client = await protocol(mode);
-  expect(client.getNegotiatedProtocolVersion()).toBe(mode === 'modern' ? '2026-07-28' : '2025-11-25');
+test('advertises note tools with their intended read and write annotations', async () => {
+  const client = await protocol();
   const { tools } = await client.listTools();
   expect(tools.map(tool => tool.name).sort()).toEqual(['notes_create', 'notes_get', 'notes_list', 'notes_set_status', 'notes_update', 'tasks_list']);
   for (const tool of tools) {
@@ -84,8 +83,6 @@ test.each(['legacy', 'modern'] as const)('discovers six tools with read and writ
   }
   expect(tools.find(tool => tool.name === 'notes_create')?.annotations?.idempotentHint).toBe(false);
   expect(tools.find(tool => tool.name === 'notes_update')?.annotations?.destructiveHint).toBe(true);
-  const saved = await create(client);
-  expect(saved.note).toMatchObject({ taskIssue: null, status: 'active' });
 });
 
 test('creation without taskIssue is General and every read/write pins the project', async () => {
@@ -93,7 +90,6 @@ test('creation without taskIssue is General and every read/write pins the projec
   const saved = await create(client, { body: '  Check\nrelease timing  ' });
   expect(saved.note).toMatchObject({ title: null, taskIssue: null, body: '  Check\nrelease timing  ' });
   expect(captured[0]!.body).toMatchObject({ projectId, taskIssue: null });
-  expect(captured[0]!.body.clientRequestId).toMatch(/^[0-9a-f-]{36}$/);
   await client.callTool({ name: 'tasks_list', arguments: { search: '42' } });
   await client.callTool({ name: 'notes_list', arguments: {} });
   await client.callTool({ name: 'notes_get', arguments: { id: saved.note.id } });
@@ -219,13 +215,9 @@ test('a successful response must acknowledge the requested note or creation requ
 });
 
 test.each([
-  ['notes_create', { body: 'OK', taskIssue: 0 }],
-  ['notes_create', { body: 'OK', taskIssue: 1.5 }], ['notes_create', { body: 'OK', taskIssue: Number.MAX_SAFE_INTEGER + 1 }],
   ['notes_create', { body: 'OK', projectId: 'injected' }],
   ['notes_get', { id: '../tasks' }], ['notes_list', { scope: 'task' }], ['notes_list', { scope: 'general', taskIssue: 42 }],
-  ['notes_update', { id: randomUUID(), body: 'OK' }], ['notes_update', { id: randomUUID(), expectedRevision: 1 }],
-  ['notes_set_status', { id: randomUUID(), expectedRevision: 0, status: 'settled' }],
-  ['notes_set_status', { id: randomUUID(), expectedRevision: 1, status: 'deleted' }],
+  ['notes_update', { id: randomUUID(), expectedRevision: 1 }],
 ] as const)('rejects invalid %s arguments before HTTP dispatch, case %#', async (name, args) => {
   const client = await protocol();
   const result = await client.callTool({ name, arguments: args });

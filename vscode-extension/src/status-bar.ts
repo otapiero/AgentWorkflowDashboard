@@ -10,7 +10,7 @@ type StatusApi = {
   createStatusBarItem(alignment: vscode.StatusBarAlignment): { text: string; command?: string; show(): void; dispose(): void };
 };
 
-export function taskStatus(task: TaskWithDerived): string {
+function taskStatus(task: TaskWithDerived): string {
   const agent = [task.pinned.agent, task.pinned.model, task.pinned.effort].filter(Boolean).join(' · ');
   return `#${task.issue} · ${phaseLabel(task.derived.displayPhase)}${agent ? ` | ${agent}` : ''}`;
 }

@@ -9,8 +9,6 @@ import type { Facts } from '../src/shared/types.ts';
 let home: string;
 
 beforeEach(() => {
-  // toEditorIntegration supplies the canonical worktree path, which is
-  // composed from the project home.
   home = mkdtempSync(join(tmpdir(), 'mc-editor-'));
   process.env.MC_HOME = home;
 });
@@ -45,20 +43,13 @@ function facts(overrides: Partial<Facts> = {}): Facts {
 }
 
 describe('toEditorIntegration', () => {
-  test('copies gathered signals and supplies the canonical worktree path', () => {
-    const result = toEditorIntegration(facts());
-    expect(result.workspacePath).toMatch(/[\\/]issue-3060$/);
-    expect(result).toMatchObject({
-      worktreeExists: true,
-      checks: 'success',
-      approvalRequired: true,
-      review: { decision: 'REVIEW_REQUIRED', unresolvedThreads: 2, copilotUnresolved: 1 },
-    });
-  });
-
-  test('does not require approval without an open PR awaiting review', () => {
+  test('requests approval only when a PR is awaiting review', () => {
+    expect(toEditorIntegration(facts()).approvalRequired).toBe(true);
     expect(toEditorIntegration(facts({
       pr: { exists: false, number: null, url: null, state: null },
+    })).approvalRequired).toBe(false);
+    expect(toEditorIntegration(facts({
+      review: { decision: 'APPROVED', unresolvedThreads: 0, copilotUnresolved: 0 },
     })).approvalRequired).toBe(false);
   });
 });

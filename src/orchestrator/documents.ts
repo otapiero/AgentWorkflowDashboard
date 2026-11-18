@@ -28,7 +28,7 @@ const MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown']);
  * A leading-dot name (`.gitignore`) is its own extension, which keeps such
  * files out of the "no extension, assume markdown" bucket.
  */
-export function extensionOf(name: string): string {
+function extensionOf(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? name;
   const dot = base.lastIndexOf('.');
   return dot === -1 ? '' : base.slice(dot).toLowerCase();
@@ -48,7 +48,7 @@ export function classify(name: string, bytes: Buffer): ContentClass {
  * stored snapshot are two distinct files too, so the only question that matters
  * is whether the recorded original still exists.
  */
-export function resolveWriteTarget(
+function resolveWriteTarget(
   ref: ArtifactRef,
   fileExists: (path: string) => boolean,
 ): WriteTarget {

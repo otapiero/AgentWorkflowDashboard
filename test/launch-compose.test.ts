@@ -15,15 +15,13 @@ const layer = { host: 'github.com', repository: 'acme/widgets', number: 11, titl
 test('Implement stays enabled with historical PRs and no explicit target', () => {
   const task = { ...newTask(1, 'Feature', 'alice'), stack: { layers: [layer], discoveryComplete: false } } as TaskWithDerived;
   const html = renderToStaticMarkup(createElement(LaunchCompose, { task, config, phase, busy: null, run: async () => {}, onBack() {} }));
-  expect(html).toMatch(/<button[^>]*class="btn is-primary is-launch"[^>]*>.*Launch Implement<\/button>/);
-  expect(html.match(/<button[^>]*class="btn is-primary is-launch"[^>]*>/)?.[0]).not.toContain('disabled');
+  expect(html).toMatch(/<button\b(?![^>]*\bdisabled\b)[^>]*>(?:(?!<\/button>).)*Launch Implement<\/button>/);
   expect(html).not.toContain('Target PR #11');
 });
 
 test('PR panel offers the issue worktree as the default without detaching historical PRs', () => {
   const task = { ...newTask(1, 'Feature', 'alice'), stack: { layers: [layer], discoveryComplete: true } } as TaskWithDerived;
   const html = renderToStaticMarkup(createElement(StackLayers, { task, baseBranch: 'main', repository: 'acme/widgets', onStack() {} }));
-  expect(html).toContain('Issue worktree');
   expect(html).toMatch(/<input[^>]*checked=""[^>]*\/>Issue worktree/);
   expect(html).toContain('#11');
 });
@@ -31,5 +29,5 @@ test('PR panel offers the issue worktree as the default without detaching histor
 test('a stale saved target can be cleared after its PR layers disappear', () => {
   const task = { ...newTask(1, 'Feature', 'alice'), stack: { layers: [], selectedKey: 'github.com/acme/widgets/11', discoveryComplete: false } } as unknown as TaskWithDerived;
   const html = renderToStaticMarkup(createElement(StackLayers, { task, baseBranch: 'main', repository: 'acme/widgets', onStack() {} }));
-  expect(html).toMatch(/<input[^>]*type="radio"[^>]*\/>Issue worktree/);
+  expect(html).toMatch(/<input\b(?![^>]*\bdisabled\b)[^>]*type="radio"[^>]*\/>Issue worktree/);
 });

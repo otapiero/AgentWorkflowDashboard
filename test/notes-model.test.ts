@@ -30,7 +30,6 @@ describe('drafts', () => {
     saveDraft(storage, 'acme__app', draft);
     expect(loadDraft(storage, 'acme__app', 'new')).toEqual(draft);
     expect(loadDraft(storage, 'other', 'new')).toBeNull();
-    expect(draft.clientRequestId).toMatch(/^[0-9a-f-]{36}$/);
   });
   test('uncertain creation retains its original payload and retry state on reload', () => {
     saveDraft(storage, 'acme__app', { ...newDraft(42), clientRequestId: '11111111-1111-4111-8111-111111111111', title: 'Retry', body: '  Keep exactly\n', uncertainCreate: true });

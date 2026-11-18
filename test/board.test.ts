@@ -65,14 +65,6 @@ describe('boardSignature', () => {
 });
 
 describe('applyLastGood', () => {
-  test('a good result passes through and is remembered', () => {
-    const good = task({ issue: 1, derived: derived({ displayPhase: 'ci' }) });
-    const { results, lastGood } = applyLastGood([good], new Map());
-    expect(results[0]!.unreachable).toBeFalsy();
-    expect(results[0]!.derived.displayPhase).toBe('ci');
-    expect(lastGood.get(1)?.derived.displayPhase).toBe('ci');
-  });
-
   test('an unreachable result keeps its last good lane and is flagged', () => {
     const good = task({ issue: 1, derived: derived({ displayPhase: 'ci' }) });
     const cache = applyLastGood([good], new Map()).lastGood;
@@ -95,10 +87,11 @@ describe('applyLastGood', () => {
     expect(results[0]!.unreachable).toBe(true);
   });
 
-  test('a task no longer on the board is dropped from the cache', () => {
-    const cache = applyLastGood([task({ issue: 1 }), task({ issue: 2 })], new Map()).lastGood;
+  test('a reimported task does not inherit status from before it was removed', () => {
+    const cache = applyLastGood([task({ issue: 1 }), task({ issue: 2, derived: derived({ displayPhase: 'ci' }) })], new Map()).lastGood;
     const { lastGood } = applyLastGood([task({ issue: 1 })], cache);
-    expect(lastGood.has(1)).toBe(true);
-    expect(lastGood.has(2)).toBe(false);
+    const returned = task({ issue: 2, unreachable: true, derived: derived({ displayPhase: 'inbox' }) });
+    const { results } = applyLastGood([returned], lastGood);
+    expect(results[0]!.derived.displayPhase).toBe('inbox');
   });
 });

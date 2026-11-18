@@ -5,41 +5,60 @@ import { NotificationCoordinator } from '../../src/notifications/notification-co
 import { TaskStore } from '../../src/task-store.ts';
 import { config, task } from './fixtures.ts';
 
-test('uses one baseline, reconciles after SSE opens, then connects', async () => {
-  const calls: string[] = [];
-  let handlers: { onOpen(): void | Promise<void>; onClosed(error: Error | null): void } | undefined;
+test('keeps the REST baseline visible until SSE opens and reconciliation finishes', async () => {
+  const baseline = task({ checks: 'success' });
+  const reconciled = task({ checks: 'failure', lastReconciledAt: '2026-08-03T10:01:00.000Z' });
+  let openStream!: () => void;
+  const streamPending = new Promise<void>((resolve) => { openStream = resolve; });
+  let finishReconciliation!: (tasks: Array<typeof reconciled>) => void;
+  const reconciliationPending = new Promise<Array<typeof reconciled>>((resolve) => { finishReconciliation = resolve; });
+  let reconciling = false;
+  const notifications: string[] = [];
   const client = {
-    config: async () => { calls.push('config'); return config; },
-    tasks: async () => { calls.push('tasks'); return [task()]; },
-    reconcile: async () => { calls.push('reconcile'); return [task()]; },
-    connect: async (value: typeof handlers, signal: AbortSignal) => { handlers = value; await value!.onOpen(); await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })); },
+    config: async () => config,
+    tasks: async () => [baseline],
+    reconcile: () => { reconciling = true; return reconciliationPending; },
+    async connect(handlers: { onOpen(): Promise<void> }, signal: AbortSignal) {
+      const closed = new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+      await streamPending;
+      await handlers.onOpen();
+      await closed;
+    },
   };
-  const primes: unknown[][] = [];
   const store = new TaskStore();
   const runtime = new MissionControlRuntime({
     readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }),
     createClient: () => client as never,
     createServerManager: () => ({ ensureReady: async () => ({ kind: 'ready', health: {} }) }) as never,
     store,
-    notifications: { prime: (tasks: unknown[]) => primes.push(tasks), apply: async () => {} } as never,
-    delay: async (_ms, signal) => await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })), jitter: (value) => value, presentConnectionFailure: async () => undefined,
+    notifications: new NotificationCoordinator({ claim: async () => true } as never, (event) => { notifications.push(event.kind); }, { ciFailed: true, ciPassed: true, agentFinished: true, reviewComments: true, approvalRequired: true }),
+    delay: async () => {}, jitter: (value) => value, presentConnectionFailure: async () => undefined,
   });
   runtime.start();
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(calls).toEqual(['config', 'tasks', 'reconcile']);
-  expect(primes).toHaveLength(2);
-  expect(store.snapshot().connection).toBe('connected');
+  expect(store.snapshot()).toMatchObject({ tasks: [baseline], connection: 'starting' });
+  expect(reconciling).toBe(false);
+  openStream();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(store.snapshot()).toMatchObject({ tasks: [baseline], connection: 'starting' });
+  expect(reconciling).toBe(true);
+
+  finishReconciliation([reconciled]);
+  await runtime.whenConnected();
+
+  expect(store.snapshot()).toMatchObject({ tasks: [reconciled], connection: 'connected' });
+  expect(notifications).toEqual([]);
   runtime.dispose();
 });
 
-test('marks the retained store disconnected and waits before reconnecting', async () => {
-  const delays: number[] = [];
-  let opens = 0;
+test('retains tasks while disconnected and cancels the pending reconnect on disposal', async () => {
+  let attempts = 0;
+  let reconnectSignal: AbortSignal | undefined;
   const client = {
     config: async () => config, tasks: async () => [task()], reconcile: async () => [task()],
     connect: async (handlers: { onOpen(): Promise<void>; onClosed(error: Error | null): void }) => {
       await handlers.onOpen();
-      opens += 1;
+      attempts += 1;
       handlers.onClosed(new Error('lost'));
     },
   };
@@ -48,34 +67,47 @@ test('marks the retained store disconnected and waits before reconnecting', asyn
     readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }),
     createClient: () => client as never, createServerManager: () => ({ ensureReady: async () => ({ kind: 'ready', health: {} }) }) as never,
     store, notifications: { prime: () => {}, apply: async () => {} } as never,
-    delay: async (ms, signal) => { delays.push(ms); await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })); }, jitter: (value) => value, presentConnectionFailure: async () => undefined,
+    delay: async (_ms, signal) => { reconnectSignal = signal; await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true })); }, jitter: (value) => value, presentConnectionFailure: async () => undefined,
   });
   runtime.start();
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(opens).toBeGreaterThan(0);
-  expect(delays[0]).toBe(1_000);
-  expect(store.snapshot().tasks).toHaveLength(1);
+  expect(store.snapshot()).toMatchObject({ tasks: [task()], connection: 'disconnected' });
+  expect(reconnectSignal?.aborted).toBe(false);
   runtime.dispose();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(reconnectSignal?.aborted).toBe(true);
+  expect(attempts).toBe(1);
 });
 
 test('restarts only when connection settings change', async () => {
-  const clients: string[] = [];
+  const streams: AbortSignal[] = [];
+  let serverUrl = 'http://127.0.0.1:4317';
+  const origins: string[] = [];
   const client = {
     config: async () => config, tasks: async () => [task()], reconcile: async () => [task()],
-    connect: async (handlers: { onOpen(): Promise<void> }, signal: AbortSignal) => { await handlers.onOpen(); await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })); },
+    async connect(handlers: { onOpen(): Promise<void> }, signal: AbortSignal) {
+      streams.push(signal);
+      const closed = new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+      await handlers.onOpen();
+      await closed;
+    },
   };
   const runtime = new MissionControlRuntime({
-    readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }),
-    createClient: (url) => { clients.push(url); return client as never; }, createServerManager: () => ({ ensureReady: async () => ({ kind: 'ready', health: {} }) }) as never,
+    readSettings: () => ({ serverUrl, installationPath: undefined, autoStart: false }),
+    createClient: (url) => { origins.push(url); return client as never; }, createServerManager: () => ({ ensureReady: async () => ({ kind: 'ready', health: {} }) }) as never,
     store: new TaskStore(), notifications: { prime: () => {}, apply: async () => {} } as never,
     delay: async () => {}, jitter: value => value, presentConnectionFailure: async () => undefined,
   });
-  runtime.start(); await new Promise(resolve => setTimeout(resolve, 0));
+  runtime.start();
+  await runtime.whenConnected();
   runtime.reconfigure(new Set(['missionControl.notifications.ci']));
-  expect(clients).toHaveLength(1);
+  expect(origins).toEqual(['http://127.0.0.1:4317']);
+  expect(streams[0]?.aborted).toBe(false);
+  serverUrl = 'http://127.0.0.1:4318';
   runtime.reconfigure(new Set(['missionControl.serverUrl']));
-  expect(runtime['deps'].store.snapshot().connection).toBe('starting');
-  expect(clients).toHaveLength(2);
+  await runtime.whenConnected();
+  expect(origins).toEqual(['http://127.0.0.1:4317', 'http://127.0.0.1:4318']);
+  expect(streams.map((signal) => signal.aborted)).toEqual([true, false]);
   runtime.dispose();
 });
 
@@ -96,12 +128,12 @@ test('caps failed reconnect backoff and applies injected jitter', async () => {
   expect(delays).toEqual([2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000]); runtime.dispose();
 });
 
-test('disposal aborts the active stream and pending reconnect delay', async () => {
-  let streamAborted = false; let delayAborted = false;
+test('disposal aborts an active stream without scheduling a reconnect', async () => {
+  let streamAborted = false; let reconnectScheduled = false;
   const client = { config: async () => config, tasks: async () => [task()], reconcile: async () => [task()], connect: async (handlers: { onOpen(): Promise<void> }, signal: AbortSignal) => { await handlers.onOpen(); await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => { streamAborted = true; reject(new Error('aborted')); }, { once: true })); } };
-  const runtime = new MissionControlRuntime({ readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }), createClient: () => client as never, createServerManager: () => ({ ensureReady: async () => ({ kind: 'ready', health: {} }) }) as never, store: new TaskStore(), notifications: { prime: () => {}, apply: async () => {} } as never, delay: async (_ms, signal) => await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => { delayAborted = true; reject(new Error('aborted')); }, { once: true })), jitter: value => value, presentConnectionFailure: async () => undefined });
+  const runtime = new MissionControlRuntime({ readSettings: () => ({ serverUrl: 'http://127.0.0.1:4317', installationPath: undefined, autoStart: false }), createClient: () => client as never, createServerManager: () => ({ ensureReady: async () => ({ kind: 'ready', health: {} }) }) as never, store: new TaskStore(), notifications: { prime: () => {}, apply: async () => {} } as never, delay: async () => { reconnectScheduled = true; }, jitter: value => value, presentConnectionFailure: async () => undefined });
   runtime.start(); await new Promise(resolve => setTimeout(resolve, 0)); runtime.dispose(); await new Promise(resolve => setTimeout(resolve, 0));
-  expect(streamAborted).toBe(true); expect(delayAborted).toBe(false);
+  expect(streamAborted).toBe(true); expect(reconnectScheduled).toBe(false);
 });
 
 test('releases a command gate once the connection settles without connecting', async () => {

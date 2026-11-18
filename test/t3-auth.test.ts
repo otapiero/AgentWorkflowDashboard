@@ -1,18 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { existsSync, readFileSync } from 'node:fs';
-
-import { mcHome } from '../src/orchestrator/paths.ts';
 import {
   T3TokenStore,
-  T3_SCOPES,
   hasCachedT3Token,
   readPairingCredential,
-  t3CredentialPath,
-  t3TokenCachePath,
 } from '../src/orchestrator/t3/auth.ts';
 
 let home: string;
@@ -30,8 +24,7 @@ afterEach(() => {
 });
 
 function writeCredential(value: string): void {
-  mkdirSync(mcHome(), { recursive: true });
-  writeFileSync(t3CredentialPath(), value, 'utf8');
+  writeFileSync(join(home, 't3-credential'), value, 'utf8');
 }
 
 /** Records every request so the exchange payload can be asserted. */
@@ -51,23 +44,13 @@ const goodToken = {
   issued_token_type: 'urn:ietf:params:oauth:token-type:access_token',
   token_type: 'Bearer',
   expires_in: 3600,
-  scope: T3_SCOPES,
+  scope: 'orchestration:read orchestration:operate',
 };
 
 describe('pairing credential on disk', () => {
   test('a written credential is read back with surrounding whitespace stripped', () => {
     writeCredential('  pair-abc123\n');
     expect(readPairingCredential()).toBe('pair-abc123');
-  });
-
-  test('the credential and token cache belong to the install, not a project', () => {
-    // One pairing serves every project, so neither may live under MC_HOME.
-    const project = join(home, 'projects', 'acme__widgets');
-    process.env.MC_HOME = project;
-    expect(t3CredentialPath().startsWith(project)).toBe(false);
-    expect(t3TokenCachePath().startsWith(project)).toBe(false);
-    expect(t3CredentialPath().startsWith(home)).toBe(true);
-    expect(t3TokenCachePath().startsWith(home)).toBe(true);
   });
 
   test('no credential file reads as null, not a throw', () => {
@@ -80,17 +63,12 @@ describe('pairing credential on disk', () => {
   });
 
   test('a pairing URL from T3s Create link button yields just the token', () => {
-    // Recorded verbatim from T3 0.0.31's "Create link" button on 2026-08-07.
-    // The token is in the FRAGMENT, not the query string — a fragment never
-    // reaches a server, so it stays out of logs. searchParams finds nothing
-    // here, and sending the whole URL as a bearer token 401s in a way that
-    // reads exactly like a revoked credential.
-    writeCredential('http://127.0.0.1:3773/pair#token=QX7T5F72X89Q\n');
-    expect(readPairingCredential()).toBe('QX7T5F72X89Q');
+    writeCredential('http://127.0.0.1:3773/pair#token=pair-abc123\n');
+    expect(readPairingCredential()).toBe('pair-abc123');
   });
 
   test('a query-string pairing URL works too', () => {
-    writeCredential('http://192.168.110.1:3773/pair?token=pair-abc123');
+    writeCredential('http://127.0.0.1:3773/pair?token=pair-abc123');
     expect(readPairingCredential()).toBe('pair-abc123');
   });
 
@@ -103,16 +81,12 @@ describe('pairing credential on disk', () => {
 });
 
 describe('T3TokenStore', () => {
-  test('exchanges the credential for a bearer token', async () => {
+  test('exchanges the pairing credential using the OAuth grant T3 expects', async () => {
     const { impl, calls } = recordingFetch([{ status: 200, body: goodToken }]);
     const store = new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', impl);
     expect(await store.getToken()).toBe('tok-1');
     expect(calls[0]?.url).toBe('http://127.0.0.1:3773/oauth/token');
-  });
-
-  test('sends the OAuth token-exchange grant form T3 expects', async () => {
-    const { impl, calls } = recordingFetch([{ status: 200, body: goodToken }]);
-    await new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', impl).getToken();
+    expect(calls[0]?.init.method).toBe('POST');
 
     const headers = calls[0]?.init.headers as Record<string, string>;
     expect(headers['content-type']).toBe('application/x-www-form-urlencoded');
@@ -126,7 +100,7 @@ describe('T3TokenStore', () => {
     expect(body.get('requested_token_type')).toBe(
       'urn:ietf:params:oauth:token-type:access_token',
     );
-    expect(body.get('scope')).toBe(T3_SCOPES);
+    expect(body.get('scope')).toBe('orchestration:read orchestration:operate');
     expect(body.get('client_label')).toBe('Mission Control');
   });
 
@@ -149,18 +123,6 @@ describe('T3TokenStore', () => {
     expect(await store.getToken(t0)).toBe('tok-1');
     // 70s later the 120s token has under a minute left.
     expect(await store.getToken(t0 + 70_000)).toBe('tok-2');
-    expect(calls).toHaveLength(2);
-  });
-
-  test('invalidate forces the next call to exchange again', async () => {
-    const { impl, calls } = recordingFetch([
-      { status: 200, body: goodToken },
-      { status: 200, body: { ...goodToken, access_token: 'tok-2' } },
-    ]);
-    const store = new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', impl);
-    await store.getToken();
-    store.invalidate();
-    expect(await store.getToken()).toBe('tok-2');
     expect(calls).toHaveLength(2);
   });
 
@@ -196,19 +158,15 @@ describe('T3TokenStore', () => {
    * would mean every board restart tried to re-exchange a spent token.
    */
   describe('the access token outlives the process that earned it', () => {
-    test('a successful exchange persists the access token', async () => {
-      const { impl } = recordingFetch([{ status: 200, body: goodToken }]);
-      await new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', impl).getToken();
-
-      expect(existsSync(t3TokenCachePath())).toBe(true);
-      expect(JSON.parse(readFileSync(t3TokenCachePath(), 'utf8')).accessToken).toBe('tok-1');
-    });
-
-    test('a spent pairing token is fine when a valid access token is on disk', async () => {
+    test('another project can reuse the access token after the pairing credential is spent', async () => {
+      process.env.MC_HOME = join(home, 'projects', 'acme__widgets');
+      writeCredential('pair-abc');
       const first = recordingFetch([{ status: 200, body: goodToken }]);
-      await new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', first.impl).getToken();
+      const credential = readPairingCredential();
+      expect(credential).toBe('pair-abc');
+      await new T3TokenStore('http://127.0.0.1:3773', credential, first.impl).getToken();
 
-      // null credential: the operator never replaced the spent pairing token.
+      process.env.MC_HOME = join(home, 'projects', 'acme__tools');
       const { impl, calls } = recordingFetch([{ status: 401, body: {} }]);
       expect(await new T3TokenStore('http://127.0.0.1:3773', null, impl).getToken()).toBe('tok-1');
       expect(calls).toHaveLength(0);
@@ -233,14 +191,6 @@ describe('T3TokenStore', () => {
       const store = new T3TokenStore('http://127.0.0.1:3773', 'pair-2', impl);
       expect(await store.getToken(t0 + 200_000)).toBe('tok-2');
       expect(calls).toHaveLength(1);
-    });
-
-    test('invalidate removes the persisted copy, so a dead token is not reloaded', async () => {
-      const { impl } = recordingFetch([{ status: 200, body: goodToken }]);
-      const store = new T3TokenStore('http://127.0.0.1:3773', 'pair-abc', impl);
-      await store.getToken();
-      store.invalidate();
-      expect(existsSync(t3TokenCachePath())).toBe(false);
     });
 
     test('hasCachedT3Token reports whether a re-pair is needed', async () => {

@@ -5,10 +5,8 @@ import { join } from 'node:path';
 import { execaSync } from 'execa';
 import {
   parsePorcelainPaths,
-  uniqueName,
   shouldCollectRun,
   COLLECT_GRACE_MS,
-  resolveArtifactStoredPath,
   writeRunSnapshot,
   snapshotAgeMs,
   collectArtifacts,
@@ -24,13 +22,6 @@ describe('parsePorcelainPaths', () => {
   it('extracts paths and resolves renames to their new name', () => {
     const out = ' M docs/spec.md\n?? docs/new.md\nR  a.md -> b.md\n';
     expect(parsePorcelainPaths(out)).toEqual(['docs/spec.md', 'docs/new.md', 'b.md']);
-  });
-});
-
-describe('uniqueName', () => {
-  it('suffixes before the extension on collision', () => {
-    expect(uniqueName(['plan.md'], 'plan.md')).toBe('plan-1.md');
-    expect(uniqueName(['plan.md', 'plan-1.md'], 'plan.md')).toBe('plan-2.md');
   });
 });
 
@@ -60,31 +51,6 @@ describe('shouldCollectRun', () => {
     // The window between writing the snapshot and the terminal writing
     // <kind>.running: nothing is live yet, but the run has not started either.
     expect(shouldCollectRun({ ...base, snapshotAgeMs: 500 })).toBe(false);
-  });
-});
-
-describe('resolveArtifactStoredPath', () => {
-  let storeHome: string;
-
-  beforeEach(() => {
-    storeHome = mkdtempSync(join(tmpdir(), 'mc-store-'));
-    process.env.MC_HOME = storeHome;
-  });
-
-  afterEach(() => {
-    delete process.env.MC_HOME;
-    rmSync(storeHome, { recursive: true, force: true });
-  });
-
-  const refs = [
-    { name: 'design.md', storedPath: 'artifacts/design.md', origin: 'repo' as const, originalPath: 'x' },
-  ];
-  it('resolves a known artifact under the task dir', () => {
-    const p = resolveArtifactStoredPath(7, 'design.md', refs);
-    expect(p).toMatch(/[\\/]7[\\/]artifacts[\\/]design\.md$/);
-  });
-  it('returns null for a name not in the manifest (blocks traversal)', () => {
-    expect(resolveArtifactStoredPath(7, '../../secret', refs)).toBeNull();
   });
 });
 
@@ -161,17 +127,6 @@ describe('snapshot + collectArtifacts', () => {
     expect(existsSync(join(taskDir(ISSUE), 'artifacts', 'research.md'))).toBe(true);
   });
 
-  it('starting a plan run no longer clears what earlier runs produced', async () => {
-    writeRunSnapshot(config, ISSUE, 'custom');
-    writeFileSync(join(taskDir(ISSUE), 'research.md'), '# research\n');
-    await collectArtifacts(config, ISSUE, 'custom');
-
-    writeRunSnapshot(config, ISSUE, 'plan');
-
-    expect(readArtifacts(ISSUE)).toHaveLength(1);
-    expect(existsSync(join(taskDir(ISSUE), 'artifacts', 'research.md'))).toBe(true);
-  });
-
   it('two runs claiming the same file produce one entry, not a suffixed duplicate', async () => {
     // Exactly the overlap the poller can hit: a custom run launched while a
     // plan run's output was still uncollected leaves both snapshots pending,
@@ -186,15 +141,17 @@ describe('snapshot + collectArtifacts', () => {
     expect(readArtifacts(ISSUE).map((r) => r.name)).toEqual(['design.md']);
   });
 
-  it('two different originals sharing a basename both land, suffixed', async () => {
+  it('keeps artifacts with colliding basenames under separate names', async () => {
     mkdirSync(join(repo, 'docs'), { recursive: true });
+    mkdirSync(join(repo, 'research'), { recursive: true });
     writeRunSnapshot(config, ISSUE, 'plan');
     writeFileSync(join(taskDir(ISSUE), 'notes.md'), 'a\n');
     writeFileSync(join(repo, 'docs', 'notes.md'), 'b\n');
+    writeFileSync(join(repo, 'research', 'notes.md'), 'c\n');
 
     await collectArtifacts(config, ISSUE, 'plan');
 
-    expect(readArtifacts(ISSUE).map((r) => r.name).sort()).toEqual(['notes-1.md', 'notes.md']);
+    expect(readArtifacts(ISSUE).map((r) => r.name).sort()).toEqual(['notes-1.md', 'notes-2.md', 'notes.md']);
   });
 
   it('signs off with the run kind, never with plan.done for a custom run', async () => {

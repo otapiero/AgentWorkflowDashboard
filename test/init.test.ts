@@ -10,7 +10,7 @@ import {
   type DetectedRepo,
 } from '../src/orchestrator/init.ts';
 import { parseConfig } from '../src/orchestrator/config.ts';
-import { activeProjectSlug, projectHome, projectSlug } from '../src/orchestrator/paths.ts';
+import { activeProjectSlug } from '../src/orchestrator/paths.ts';
 
 let root: string;
 
@@ -62,15 +62,9 @@ describe('renderConfigTemplate', () => {
 describe('initProject', () => {
   test('writes the config into the project home and makes it active', () => {
     const result = initProject(REPO);
-    expect(result.slug).toBe(projectSlug('acme', 'widgets'));
+    expect(result.slug).toBe('acme__widgets');
     expect(existsSync(result.configPath)).toBe(true);
     expect(activeProjectSlug()).toBe(result.slug);
-  });
-
-  test('creates the tasks and worktrees directories the runtime expects', () => {
-    const result = initProject(REPO);
-    expect(existsSync(join(projectHome(result.slug), 'tasks'))).toBe(true);
-    expect(existsSync(join(projectHome(result.slug), 'worktrees'))).toBe(true);
   });
 
   test('refuses to clobber an existing config', () => {

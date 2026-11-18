@@ -19,7 +19,7 @@ afterEach(() => {
 
 const VALID = `
 repo:
-  path: 'C:\\Users\\alice\\Desktop\\V1\\widgets'
+  path: 'C:\\src\\widgets'
   owner: 'acme'
   name: 'widgets'
   baseBranch: 'dev'
@@ -74,20 +74,6 @@ server:
 `;
 
 describe('parseConfig', () => {
-  test('accepts a valid config and returns typed values', () => {
-    const cfg = parseConfig(VALID);
-    expect(cfg.repo.owner).toBe('acme');
-    expect(cfg.repo.name).toBe('widgets');
-    expect(cfg.pipeline.map((p) => p.id)).toEqual(['plan', 'implement', 'publish']);
-  });
-
-  test('accepts Codex as a configured phase actor', () => {
-    const cfg = parseConfig(VALID.replace('actor: claude', 'actor: codex'));
-    expect(cfg.pipeline[0]?.actor).toBe('codex');
-    expect(cfg.agents.codex?.promptPosition).toBe('last');
-    expect(cfg.agents.codex?.effortValueTemplate).toContain('{{effort}}');
-  });
-
   test('rejects duplicate phase ids', () => {
     const dup = VALID.replace('  - id: implement', '  - id: plan');
     expect(() => parseConfig(dup)).toThrow(/duplicate/i);

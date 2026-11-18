@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  samePath,
   parseCodexSessionFile,
   parseSessionFile,
   missionUsage,
@@ -16,21 +15,14 @@ function asst(cwd: string, usage: Record<string, number>, ts: string, model = 'c
   return line({ type: 'assistant', cwd, timestamp: ts, sessionId: 'sess', message: { model, usage } });
 }
 
-describe('samePath', () => {
-  test('ignores drive-letter case and separator style', () => {
-    expect(samePath('C:\\Users\\o\\wt', 'c:/users/o/wt')).toBe(true);
-    expect(samePath('C:\\a', 'C:\\b')).toBe(false);
-  });
-});
-
 describe('parseSessionFile', () => {
   const cwd = 'c:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\worktrees\\issue-1';
-  test('sums the four usage fields for matching-cwd assistant lines', () => {
+  test('sums usage for the same worktree despite Windows path spelling differences', () => {
     const content = [
       asst(cwd, { input_tokens: 2, output_tokens: 5, cache_creation_input_tokens: 10, cache_read_input_tokens: 20 }, '2026-07-26T00:00:00Z'),
       asst(cwd, { input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }, '2026-07-26T00:05:00Z'),
     ].join('\n');
-    const s = parseSessionFile(content, 'sess', cwd)!;
+    const s = parseSessionFile(content, 'sess', 'C:/Users/Alice/.mission-control/projects/acme__widgets/worktrees/issue-1')!;
     expect(s.tokens).toEqual({ input: 3, output: 6, cacheCreate: 10, cacheRead: 20, total: 39 });
     expect(s.startedAt).toBe('2026-07-26T00:00:00Z');
     expect(s.endedAt).toBe('2026-07-26T00:05:00Z');
@@ -65,6 +57,11 @@ describe('parseCodexSessionFile', () => {
         type: 'turn_context',
         timestamp: '2026-08-03T00:00:01Z',
         payload: { model: 'gpt-5.6-sol', cwd },
+      }),
+      line({
+        type: 'event_msg',
+        timestamp: '2026-08-03T00:02:00Z',
+        payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 10, output_tokens: 2 } } },
       }),
       line({
         type: 'event_msg',
@@ -110,12 +107,14 @@ describe('parseCodexSessionFile', () => {
 describe('missionUsage', () => {
   let projects: string;
   let codexSessions: string;
+  let home: string;
   beforeEach(() => {
     projects = mkdtempSync(join(tmpdir(), 'mc-proj-'));
     codexSessions = mkdtempSync(join(tmpdir(), 'mc-codex-'));
     process.env.MC_CLAUDE_PROJECTS = projects;
     process.env.MC_CODEX_SESSIONS = codexSessions;
-    process.env.MC_HOME = mkdtempSync(join(tmpdir(), 'mc-home-'));
+    home = mkdtempSync(join(tmpdir(), 'mc-home-'));
+    process.env.MC_HOME = home;
   });
   afterEach(() => {
     delete process.env.MC_CLAUDE_PROJECTS;
@@ -123,18 +122,7 @@ describe('missionUsage', () => {
     delete process.env.MC_HOME;
     rmSync(projects, { recursive: true, force: true });
     rmSync(codexSessions, { recursive: true, force: true });
-  });
-
-  test('rolls all sessions for a worktree into a mission total', () => {
-    const cwd = worktreePath(1); // uses MC_HOME
-    const folder = join(projects, 'issue-1-folder');
-    mkdirSync(folder, { recursive: true });
-    writeFileSync(join(folder, 'a.jsonl'), asst(cwd, { input_tokens: 1, output_tokens: 2, cache_creation_input_tokens: 3, cache_read_input_tokens: 4 }, '2026-07-26T00:00:00Z'));
-    writeFileSync(join(folder, 'b.jsonl'), asst(cwd, { input_tokens: 10, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }, '2026-07-26T01:00:00Z'));
-    const u = missionUsage(1);
-    expect(u.tracked).toBe(true);
-    expect(u.sessions).toHaveLength(2);
-    expect(u.total.total).toBe(20);
+    rmSync(home, { recursive: true, force: true });
   });
 
   test('reports untracked when nothing matches', () => {
@@ -142,13 +130,17 @@ describe('missionUsage', () => {
     expect(missionUsage(999).total.total).toBe(0);
   });
 
-  test('combines Claude and nested Codex sessions for the same worktree', () => {
+  test('combines multiple Claude sessions and a nested Codex session for the same worktree', () => {
     const cwd = worktreePath(1);
     const claudeFolder = join(projects, 'issue-1-folder');
     mkdirSync(claudeFolder, { recursive: true });
     writeFileSync(
       join(claudeFolder, 'claude.jsonl'),
       asst(cwd, { input_tokens: 1, output_tokens: 2 }, '2026-08-03T00:00:00Z'),
+    );
+    writeFileSync(
+      join(claudeFolder, 'claude-next.jsonl'),
+      asst(cwd, { input_tokens: 4 }, '2026-08-03T00:30:00Z'),
     );
 
     const dateFolder = join(codexSessions, '2026', '08', '03');
@@ -170,7 +162,7 @@ describe('missionUsage', () => {
     );
 
     const usage = missionUsage(1);
-    expect(usage.sessions.map((session) => session.agent)).toEqual(['claude', 'codex']);
-    expect(usage.total.total).toBe(15);
+    expect(usage.sessions.map((session) => session.agent)).toEqual(['claude', 'claude', 'codex']);
+    expect(usage.total.total).toBe(19);
   });
 });

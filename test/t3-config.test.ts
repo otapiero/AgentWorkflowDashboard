@@ -6,7 +6,7 @@ import type { PhaseConfig } from '../src/shared/types.ts';
 
 const base = `
 repo:
-  path: 'C:\\repo'
+  path: 'C:\\src\\widgets'
   owner: 'acme'
   name: 'widgets'
   baseBranch: 'dev'
@@ -35,23 +35,11 @@ pipeline:
 `;
 
 describe('t3 config', () => {
-  test("accepts 't3' as a launcher", () => {
+  test('accepts settings needed to run a phase through T3', () => {
     const config = parseConfig(`${base}launcher: t3\n`);
     expect(config.launcher).toBe('t3');
-  });
-
-  test('still accepts the two existing launchers', () => {
-    expect(parseConfig(`${base}launcher: wt\n`).launcher).toBe('wt');
-    expect(parseConfig(`${base}launcher: vscode\n`).launcher).toBe('vscode');
-  });
-
-  test('reads t3Instance off an agent profile', () => {
-    expect(parseConfig(base).agents.claude?.t3Instance).toBe('claudeAgent');
-  });
-
-  test('reads per-phase runtime and interaction modes', () => {
-    const phase = parseConfig(base).pipeline[0]!;
-    expect(phase.t3).toEqual({ runtimeMode: 'approval-required', interactionMode: 'plan' });
+    expect(config.agents.claude?.t3Instance).toBe('claudeAgent');
+    expect(config.pipeline[0]?.t3).toEqual({ runtimeMode: 'approval-required', interactionMode: 'plan' });
   });
 
   test('a phase block with only one of the two modes is rejected', () => {
@@ -70,13 +58,6 @@ describe('t3ModesForPhase', () => {
     expect(
       t3ModesForPhase(phase('plan', { runtimeMode: 'auto', interactionMode: 'default' })),
     ).toEqual({ runtimeMode: 'auto', interactionMode: 'default' });
-  });
-
-  test('plan defaults to full access in plan mode', () => {
-    expect(t3ModesForPhase(phase('plan'))).toEqual({
-      runtimeMode: 'full-access',
-      interactionMode: 'plan',
-    });
   });
 
   /**

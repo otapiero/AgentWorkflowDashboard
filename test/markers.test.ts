@@ -36,25 +36,13 @@ describe('spawn liveness', () => {
     expect(live).not.toBeNull();
     expect(live?.phase).toBe('plan');
     expect(live?.pid).toBe(process.pid);
+    expect(hasMarker(3060, 'plan.running')).toBe(true);
   });
 
-  test('a running marker for a dead process reports no live spawn', () => {
-    // The whole point of storing the PID: a closed terminal must not leave
-    // a card showing "live" forever.
+  test('a dead spawn is no longer reported and its running marker is cleared', () => {
     writeRunningMarker(3060, 'plan', 0x7ffffff);
     expect(readLiveSpawn(3060)).toBeNull();
-  });
-
-  test('a dead running marker is cleaned up so it stops being listed', () => {
-    writeRunningMarker(3060, 'plan', 0x7ffffff);
-    readLiveSpawn(3060);
     expect(hasMarker(3060, 'plan.running')).toBe(false);
-  });
-
-  test('a live running marker is left in place', () => {
-    writeRunningMarker(3060, 'plan', process.pid);
-    readLiveSpawn(3060);
-    expect(hasMarker(3060, 'plan.running')).toBe(true);
   });
 
   test('a corrupt running marker is treated as dead rather than crashing', () => {

@@ -13,25 +13,22 @@ async function directory() { const value = await mkdtemp(join(tmpdir(), 'notific
 function event(fingerprint: string): NotificationEvent { return { kind: 'ciFailed', issue: 1, title: 'CI failed', message: 'CI failed', fingerprint, prUrl: null }; }
 afterEach(async () => { await Promise.all(directories.splice(0).map((value) => rm(value, { recursive: true, force: true }))); });
 
-test('atomically allows one window to claim an event', async () => {
-  const storage = await directory();
-  const [first, second] = await Promise.all([new DeliveryLedger(storage, delay).claim(event('same')), new DeliveryLedger(storage, delay).claim(event('same'))]);
-  expect([first, second].filter(Boolean)).toHaveLength(1);
-});
-
-test('uses every configured backoff then makes a final lease attempt', async () => {
+test('claims an event when contention clears at the end of the retry window', async () => {
   const storage = await directory();
   // The holder must heartbeat faster than the 1 s window DeliveryLedger acquires with,
   // or it reads as stale between beats and gets taken over before the last backoff.
   const held = await acquireAtomicLease(join(storage, 'notifications.lock'), 600);
-  const delays: number[] = [];
+  let elapsed = 0;
   const ledger = new DeliveryLedger(storage, async (ms) => {
-    delays.push(ms);
-    if (ms === 80) await held!.release();
+    elapsed += ms;
+    if (elapsed === 155) await held!.release();
   });
 
-  await expect(ledger.claim(event('after-final-retry'))).resolves.toBe(true);
-  expect(delays).toEqual([5, 10, 20, 40, 80]);
+  try {
+    await expect(ledger.claim(event('after-final-retry'))).resolves.toBe(true);
+  } finally {
+    await held!.release();
+  }
 });
 
 test('fails closed without replacing malformed ledger contents', async () => {
@@ -46,8 +43,10 @@ test('fails closed without replacing malformed ledger contents', async () => {
 test('keeps only the newest 500 fingerprints', async () => {
   const storage = await directory();
   const ledger = new DeliveryLedger(storage, delay);
-  await writeFile(join(storage, 'notifications.json'), JSON.stringify({ fingerprints: Array.from({ length: 499 }, (_, index) => `event-${498 - index}`) }), 'utf8');
+  const persisted = Array.from({ length: 500 }, (_, index) => `event-${index}`);
+  await writeFile(join(storage, 'notifications.json'), JSON.stringify({ fingerprints: persisted }), 'utf8');
+  await expect(ledger.claim(event('new'))).resolves.toBe(true);
+  await expect(ledger.claim(event('new'))).resolves.toBe(false);
+  await expect(ledger.claim(event('event-498'))).resolves.toBe(false);
   await expect(ledger.claim(event('event-499'))).resolves.toBe(true);
-  await expect(ledger.claim(event('event-500'))).resolves.toBe(true);
-  expect(JSON.parse(await readFile(join(storage, 'notifications.json'), 'utf8')).fingerprints).toEqual(['event-500', 'event-499', ...Array.from({ length: 498 }, (_, index) => `event-${498 - index}`)]);
 });

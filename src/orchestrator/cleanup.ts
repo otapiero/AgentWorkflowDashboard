@@ -16,36 +16,20 @@ import type { Config, Phase } from '../shared/types.ts';
  */
 
 /**
- * The paths out of `git status --porcelain`.
+ * The paths out of NUL-delimited Git status.
  *
  * The status code is deliberately ignored: modified, added, untracked and
  * renamed all mean the same thing here — a file on disk that git is not
  * carrying, which the removal would take with it.
  */
 export function parseRescuePaths(stdout: string): string[] {
-  if (stdout.includes('\0')) {
-    const records = stdout.split('\0');
-    const paths: string[] = [];
-    for (let i = 0; i < records.length; i += 1) {
-      const record = records[i]!;
-      if (!record) continue;
-      paths.push(record.slice(3));
-      if (/^[RC]|^.[RC]/.test(record)) i += 1;
-    }
-    return paths;
-  }
+  const records = stdout.split('\0');
   const paths: string[] = [];
-  for (const line of stdout.split(/\r?\n/)) {
-    if (line.trim() === '') continue;
-    // Two status columns then a space; everything after is the path.
-    let path = line.slice(3).trim();
-    if (path === '') continue;
-    // A rename reads "old -> new"; the file on disk is the new one.
-    const arrow = path.indexOf(' -> ');
-    if (arrow !== -1 && /^[RC]|^.[RC]/.test(line)) path = path.slice(arrow + 4);
-    // git quotes paths with spaces or non-ASCII bytes.
-    if (path.startsWith('"') && path.endsWith('"')) path = path.slice(1, -1);
-    paths.push(path);
+  for (let i = 0; i < records.length; i += 1) {
+    const record = records[i]!;
+    if (!record) continue;
+    paths.push(record.slice(3));
+    if (/^[RC]|^.[RC]/.test(record)) i += 1;
   }
   return paths;
 }

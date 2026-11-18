@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { MissionControlStatusBar, taskStatus } from '../../src/status-bar.ts';
+import { MissionControlStatusBar } from '../../src/status-bar.ts';
 import { TaskStore } from '../../src/task-store.ts';
 import { config, task } from './fixtures.ts';
 
@@ -18,9 +18,15 @@ describe('status bar', () => {
     expect(vscode.items[1]).toMatchObject({ text: '$(check) Mission Control', command: 'missionControl.openDashboard' });
   });
 
-  test('omits null model and effort', () => {
-    const current = task(); current.pinned = { agent: 'codex', model: null, effort: null };
-    expect(taskStatus(current)).toBe('#3060 · Implement | codex');
+  test('removes the model and effort from the status bar when the task clears them', () => {
+    const current = task();
+    const store = new TaskStore(); store.applyBaseline(config, [current]); store.setConnection('connected');
+    const vscode = fakeVscode();
+    new MissionControlStatusBar(store, () => ({ scheme: 'file', fsPath: current.integration.workspacePath }), vscode);
+
+    store.applyTasks([{ ...current, pinned: { agent: 'codex', model: null, effort: null } }]);
+
+    expect(vscode.items[0].text).toBe('#3060 · Implement | codex');
   });
 
   test('shows disconnected warning and hides unrelated workspace context', () => {
@@ -28,6 +34,6 @@ describe('status bar', () => {
     const vscode = fakeVscode();
     new MissionControlStatusBar(store, () => ({ scheme: 'file', fsPath: 'C:\\elsewhere' }), vscode);
     expect(vscode.items[0].text).toBe('');
-    expect(vscode.items[1].text).toBe('$(warning) Mission Control disconnected');
+    expect(vscode.items[1]).toMatchObject({ text: '$(warning) Mission Control disconnected', command: 'missionControl.connectionActions' });
   });
 });

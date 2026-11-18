@@ -24,7 +24,6 @@ export interface CommandDependencies {
   api: CommandsApi;
   store: Pick<TaskStore, 'task' | 'tasks'>;
   client: Pick<MissionControlClient, 'spawn'>;
-  currentClient?: () => Pick<MissionControlClient, 'spawn'>;
   config: () => BoardConfig | null;
   serverUrl: () => string;
   runLaunchFlow?: (task: TaskWithDerived, config: BoardConfig, picker: LaunchPicker) => Promise<SpawnRequest | null>;
@@ -72,7 +71,7 @@ export class CommandController {
     const target = this.deps.mutationTarget?.();
     if (this.deps.mutationTarget && !target) { await this.deps.api.showWarningMessage('Mission Control is reconnecting. Try again when connected.'); return; }
     try {
-      await (target?.client ?? this.deps.currentClient?.() ?? this.deps.client).spawn(task.issue, request, target?.signal ?? new AbortController().signal);
+      await (target?.client ?? this.deps.client).spawn(task.issue, request, target?.signal ?? new AbortController().signal);
     } catch (error) {
       const choice = await this.deps.api.showWarningMessage(error instanceof Error ? error.message : String(error), 'Show Logs');
       if (choice === 'Show Logs') await this.showLogs();

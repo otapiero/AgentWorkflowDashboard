@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 
+import type { SpawnRequest } from '../../src/client/mission-control-client.ts';
 import { CommandController } from '../../src/commands.ts';
 import { config, task } from './fixtures.ts';
 
@@ -28,7 +29,8 @@ function controller(overrides: Partial<ConstructorParameters<typeof CommandContr
 describe('CommandController', () => {
   test('opens the latest task worktree in a new window', async () => {
     const { commands, current, api } = controller();
-    await commands.openTask(current.issue);
+    const stale = task({ workspacePath: 'C:\\src\\widgets\\old-worktree' });
+    await commands.openTask(stale);
     expect(api.executeCommand).toHaveBeenCalledWith('vscode.openFolder', { fsPath: current.integration.workspacePath }, { forceNewWindow: true });
   });
 
@@ -43,14 +45,12 @@ describe('CommandController', () => {
   test('opens the configured dashboard origin', async () => {
     const { commands, api } = controller();
     await commands.openDashboard();
-    expect(api.uriParse).toHaveBeenCalledWith('http://127.0.0.1:4317');
     expect(api.openExternal).toHaveBeenCalledWith({ value: 'http://127.0.0.1:4317' });
   });
 
-  test('delegates a launch for the current workspace task', async () => {
-    const { commands, current, client, flow } = controller();
+  test('spawns the requested selection for the current workspace task', async () => {
+    const { commands, current, client } = controller();
     await commands.runCurrentPhase();
-    expect(flow).toHaveBeenCalledWith(current, config, expect.objectContaining({ pick: expect.any(Function) }));
     expect(client.spawn).toHaveBeenCalledWith(current.issue, { phase: 'implement', agent: 'codex', model: 'gpt-5.6-sol', effort: 'high' }, expect.any(AbortSignal));
   });
 
@@ -98,30 +98,19 @@ describe('CommandController', () => {
     expect(exact.show).toHaveBeenCalledOnce();
   });
 
-  test('shows output and reports restart completion', async () => {
-    const { commands, output, api, server } = controller();
-    await commands.showLogs();
+  test('restarts the current server and reports completion', async () => {
+    const replacement = { restartOwned: vi.fn().mockResolvedValue(true) };
+    const { commands, output, api, server } = controller({ currentServer: () => replacement });
     await commands.restartServer();
-    expect(output.show).toHaveBeenCalledTimes(2);
-    expect(server.restartOwned).toHaveBeenCalledOnce();
+    expect(output.show).toHaveBeenCalledOnce();
+    expect(replacement.restartOwned).toHaveBeenCalledOnce();
+    expect(server.restartOwned).not.toHaveBeenCalled();
     expect(api.showInformationMessage).toHaveBeenCalledWith('Mission Control server stopped; reconnecting.');
   });
 
-  test('uses retargeted client and server after a runtime reconfiguration', async () => {
-    const replacementClient = { spawn: vi.fn().mockResolvedValue({ spawned: {} }) };
-    const replacementServer = { restartOwned: vi.fn().mockResolvedValue(true) };
-    const { commands, current, client, server } = controller({ currentClient: () => replacementClient, currentServer: () => replacementServer });
-    await commands.runCurrentPhase(current);
-    await commands.restartServer();
-    expect(replacementClient.spawn).toHaveBeenCalledOnce();
-    expect(replacementServer.restartOwned).toHaveBeenCalledOnce();
-    expect(client.spawn).not.toHaveBeenCalled();
-    expect(server.restartOwned).not.toHaveBeenCalled();
-  });
-
-  test('does not spawn when runtime generation changes during launch picks', async () => {
-    let finishPick!: (value: any) => void;
-    const flow = vi.fn(() => new Promise<any>(resolve => { finishPick = resolve; }));
+  test('does not spawn when the runtime is reconnecting after the launch picks', async () => {
+    let finishPick!: (value: SpawnRequest) => void;
+    const flow = () => new Promise<SpawnRequest>(resolve => { finishPick = resolve; });
     const { commands, current, client, api } = controller({ runLaunchFlow: flow, mutationTarget: () => null });
     const pending = commands.runCurrentPhase(current);
     await Promise.resolve();

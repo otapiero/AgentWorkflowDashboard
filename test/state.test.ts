@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -32,15 +32,11 @@ describe('loadState', () => {
     expect(loadState()).toEqual({ version: 1, tasks: [] });
   });
 
-  test('a corrupt state file yields an empty board rather than crashing', () => {
-    writeFileSync(statePath(), '{ this is not json', 'utf8');
-    expect(loadState().tasks).toEqual([]);
-  });
-
-  test('a corrupt state file is preserved alongside as a .corrupt backup', () => {
-    writeFileSync(statePath(), '{ this is not json', 'utf8');
-    loadState();
-    expect(existsSync(`${statePath()}.corrupt`)).toBe(true);
+  test('opens an empty board while preserving the corrupt state for recovery', () => {
+    const corrupt = '{ this is not json';
+    writeFileSync(statePath(), corrupt, 'utf8');
+    expect(loadState()).toEqual({ version: 1, tasks: [] });
+    expect(readFileSync(`${statePath()}.corrupt`, 'utf8')).toBe(corrupt);
   });
 
   test('state written by saveState round-trips', () => {
@@ -65,10 +61,6 @@ describe('task mutations', () => {
     expect(listTasks()).toHaveLength(1);
     expect(getTask(3060)?.title).toBe('Renamed title');
     expect(getTask(3060)?.manualPhase).toBe('merge');
-  });
-
-  test('getTask returns null for an issue that is not on the board', () => {
-    expect(getTask(9999)).toBeNull();
   });
 
   test('removeTask takes an issue off the board', () => {

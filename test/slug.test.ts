@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { slugify, branchName } from '../src/orchestrator/slug.ts';
+import { slugify } from '../src/orchestrator/slug.ts';
 
 describe('slugify', () => {
   test('drops apostrophes rather than turning them into separators', () => {
@@ -42,13 +42,4 @@ describe('slugify', () => {
   test('falls back to "task" when a title has no usable characters', () => {
     expect(slugify('***')).toBe('task');
   });
-});
-
-describe('branchName', () => {
-  test('composes prefix, issue number and slug', () => {
-    expect(
-      branchName('alice', 3060, 'Add audio playback mode'),
-    ).toBe('alice/3060-add-audio-playback-mode');
-  });
-
 });

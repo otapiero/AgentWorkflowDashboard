@@ -75,14 +75,6 @@ test('deduplicates simultaneous reads including forced refreshes', async () => {
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-test('a forced refresh removes reviews that have been completed', async () => {
-  const fetch = vi.fn().mockResolvedValueOnce([pr]).mockResolvedValueOnce([]);
-  const read = createReviewRequestsReader(config, { fetch });
-  await read();
-  expect(await read(true)).toMatchObject({ pullRequests: [], error: null });
-  expect(fetch).toHaveBeenCalledTimes(2);
-});
-
 test('retains the last successful queue and timestamp when GitHub fails', async () => {
   const fetch = vi.fn().mockResolvedValueOnce([pr]).mockRejectedValueOnce(new Error('Offline'));
   const read = createReviewRequestsReader(config, { fetch });

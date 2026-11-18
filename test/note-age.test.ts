@@ -45,6 +45,6 @@ describe('unsettled note age indicators', () => {
     expect(render(30 * day, { status: 'settled', settledAt: '2026-10-02T10:00:00Z' })).not.toContain('notes-age');
   });
   test('a future creation timestamp does not show a warning', () => {
-    expect(render(-day)).not.toContain('notes-age');
+    expect(render(-30 * day)).not.toContain('notes-age');
   });
 });

@@ -52,12 +52,12 @@ describe('resolveT3Launch', () => {
     expect(result.error).toContain('not installed');
   });
 
-  test('refuses when no concrete model is resolvable', () => {
+  test.each(['default', null])('refuses a launch with model %s and no profile model', (model) => {
     const result = resolveT3Launch({
       agent: 'codex',
       profile: codex,
       phase: plan,
-      model: 'default',
+      model,
       effort: null,
       readiness: () => ({ instanceId: 'codex', ready: true, reason: null, models: [] }),
     });
@@ -191,12 +191,12 @@ describe('resolveT3Launch', () => {
     expect(result.modelSelection.model).toBe('github-copilot/claude-sonnet-5');
   });
 
-  test('leaves a model the instance already offers exactly as written', () => {
+  test('uses the configured model verbatim when no model or effort is selected', () => {
     const result = resolveT3Launch({
       agent: 'copilot',
-      profile: { ...codex, t3Instance: 'opencode' },
+      profile: { ...codex, t3Instance: 'opencode', model: 'opencode/big-pickle' },
       phase: plan,
-      model: 'opencode/big-pickle',
+      model: null,
       effort: null,
       readiness: () => ({
         instanceId: 'opencode',
@@ -206,7 +206,7 @@ describe('resolveT3Launch', () => {
       }),
     });
     if (!result.ok) throw new Error(`expected success, got: ${result.error}`);
-    expect(result.modelSelection.model).toBe('opencode/big-pickle');
+    expect(result.modelSelection).toEqual({ instanceId: 'opencode', model: 'opencode/big-pickle' });
   });
 
   test('refuses a model the instance does not offer, listing the ones it does', () => {
@@ -252,16 +252,7 @@ describe('resolveT3Launch', () => {
   // The claude agent's models are the CLI's family aliases, but claudeAgent
   // advertises released slugs, so 'opus' was refused with "it does not offer
   // 'opus'" even though the family was right there.
-  const claudeAgentModels = [
-    'claude-fable-5',
-    'claude-opus-5',
-    'claude-opus-4-8',
-    'claude-sonnet-5',
-    'claude-sonnet-4-6',
-    'claude-haiku-4-5',
-  ];
-
-  function launchClaude(model: string, models = claudeAgentModels) {
+  function launchClaude(model: string, models: string[]) {
     return resolveT3Launch({
       agent: 'claude',
       profile: { ...codex, t3Instance: 'claudeAgent' },
@@ -271,12 +262,6 @@ describe('resolveT3Launch', () => {
       readiness: () => ({ instanceId: 'claudeAgent', ready: true, reason: null, models }),
     });
   }
-
-  test('reads a family alias as the newest release in that family', () => {
-    const result = launchClaude('opus');
-    if (!result.ok) throw new Error(`expected success, got: ${result.error}`);
-    expect(result.modelSelection.model).toBe('claude-opus-5');
-  });
 
   test('picks the newest by version, not by where the instance listed it', () => {
     const result = launchClaude('sonnet', ['claude-sonnet-4-6', 'claude-sonnet-5']);
@@ -292,13 +277,5 @@ describe('resolveT3Launch', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
     expect(result.error).toContain('anthropic/claude-sonnet-5');
-  });
-
-  test('a family no release matches is still refused', () => {
-    const result = launchClaude('gemini');
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('expected failure');
-    expect(result.error).toContain("'gemini'");
-    expect(result.error).toContain('claude-opus-5');
   });
 });

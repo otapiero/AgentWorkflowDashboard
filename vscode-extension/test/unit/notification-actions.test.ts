@@ -9,7 +9,7 @@ test('never offers Run Phase for non-approval events, even when connected', () =
 
 test('filters actions that cannot succeed', () => {
   const value = task({ worktreeExists: false });
-  expect(notificationActions({ kind: 'approvalRequired', issue: value.issue, title: '', message: '', fingerprint: '', prUrl: null }, value, undefined)).toEqual(['Open Dashboard']);
+  expect(notificationActions({ kind: 'approvalRequired', issue: value.issue, title: '', message: '', fingerprint: '', prUrl: null }, value, undefined, true)).toEqual(['Open Dashboard']);
 });
 
 test('omits Run Phase while disconnected but preserves safe actions', () => {

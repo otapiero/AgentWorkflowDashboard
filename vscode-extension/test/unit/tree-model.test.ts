@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
 
-import { buildChildren, severityFor } from '../../src/tree-model.ts';
+import { buildChildren } from '../../src/tree-model.ts';
 import { config, task, taskWithPath } from './fixtures.ts';
 import type { TaskStoreSnapshot } from '../../src/task-store.ts';
 
 function snapshot(tasks = [task()]): TaskStoreSnapshot {
-  return { config, tasks, attentionTransitions: new Map(tasks.filter((item) => item.derived.needsYou).map((item) => [item.issue, item.lastReconciledAt ?? ''])), poll: null, connection: 'connected', isBaselineReady: true };
+  return { config, tasks, attentionTransitions: new Map(tasks.filter((item) => item.derived.needsYou).map((item) => [item.issue, item.lastReconciledAt ?? ''])), poll: null, connection: 'connected' };
 }
 
 describe('tree model', () => {
@@ -36,25 +36,26 @@ describe('tree model', () => {
   });
 
   test('sorts attention by structured severity, transition time, then issue', () => {
-    const bad = task({ issue: 7, needsYou: true, checks: 'failure', lastReconciledAt: '2026-08-03T12:00:00.000Z' });
+    const bad = task({ issue: 10, needsYou: true, lastReconciledAt: '2026-08-03T10:00:00.000Z' });
+    bad.integration.review.decision = 'CHANGES_REQUESTED';
     const warnLater = task({ issue: 9, needsYou: true, lastReconciledAt: '2026-08-03T12:00:00.000Z' });
     const warnEarlier = task({ issue: 8, needsYou: true, lastReconciledAt: '2026-08-03T11:00:00.000Z' });
-    expect(buildChildren(snapshot([warnLater, bad, warnEarlier]), undefined, 'section:attention').map((node) => node.id)).toEqual(['task:attention:7', 'task:attention:9', 'task:attention:8']);
+    const tied = task({ issue: 7, needsYou: true, lastReconciledAt: '2026-08-03T11:00:00.000Z' });
+    expect(buildChildren(snapshot([warnLater, bad, warnEarlier, tied]), undefined, 'section:attention').map((node) => node.id)).toEqual(['task:attention:10', 'task:attention:9', 'task:attention:7', 'task:attention:8']);
   });
 
   test('uses structured attention signals for severity', () => {
-    expect(severityFor(task({ checks: 'failure' }))).toBe('bad');
-    const requested = task(); requested.integration.review.decision = 'CHANGES_REQUESTED';
-    expect(severityFor(requested)).toBe('bad');
-    const unresolved = task(); unresolved.integration.review.unresolvedThreads = 1;
-    expect(severityFor(unresolved)).toBe('warn');
+    const unresolved = task();
+    unresolved.integration.review.unresolvedThreads = 1;
+    expect(buildChildren(snapshot([unresolved]), undefined, 'phase:implement')).toMatchObject([{ severity: 'warn' }]);
   });
 
-  test('groups all tasks by configured pipeline order and filters issue title and phase', () => {
+  test('groups tasks by configured pipeline order and filters by issue or phase', () => {
     const tasks = [task({ issue: 2, phase: 'ci' }), task({ issue: 1, phase: 'plan' })];
-    expect(buildChildren(snapshot(tasks), undefined, 'section:all').map((node) => node.id)).toEqual(['phase:plan', 'phase:ci']);
-    expect(buildChildren(snapshot(tasks), undefined, 'phase:plan', 'task 1').map((node) => node.id)).toEqual(['task:all:plan:1']);
-    expect(buildChildren(snapshot(tasks), undefined, 'phase:ci', 'ci').map((node) => node.id)).toEqual(['task:all:ci:2']);
+    const board = { ...snapshot(tasks), config: { ...config, pipeline: [...config.pipeline].reverse() } };
+    expect(buildChildren(board, undefined, 'section:all').map((node) => node.id)).toEqual(['phase:ci', 'phase:plan']);
+    expect(buildChildren(board, undefined, 'section:all', '1').map((node) => node.id)).toEqual(['phase:plan']);
+    expect(buildChildren(board, undefined, 'section:all', 'ci').map((node) => node.id)).toEqual(['phase:ci']);
   });
 
   test('rests tasks in inbox, merged and done even when the pipeline does not configure them', () => {

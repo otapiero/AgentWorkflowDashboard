@@ -40,10 +40,6 @@ test('wrong repository and unexpected sessions cannot replace collection', () =>
   expect(acceptSnapshot(state, { ...snapshot(9), projectId: 'other' }, 0)).toBe(state);
   expect(acceptNote(state, { ...snapshot(9, 'other'), note: n }, 0)).toBe(state);
 });
-test('unavailable status preserves collection and remains separate from loading', () => {
-  const state = acceptStatus(acceptSnapshot(initialNotesState('p'), snapshot(), 0), { projectId: 'p', serverSessionId: 's1', available: false, code: 'NOTES_STORE_INVALID', error: 'Cannot read notes' }, 0);
-  expect(state.notes).toEqual([n]); expect(state.loading).toBe(false); expect(state.error).toBe('Cannot read notes'); expect(state.available).toBe(false);
-});
 test.each([1, 2])('same-session snapshot revision %s cannot clear unavailable status', revision => {
   const state = acceptStatus(acceptSnapshot(initialNotesState('p'), snapshot(), 0), unavailable, 0);
   const next = acceptSnapshot(state, snapshot(revision), 0);

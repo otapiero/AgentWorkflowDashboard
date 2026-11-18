@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { customPhase, resolveRunPhase } from '../src/shared/custom-run.ts';
+import { resolveRunPhase } from '../src/shared/custom-run.ts';
 import type { PhaseConfig } from '../src/shared/types.ts';
 
 const pipeline: PhaseConfig[] = [
@@ -10,24 +10,14 @@ const pipeline: PhaseConfig[] = [
 
 const source = { pipeline, agentNames: ['claude', 'codex'] };
 
-describe('customPhase', () => {
+describe('resolveRunPhase', () => {
   it('inherits the plan phase actor', () => {
-    expect(customPhase(source).actor).toBe('codex');
+    expect(resolveRunPhase(source, 'custom')?.actor).toBe('codex');
   });
 
   it('falls back to the first configured agent when there is no plan phase', () => {
     const noPlan = { pipeline: [pipeline[1]!], agentNames: ['copilot'] };
-    expect(customPhase(noPlan).actor).toBe('copilot');
-  });
-});
-
-describe('resolveRunPhase', () => {
-  it('returns the synthetic phase for the custom id', () => {
-    expect(resolveRunPhase(source, 'custom')!.label).toBe('Custom run');
-  });
-
-  it('returns a real pipeline phase by id', () => {
-    expect(resolveRunPhase(source, 'implement')!.command).toBe('mc-implementer');
+    expect(resolveRunPhase(noPlan, 'custom')?.actor).toBe('copilot');
   });
 
   it('returns null for an unknown id and for undefined', () => {

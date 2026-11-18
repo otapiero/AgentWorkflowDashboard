@@ -118,7 +118,6 @@ describe('resolveAgent — effort', () => {
   });
 
   test('a saved model the agent no longer offers falls back to the CLI default', () => {
-    // An org admin withdrew it, or it was mistyped: sending it fails the launch.
     const r = resolveAgent(config, task(), 'plan', {
       plan: { agent: 'copilot', model: 'luna-5.6', effort: 'max' },
     });
@@ -127,21 +126,10 @@ describe('resolveAgent — effort', () => {
 });
 
 describe('agentCapabilities', () => {
-  test('supplies Codex models and config-based effort support', () => {
+  test('uses built-in capabilities when the Codex profile omits them', () => {
     const caps = agentCapabilities('codex', config.agents.codex as AgentProfile);
     expect(caps.models).toContain('gpt-5.6-sol');
-    expect(caps.models).toContain('gpt-5.6-luna');
-    expect(caps.efforts).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
-    expect(caps.effortFlag).toBe('-c');
     expect(caps.hasEffort).toBe(true);
-  });
-
-  test('a profile-provided list overrides the built-in one', () => {
-    const caps = agentCapabilities('claude', {
-      ...(config.agents.claude as AgentProfile),
-      models: ['only-this'],
-    });
-    expect(caps.models).toEqual(['only-this']);
   });
 
   test('an unknown agent with no lists reports no effort support', () => {

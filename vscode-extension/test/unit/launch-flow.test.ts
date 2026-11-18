@@ -26,11 +26,12 @@ describe('runLaunchFlow', () => {
     expect(received.map((item) => item.value)).toEqual(['codex', 'claude']);
   });
 
-  test('uses spawnable phases and valid pinned selections', async () => {
+  test('offers only spawnable phases and confirms the chosen launch', async () => {
     const choices = picker(['implement', 'codex', 'gpt-5.6-sol', 'high', 'confirm']);
     const result = await runLaunchFlow(task({ phase: 'ci' }), config, choices);
+    expect(choices.offered[0]?.map(({ value }) => value)).toEqual(['plan', 'implement']);
     expect(result).toEqual({ phase: 'implement', agent: 'codex', model: 'gpt-5.6-sol', effort: 'high' });
-    expect(choices.prompts).toEqual(['Phase', 'Agent', 'Model', 'Reasoning effort', 'Run #3060 · implement with codex · gpt-5.6-sol · high?']);
+    expect(choices.prompts.at(-1)).toBe('Run #3060 · implement with codex · gpt-5.6-sol · high?');
   });
 
   test('initializes from the selected phase instead of the current-phase pin', async () => {
@@ -58,8 +59,8 @@ describe('runLaunchFlow', () => {
   });
 
   test.each([0, 1, 2, 3, 4])('returns null when cancelled at step %i', async (step) => {
-    const answers = ['implement', 'codex', 'gpt-5.6-sol', 'high', 'confirm'];
-    answers[step] = undefined as unknown as string;
+    const answers: Array<string | undefined> = ['implement', 'codex', 'gpt-5.6-sol', 'high', 'confirm'];
+    answers[step] = undefined;
     expect(await runLaunchFlow(task(), config, picker(answers))).toBeNull();
   });
 });

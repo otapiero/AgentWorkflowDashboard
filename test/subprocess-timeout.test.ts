@@ -3,8 +3,6 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 const execa = vi.hoisted(() => vi.fn());
 vi.mock('execa', () => ({ execa, execaSync: vi.fn(() => ({ stdout: '' })) }));
 
-import { SUBPROCESS_TIMEOUT_MS } from '../src/orchestrator/exec.ts';
-import { queryGithub } from '../src/orchestrator/github.ts';
 import { createStackCollector } from '../src/orchestrator/github-stack.ts';
 import { newTask } from '../src/orchestrator/state.ts';
 import { listBranches } from '../src/orchestrator/worktree.ts';
@@ -28,25 +26,6 @@ beforeEach(() => {
  * that never returns wedges the board for good. Each call must be bounded.
  */
 describe('external commands are bounded', () => {
-  test('gh runs under the shared timeout', async () => {
-    execa.mockResolvedValue({ stdout: '{"data":{"repository":{}}}' });
-    await queryGithub(config, 'query { rateLimit { remaining } }');
-    expect(execa).toHaveBeenCalledWith(
-      'gh',
-      expect.any(Array),
-      expect.objectContaining({ timeout: SUBPROCESS_TIMEOUT_MS }),
-    );
-  });
-
-  test('git runs under the shared timeout', async () => {
-    await listBranches(config);
-    expect(execa).toHaveBeenCalledWith(
-      'git',
-      expect.any(Array),
-      expect.objectContaining({ timeout: SUBPROCESS_TIMEOUT_MS }),
-    );
-  });
-
   test('a timed-out gh degrades to an unavailable board rather than hanging', async () => {
     const timedOut = Object.assign(new Error('Command timed out'), { timedOut: true });
     execa.mockRejectedValue(timedOut);

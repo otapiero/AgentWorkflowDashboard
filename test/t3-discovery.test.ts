@@ -73,6 +73,13 @@ describe('discoverT3', () => {
       ok: false,
       reason: 'unreadable-runtime-file',
     });
+
+    const { origin, ...missingOrigin } = liveRuntime();
+    writeRuntime(missingOrigin);
+    expect(await discoverT3(fakeFetch({}))).toMatchObject({
+      ok: false,
+      reason: 'unreadable-runtime-file',
+    });
   });
 
   test('a runtime file naming a dead process does not count as running', async () => {

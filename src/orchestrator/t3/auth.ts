@@ -38,7 +38,7 @@ import { accessTokenSchema, safeParseT3 } from './schemas.ts';
  * rest of Mission Control's private state and never into the checkout.
  */
 
-export const T3_SCOPES = 'orchestration:read orchestration:operate';
+const T3_SCOPES = 'orchestration:read orchestration:operate';
 
 const GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:token-exchange';
 const SUBJECT_TOKEN_TYPE = 'urn:t3:params:oauth:token-type:environment-bootstrap';
@@ -54,12 +54,12 @@ const REFRESH_MARGIN_MS = 60_000;
  * about three minutes, so making every project mint its own would be unusable.
  * One pairing serves the machine.
  */
-export function t3CredentialPath(): string {
+function t3CredentialPath(): string {
   return join(mcRoot(), 't3-credential');
 }
 
 /** The exchanged access token, kept so a spent pairing token is never needed twice. */
-export function t3TokenCachePath(): string {
+function t3TokenCachePath(): string {
   return join(mcRoot(), 't3-token.json');
 }
 

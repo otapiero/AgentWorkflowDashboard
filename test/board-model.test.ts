@@ -47,13 +47,13 @@ describe('laneLayout', () => {
     expect(twenty!.grow).toBe(four!.grow);
   });
 
-  test('order is preserved exactly', () => {
+  test('preserves the configured lane order even with empty lanes', () => {
     const layout = laneLayout([
-      { id: 'inbox' as Phase, count: 0 },
-      { id: 'plan' as Phase, count: 3 },
       { id: 'done' as Phase, count: 0 },
+      { id: 'plan' as Phase, count: 3 },
+      { id: 'inbox' as Phase, count: 0 },
     ]);
-    expect(layout.map((l) => l.id)).toEqual(['inbox', 'plan', 'done']);
+    expect(layout.map((l) => l.id)).toEqual(['done', 'plan', 'inbox']);
   });
 });
 
@@ -71,7 +71,6 @@ test('reuses unchanged render data across observations, but keeps changed and re
   const changed = { ...observed[1]!, title: 'Updated widget' };
   const next = reuseBoardTasks(previous, [changed, observed[0]!]);
   expect(next[0]).toMatchObject({ issue: 2, title: 'Updated widget' });
-  expect(next[0]).not.toHaveProperty('integration');
   expect(next[1]).toBe(previous[0]);
   expect(reuseBoardTasks(next, [])).toEqual([]);
 });

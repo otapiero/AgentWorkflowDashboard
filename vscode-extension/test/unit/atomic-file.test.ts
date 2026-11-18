@@ -26,18 +26,9 @@ test('acquires exclusively and releases its lock', async () => {
   expect(first).not.toBeNull();
   expect(await acquireAtomicLease(file, 10_000, () => 100)).toBeNull();
   await first!.release();
-  expect(await acquireAtomicLease(file, 10_000, () => 100)).not.toBeNull();
-});
-
-test('replaces only a stale lock', async () => {
-  const directory = await temporaryDirectory();
-  const file = join(directory, 'start.lock');
-  await writeFile(file, JSON.stringify({ token: 'old', createdAt: 100 }));
-
-  expect(await acquireAtomicLease(file, 1_000, () => 1_100)).toBeNull();
-  const lease = await acquireAtomicLease(file, 1_000, () => 1_101);
-  expect(lease).not.toBeNull();
-  expect(JSON.parse(await readFile(file, 'utf8'))).toMatchObject({ token: lease!.token, createdAt: 1_101 });
+  const next = await acquireAtomicLease(file, 10_000, () => 100);
+  expect(next).not.toBeNull();
+  await next!.release();
 });
 
 test('renews a live lease so it cannot be reclaimed after staleMs', async () => {
@@ -52,12 +43,18 @@ test('renews a live lease so it cannot be reclaimed after staleMs', async () => 
   await lease!.release();
 });
 
-test('takes over after a stopped heartbeat becomes stale', async () => {
+test.each([
+  { token: 'legacy', createdAt: 10 },
+  { token: 'stopped', createdAt: 0, heartbeat: 10 },
+])('takes over when $token reaches the stale threshold', async (record) => {
   const directory = await temporaryDirectory();
   const file = join(directory, 'start.lock');
-  await writeFile(file, JSON.stringify({ token: 'dead', createdAt: 0, heartbeat: 10 }));
+  await writeFile(file, JSON.stringify(record));
 
-  expect(await acquireAtomicLease(file, 30, () => 100)).not.toBeNull();
+  expect(await acquireAtomicLease(file, 30, () => 40)).toBeNull();
+  const lease = await acquireAtomicLease(file, 30, () => 41);
+  expect(lease).not.toBeNull();
+  await lease!.release();
 });
 
 test('stops lease heartbeat writes after release', async () => {
@@ -158,12 +155,15 @@ test('compacts a large quiescent journal below the fixed cap', async () => {
   const directory = await temporaryDirectory();
   const file = join(directory, 'start.lock');
   await writeFile(file, JSON.stringify({ token: 'stale-owner', createdAt: 0 }));
-  await writeFile(`${file}.mutation.journal`, Array.from({ length: 1_100 }, (_, index) => JSON.stringify({ ticket: `old-${index}`, released: true })).join('\n'));
+  const journal = `${file}.mutation.journal`;
+  const largeRecord = JSON.stringify({ ticket: 'old-ticket'.repeat(20), released: true });
+  await writeFile(journal, (largeRecord + '\n').repeat(750));
 
   const lease = await acquireAtomicLease(file, 1, () => 10);
 
   expect(lease).not.toBeNull();
-  expect((await stat(`${file}.mutation.journal`)).size).toBeLessThan(128 * 1024);
+  expect((await stat(journal)).size).toBeLessThan(128 * 1024);
+  await lease!.release();
 });
 
 test('release leaves a newer lock intact', async () => {

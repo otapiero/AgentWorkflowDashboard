@@ -8,7 +8,6 @@ export type StoreChange = {
   sections: ReadonlySet<'current' | 'attention' | 'all' | Phase>;
 } | {
   kind: 'full';
-  reason: 'baseline' | 'config';
 };
 
 export interface TaskStoreSnapshot {
@@ -17,7 +16,6 @@ export interface TaskStoreSnapshot {
   attentionTransitions: ReadonlyMap<number, string>;
   poll: PollMeta | null;
   connection: ConnectionState;
-  isBaselineReady: boolean;
 }
 
 type ChangeListener = (change: StoreChange) => void;
@@ -45,8 +43,7 @@ export class TaskStore {
     this.config = config;
     this.baselineReady = true;
     const targeted = this.replaceTasks(tasks);
-    if (firstBaseline) this.emit({ kind: 'full', reason: 'baseline' });
-    else if (pipelineChanged) this.emit({ kind: 'full', reason: 'config' });
+    if (firstBaseline || pipelineChanged) this.emit({ kind: 'full' });
     else if (targeted) this.emit(targeted);
   }
 
@@ -76,7 +73,6 @@ export class TaskStore {
       attentionTransitions: this.attentionTransitions,
       poll: this.poll,
       connection: this.connection,
-      isBaselineReady: this.baselineReady,
     };
   }
 
@@ -86,14 +82,6 @@ export class TaskStore {
 
   task(issue: number): TaskWithDerived | undefined {
     return this.tasksByIssue.get(issue);
-  }
-
-  attentionTasks(): readonly TaskWithDerived[] {
-    return Object.freeze(this.orderedTasks.filter((task) => task.derived.needsYou));
-  }
-
-  phaseTasks(phase: Phase): readonly TaskWithDerived[] {
-    return Object.freeze(this.orderedTasks.filter((task) => task.derived.displayPhase === phase));
   }
 
   private replaceTasks(tasks: readonly TaskWithDerived[]): Extract<StoreChange, { kind: 'targeted' }> | null {

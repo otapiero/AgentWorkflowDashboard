@@ -5,11 +5,9 @@ import { join } from 'node:path';
 
 import {
   activeProjectSlug,
-  configPath,
   listProjects,
   mcHome,
   projectSlug,
-  projectsDir,
   scriptsDir,
   setActiveProject,
 } from '../src/orchestrator/paths.ts';
@@ -87,12 +85,6 @@ describe('active project resolution', () => {
 });
 
 describe('the root/project split', () => {
-  test('project state lives under projects/<slug>', () => {
-    makeProject('a__one');
-    expect(mcHome()).toBe(join(projectsDir(), 'a__one'));
-    expect(configPath()).toBe(join(root, 'projects', 'a__one', 'config.yaml'));
-  });
-
   test('MC_HOME still overrides the project home outright', () => {
     // This is what keeps every existing test file working unchanged.
     const explicit = join(root, 'somewhere-else');

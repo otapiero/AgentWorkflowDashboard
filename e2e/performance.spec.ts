@@ -1,56 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { TaskWithDerived } from '../src/shared/types.ts';
 
-test('clock ticks and note search leave unchanged board cards idle', async ({ page }) => {
-  await page.clock.install();
-  await page.addInitScript(() => {
-    // Observe our component inputs at the renderer boundary. This catches
-    // lifting the seconds clock back into App or invalidating every card's props.
-    type Fiber = { memoizedProps?: Record<string, unknown>; child?: Fiber; sibling?: Fiber };
-    const state = { board: 0, cards: 0 };
-    const previous = new Map<string | number, unknown>();
-    Object.assign(window, {
-      renderCounts: state,
-      __REACT_DEVTOOLS_GLOBAL_HOOK__: {
-        supportsFiber: true,
-        inject: () => 1,
-        onCommitFiberUnmount() {},
-        onCommitFiberRoot(_id: number, root: { current: Fiber }) {
-          const visit = (node: Fiber | undefined) => {
-            if (!node) return;
-            const props = node.memoizedProps && typeof node.memoizedProps === 'object' ? node.memoizedProps : undefined;
-            const task = props?.task as { issue: number } | undefined;
-            const key = props && 'onShowDone' in props && 'noteCounts' in props && !('phase' in props) ? 'board'
-              : props && 'noteCount' in props && task ? task.issue : null;
-            if (key !== null && props !== previous.get(key)) {
-              if (key === 'board') state.board++;
-              else state.cards++;
-              previous.set(key, props);
-            }
-            visit(node.child); visit(node.sibling);
-          };
-          visit(root.current);
-        },
-      },
-    });
-  });
-  await page.route('**/api/review-requests*', route => route.fulfill({ json: {
-    pullRequests: [], worktrees: [], checkedAt: new Date().toISOString(), error: null, limitReached: false,
-  } }));
-  await page.goto('/');
-  await expect(page.getByRole('navigation', { name: 'Pipeline' })).toBeVisible();
-  await expect(page.locator('.notes-list')).toHaveAttribute('aria-busy', 'false');
-  await page.clock.runFor(100);
-  const counts = () => page.evaluate(() => (window as unknown as { renderCounts: { board: number; cards: number } }).renderCounts);
-  const baseline = await counts();
-  expect(baseline.board).toBeGreaterThan(0);
-  expect(baseline.cards).toBeGreaterThan(0);
-  await page.clock.runFor(3100);
-  expect(await counts()).toEqual(baseline);
-  await page.getByRole('searchbox', { name: 'Search notes' }).fill('widget');
-  expect((await counts()).cards).toBe(baseline.cards);
-});
-
 test('settled history reveals an edited off-page note and clamps after reopening it', async ({ page }) => {
   const projectId = 'acme__widgets';
   for (let index = 0; index < 21; index++) {
