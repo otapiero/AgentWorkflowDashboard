@@ -96,7 +96,7 @@ export function RunTab({ task, config, busy, run }: TabProps) {
             })}
         </div>
         {task.derived.derivedPhase === 'merged' && task.manualPhase !== 'done' && (
-          <p className="hint">Mark Done removes this issue's worktree and saves uncommitted files in its task folder.</p>
+          <p className="hint">With cleanup enabled, Mark Done removes the worktree and its uncommitted files. Save your work first.</p>
         )}
       </section>
     </>

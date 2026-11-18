@@ -100,6 +100,51 @@ describe('marking a task done', () => {
 });
 
 describe('rescuing a review checkout', () => {
+  test('skips ignored .NET build output while rescuing local files', async () => {
+    const { git, worktree } = await repoWithWorktree(3259);
+    mkdirSync(join(worktree, 'service', 'bin', 'Debug'), { recursive: true });
+    mkdirSync(join(worktree, 'service', 'obj'), { recursive: true });
+    mkdirSync(join(worktree, 'tools', 'bin'), { recursive: true });
+    writeFileSync(join(worktree, '.gitignore'), '**/bin/\n**/obj/\n.env\n');
+    writeFileSync(join(worktree, 'service', 'service.csproj'), '<Project />');
+    writeFileSync(join(worktree, 'service', 'bin', 'run.ps1'), 'original');
+    await git(['-C', worktree, 'add', '-f', 'service/bin/run.ps1']);
+    await git(['-C', worktree, '-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'add script']);
+    writeFileSync(join(worktree, 'service', 'bin', 'run.ps1'), 'edited');
+    writeFileSync(join(worktree, 'service', 'bin', 'Debug', 'service.dll'), 'build output');
+    writeFileSync(join(worktree, 'service', 'obj', 'project.assets.json'), 'restore output');
+    writeFileSync(join(worktree, 'tools', 'bin', 'notes.md'), 'local instructions');
+    writeFileSync(join(worktree, '.env'), 'LOCAL_SETTING=x');
+
+    const review = join(home, 'review');
+    const rescued = await rescueAndRemoveWorktree(worktree, review, 'issue-3259', async () => {});
+
+    expect(rescued.sort()).toEqual(['.env', '.gitignore', 'service/bin/run.ps1', 'service/service.csproj', 'tools/bin/notes.md']);
+    expect(readFileSync(join(review, 'rescued-from-worktree', 'run.ps1'), 'utf8')).toBe('edited');
+  });
+
+  test('skips the same build folder when retrying removal after Git deregisters the checkout', async () => {
+    const { worktree } = await repoWithWorktree(3259);
+    mkdirSync(join(worktree, 'service', 'obj'), { recursive: true });
+    writeFileSync(join(worktree, '.gitignore'), '**/obj/\n');
+    const project = join(worktree, 'service', 'service.csproj');
+    writeFileSync(project, '<Project />');
+    writeFileSync(join(worktree, 'service', 'obj', 'project.assets.json'), 'build output');
+    const review = join(home, 'review');
+
+    await expect(rescueAndRemoveWorktree(worktree, review, 'issue-3259', async () => {
+      rmSync(join(worktree, '.git'));
+      rmSync(project);
+      throw new Error('checkout still open');
+    })).rejects.toThrow('checkout still open');
+    writeFileSync(join(worktree, 'notes.md'), 'keep this');
+
+    const rescued = await rescueAndRemoveWorktree(worktree, review, 'issue-3259', async () => {});
+    expect(rescued).toContain('notes.md');
+    expect(rescued).not.toContain('service/obj/project.assets.json');
+    expect(existsSync(join(review, 'rescued-from-worktree', 'project.assets.json'))).toBe(false);
+  });
+
   test('flattens rescued files and suffixes basename collisions', async () => {
     const { worktree } = await repoWithWorktree(3259);
     mkdirSync(join(worktree, 'a'));

@@ -129,8 +129,9 @@ in a separate `review-pr-<number>` worktree and opens a VS Code window labeled
 Local reviews stay in the list across restarts and after the GitHub review
 request disappears. **Finish review** saves uncommitted and ignored files under
 the project's `reviews/pr-<number>/rescued-from-worktree` directory, saves local
-commits in `commits.bundle`, and removes the checkout. Disposable `node_modules`
-directories are excluded. If cleanup fails, the review stays available to retry.
+commits in `commits.bundle`, and removes the checkout. The rescue skips ignored
+`node_modules` and ignored `bin` and `obj` files beside a .NET project. If cleanup
+fails, the review stays available to retry.
 Finish review only manages the local checkout; submit your review on GitHub.
 
 Review windows use the **PR Review** VS Code profile by default. VS Code creates

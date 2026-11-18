@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, extname, join } from 'node:path';
+import { basename, extname, join, posix } from 'node:path';
 import { runGit } from './git.ts';
 
 import { removeWorktree } from './worktree.ts';
@@ -104,12 +104,40 @@ export interface CleanupResult {
   branchDeleted: boolean;
 }
 
+function ignoredRescuePaths(worktree: string, paths: string[], buildDirectories: Set<string>): string[] {
+  const dotnetProjects = new Map<string, boolean>();
+  return paths.filter((path) => {
+    if (!path) return false;
+    for (let dir = posix.dirname(path); dir !== '.'; dir = posix.dirname(dir)) {
+      if (buildDirectories.has(dir)) return false;
+      const name = posix.basename(dir).toLowerCase();
+      if (name === 'node_modules') return false;
+      if (name !== 'bin' && name !== 'obj') continue;
+
+      // A bin directory may contain local tools. Treat it as .NET build
+      // output only when it is beside a project file and Git ignores the file.
+      const parent = posix.dirname(dir);
+      if (!dotnetProjects.has(parent)) {
+        const entries = readdirSync(join(worktree, parent), { withFileTypes: true });
+        dotnetProjects.set(parent, entries.some((entry) => entry.isFile() && /\.(?:cs|fs|vb)proj$/i.test(entry.name)));
+      }
+      if (dotnetProjects.get(parent)) {
+        buildDirectories.add(dir);
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
 /** A deregistered checkout cannot answer git status. Save its remaining files. */
-function orphanFiles(worktree: string, relative = ''): string[] {
+function orphanFiles(worktree: string, buildDirectories: ReadonlySet<string>, relative = ''): string[] {
   return readdirSync(join(worktree, relative), { withFileTypes: true }).flatMap((entry) => {
     if (entry.name === '.git' || entry.name === 'node_modules') return [];
-    const path = join(relative, entry.name);
-    if (entry.isDirectory()) return orphanFiles(worktree, path);
+    const path = posix.join(relative, entry.name);
+    if (entry.isDirectory()) {
+      return buildDirectories.has(path) ? [] : orphanFiles(worktree, buildDirectories, path);
+    }
     return entry.isFile() ? [path] : [];
   });
 }
@@ -155,12 +183,14 @@ export async function rescueAndRemoveWorktree(
 ): Promise<string[]> {
   const destination = join(directory, 'rescued-from-worktree');
   const receiptPath = join(directory, 'worktree-cleanup.json');
-  let previous: { worktree: string; branch: string; rescued: string[] } | null = null;
+  let previous: { rescued: string[]; buildDirectories: string[] } | null = null;
   try {
     const receipt = JSON.parse(readFileSync(receiptPath, 'utf8'));
+    const buildDirectories = receipt.buildDirectories ?? [];
     if (receipt.worktree === worktree && receipt.branch === branch &&
-        Array.isArray(receipt.rescued) && receipt.rescued.every((p: unknown) => typeof p === 'string')) {
-      previous = receipt;
+        Array.isArray(receipt.rescued) && receipt.rescued.every((p: unknown) => typeof p === 'string') &&
+        Array.isArray(buildDirectories) && buildDirectories.every((p: unknown) => typeof p === 'string')) {
+      previous = { rescued: receipt.rescued, buildDirectories };
     }
   } catch { /* No completed rescue from an earlier attempt. */ }
 
@@ -171,16 +201,15 @@ export async function rescueAndRemoveWorktree(
   if (status.ok) {
     const ignored = await git(['ls-files', '--others', '--ignored', '--exclude-standard', '-z'], worktree);
     if (!ignored.ok) throw new Error('Could not inspect ignored files; no files were removed');
-    // Installed dependencies are disposable. Keep ignored local config and
-    // notes, including .env, alongside the normal uncommitted-file rescue.
-    const ignoredPaths = ignored.stdout.split('\0').filter((p) => p && !p.split('/').includes('node_modules'));
+    const buildDirectories = new Set<string>();
+    const ignoredPaths = ignoredRescuePaths(worktree, ignored.stdout.split('\0'), buildDirectories);
     rescued = rescueFilesTo(destination, worktree, [...new Set([...parseRescuePaths(status.stdout), ...ignoredPaths])]);
     mkdirSync(directory, { recursive: true });
-    writeFileSync(receiptPath, JSON.stringify({ worktree, branch, rescued }), 'utf8');
+    writeFileSync(receiptPath, JSON.stringify({ worktree, branch, rescued, buildDirectories: [...buildDirectories] }), 'utf8');
   } else if (previous) {
     // Windows may have deregistered the checkout before a locked folder
     // prevented deletion. Its saved rescue lets that deletion be retried.
-    rescued = [...previous.rescued, ...rescueFilesTo(destination, worktree, orphanFiles(worktree))];
+    rescued = [...previous.rescued, ...rescueFilesTo(destination, worktree, orphanFiles(worktree, new Set(previous.buildDirectories)))];
   } else {
     throw new Error('Could not inspect the worktree; no files were removed');
   }
