@@ -75,6 +75,7 @@ describe('toT3Fact', () => {
       activeTurnId: 'turn-1',
       awaitingApproval: false,
       lastError: null,
+      settled: false,
     });
   });
 
@@ -170,9 +171,6 @@ describe('toT3Fact', () => {
       ).toBe(false);
     });
 
-    test('an ordinary working thread is not settled', () => {
-      expect(toT3Fact(snapshotWith({}), 'thread-1')?.settled).toBe(false);
-    });
   });
 
   test('a session error is carried through for the card to show', () => {
@@ -212,27 +210,11 @@ describe('findProjectForWorkspace', () => {
   const snap = (projects: unknown[]) =>
     ({ projects, threads: [] }) as unknown as T3Snapshot;
 
-  test('adopts the project already rooted at the repo', () => {
-    expect(findProjectForWorkspace(snap([project()]), ROOT)).toBe('proj-1');
-  });
-
-  test('matches regardless of case, because T3 compares normalised paths', () => {
-    // T3's own error reported the root lowercased while the API returns it
-    // cased. An exact comparison would miss the project and then be refused
-    // permission to create the replacement.
+  test('matches regardless of case, slash direction, or a trailing separator', () => {
     expect(
       findProjectForWorkspace(
         snap([project()]),
-        'c:\\src\\WIDGETS',
-      ),
-    ).toBe('proj-1');
-  });
-
-  test('matches regardless of slash direction or a trailing separator', () => {
-    expect(
-      findProjectForWorkspace(
-        snap([project()]),
-        'C:/src/widgets\\',
+        'c:/src/WIDGETS\\',
       ),
     ).toBe('proj-1');
   });

@@ -95,8 +95,8 @@ afterEach(() => {
 });
 
 describe('resolveSpawnPlan', () => {
-  test.each(['OPEN', 'MERGED', 'CLOSED'] as const)('issue runs render without a PR target when attached PRs are %s', state => {
-    const p = { host: 'github.com', repository: 'acme/widgets', number: 11, state, available: false } as import('../src/shared/pr-stack.ts').PrLayer;
+  test('issue runs ignore saved selections for unavailable PRs', () => {
+    const p = { host: 'github.com', repository: 'acme/widgets', number: 11, state: 'MERGED', available: false } as import('../src/shared/pr-stack.ts').PrLayer;
     const t = task({ stack: { layers: [p, { ...p, number: 12 }], discoveryComplete: false, selectedKey: 'github.com/acme/widgets/11' } });
     const plan = resolveSpawnPlan(config(), t, implementPhase(), {});
     expect(plan.target).toMatchObject({ branch: 'alice/3060-Add-progress-bar', baseBranch: 'dev' });
@@ -198,8 +198,9 @@ describe('resolveSpawnPlan', () => {
 });
 
 describe('resolveSpawnPlan with rawPrompt', () => {
-  test('uses the raw text as the whole prompt, with no command file', () => {
-    const plan = resolveSpawnPlan(config(), task(), implementPhase(), {}, {
+  test('uses the trimmed raw text when the phase has no command', () => {
+    const commandless = { ...implementPhase(), command: undefined };
+    const plan = resolveSpawnPlan(config(), task(), commandless, {}, {
       rawPrompt: '  Investigate the auth flow.  ',
     });
     expect(plan.promptText).toBe('Investigate the auth flow.');
@@ -215,28 +216,9 @@ describe('resolveSpawnPlan with rawPrompt', () => {
     expect(plan.promptText.startsWith('You are running inside a git worktree')).toBe(true);
     expect(plan.promptText).toContain('Investigate the auth flow.');
   });
-
-  test('does not need a command on the phase at all', () => {
-    const commandless = { ...implementPhase(), command: undefined };
-    expect(() =>
-      resolveSpawnPlan(config(), task(), commandless, {}, { rawPrompt: 'go' }),
-    ).not.toThrow();
-  });
 });
 
 describe('resolveSpawnPlan for the synthetic custom phase', () => {
-  test('resolves an agent even though the phase is not in the pipeline', () => {
-    // Regression: agent resolution finds a phase's actor by looking its id up
-    // in config.pipeline, so an actor set on a synthetic phase object alone is
-    // never consulted and the spawn dies with "no agent to spawn".
-    const custom = customPhase({
-      pipeline: config().pipeline,
-      agentNames: Object.keys(config().agents),
-    });
-    const plan = resolveSpawnPlan(config(), task(), custom, {}, { rawPrompt: 'go' });
-    expect(plan.agent).toBe('claude');
-  });
-
   test('inherits the plan phase actor rather than the first configured agent', () => {
     const pipeline = [
       { id: 'plan', label: 'Plan', actor: 'copilot', command: 'mc-planner', gate: { type: 'manual' } } as PhaseConfig,

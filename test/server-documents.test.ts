@@ -83,6 +83,14 @@ afterEach(() => {
   rmSync(home, { recursive: true, force: true });
 });
 
+test('reports a missing plan to the document viewer', async () => {
+  const server = app();
+  const res = await server.inject({ url: `/api/tasks/${ISSUE}/plan` });
+  expect(res.statusCode).toBe(404);
+  expect(res.json()).toEqual({ error: 'no plan attached yet' });
+  await server.close();
+});
+
 describe('GET /api/tasks/:issue/artifacts/:name', () => {
   test('returns content, class and write target', async () => {
     seedArtifact('design.md', '# design\n', { original: true });
@@ -112,10 +120,10 @@ describe('GET /api/tasks/:issue/artifacts/:name', () => {
     await server.close();
   });
 
-  test('415s a binary artifact and names the reason', async () => {
-    seedArtifact('shot.png', Buffer.from([0x89, 0x00, 0x41]), { original: true });
+  test('415s binary content even when the artifact is named as Markdown', async () => {
+    seedArtifact('notes.md', Buffer.from([0x89, 0x00, 0x41]), { original: true });
     const server = app();
-    const res = await server.inject({ url: `/api/tasks/${ISSUE}/artifacts/shot.png` });
+    const res = await server.inject({ url: `/api/tasks/${ISSUE}/artifacts/notes.md` });
     expect(res.statusCode).toBe(415);
     expect(res.json()).toMatchObject({ reason: 'binary' });
     await server.close();

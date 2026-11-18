@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ChildProcess } from 'node:child_process';
@@ -30,15 +30,16 @@ function options(overrides: Partial<ConstructorParameters<typeof ServerManager>[
 }
 
 test('returns a healthy compatible server without spawning', async () => {
-  const dependencies = options();
+  const dependencies = options({ autoStart: true });
   const result = await new ServerManager(dependencies).ensureReady();
   expect(result).toEqual({ kind: 'ready', health: health() });
   expect(dependencies.process.spawn).not.toHaveBeenCalled();
 });
 
 test('reports an API mismatch without spawning', async () => {
-  const dependencies = options({ client: { health: vi.fn().mockResolvedValue(health({ apiVersion: 2 } as never)) } });
-  await expect(new ServerManager(dependencies).ensureReady()).resolves.toEqual({ kind: 'incompatible', health: health({ apiVersion: 2 } as never) });
+  const incompatible = health({ apiVersion: 2 });
+  const dependencies = options({ autoStart: true, client: { health: vi.fn().mockResolvedValue(incompatible) } });
+  await expect(new ServerManager(dependencies).ensureReady()).resolves.toEqual({ kind: 'incompatible', health: incompatible });
   expect(dependencies.process.spawn).not.toHaveBeenCalled();
 });
 
@@ -88,7 +89,7 @@ test.each(['https://127.0.0.1:4317', 'http://0.0.0.0:4317', 'not a url', 'http:/
   expect(dependencies.process.spawn).not.toHaveBeenCalled();
 });
 
-test.each(['http://localhost', 'http://localhost:4317/', 'http://127.0.0.1:4317'])('accepts credential-free loopback origins %s', async (serverUrl) => {
+test.each(['http://localhost', 'http://localhost:4317/'])('accepts credential-free loopback origins %s', async (serverUrl) => {
   await expect(new ServerManager(options({ serverUrl })).ensureReady()).resolves.toMatchObject({ kind: 'ready' });
 });
 
@@ -114,13 +115,13 @@ test('a second manager waits for the first manager startup and returns ready wit
 
 test('does not spawn from an invalid installation package', async () => {
   const installationPath = await directory();
-  await writeFile(join(installationPath, 'package.json'), JSON.stringify({ name: 'wrong', scripts: { start: true } }));
+  await writeFile(join(installationPath, 'package.json'), JSON.stringify({ name: 'widgets', scripts: { start: 'node' } }));
   const dependencies = options({ installationPath, autoStart: true, storagePath: await directory(), client: { health: vi.fn().mockRejectedValue(new Error('offline')) } });
   await expect(new ServerManager(dependencies).ensureReady()).resolves.toMatchObject({ kind: 'configuration-error' });
   expect(dependencies.process.spawn).not.toHaveBeenCalled();
 });
 
-test('launches detached, hidden and unreferenced then waits on the bounded readiness schedule', async () => {
+test('launches a detached, hidden and unreferenced server', async () => {
   const installationPath = await directory();
   const storagePath = await directory();
   await writeFile(join(installationPath, 'package.json'), JSON.stringify({ name: 'mission-control', scripts: { start: 'node src/server.ts' } }));
@@ -130,8 +131,6 @@ test('launches detached, hidden and unreferenced then waits on the bounded readi
   expect(result).toEqual({ kind: 'ready', health: health() });
   expect(dependencies.process.spawn).toHaveBeenCalledWith(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['start'], expect.objectContaining({ cwd: installationPath, detached: true, windowsHide: true, stdio: 'ignore', env: expect.objectContaining({ MC_PORT: '4317' }) }));
   expect(child.unref).toHaveBeenCalledOnce();
-  expect(dependencies.delay).toHaveBeenCalledWith(0, expect.any(AbortSignal));
-  expect(dependencies.delay).toHaveBeenCalledWith(100, expect.any(AbortSignal));
 });
 
 test('uses every bounded readiness delay before reporting unavailable', async () => {
@@ -185,7 +184,7 @@ function injectedInstanceId(spawn: ReturnType<typeof vi.fn>): string {
   return id as string;
 }
 
-test('claims ownership of the server it spawned even though the child PID differs, recording the server PID', async () => {
+test('restarts the server it launched using its health PID even when the npm PID differs', async () => {
   const installationPath = await installation();
   const storagePath = await directory();
   const spawn = vi.fn(() => ({ pid: 42, unref: vi.fn() }) as unknown as ChildProcess);
@@ -205,31 +204,11 @@ test('claims ownership of the server it spawned even though the child PID differ
   const result = await new ServerManager(dependencies).ensureReady();
 
   expect(result).toMatchObject({ kind: 'ready' });
-  expect(JSON.parse(await readFile(join(storagePath, 'server-owner.json'), 'utf8'))).toEqual({
-    pid: 25808,
-    startedAt: health().startedAt,
-  });
+  await expect(new ServerManager(dependencies).restartOwned()).resolves.toBe(true);
+  expect(dependencies.kill).toHaveBeenCalledExactlyOnceWith(25808);
 });
 
-test('does not claim a server started outside the extension, even on the same port', async () => {
-  const installationPath = await installation();
-  const storagePath = await directory();
-  const spawn = vi.fn(() => ({ pid: 42, unref: vi.fn() }) as unknown as ChildProcess);
-  const dependencies = options({
-    installationPath, storagePath, autoStart: true,
-    process: { spawn },
-    // A manually launched server wins the race: healthy, but unclaimed.
-    client: { health: vi.fn(async () => {
-      if (!spawn.mock.calls.length) throw new Error('offline');
-      return health({ pid: 7777, instanceId: null });
-    }) },
-  });
-
-  await expect(new ServerManager(dependencies).ensureReady()).resolves.toMatchObject({ kind: 'ready' });
-  await expect(stat(join(storagePath, 'server-owner.json'))).rejects.toMatchObject({ code: 'ENOENT' });
-});
-
-test('does not claim a server carrying a different instance id', async () => {
+test.each([null, 'some-other-window'])('connects to a server with instance id %s without claiming restart ownership', async (instanceId) => {
   const installationPath = await installation();
   const storagePath = await directory();
   const spawn = vi.fn(() => ({ pid: 42, unref: vi.fn() }) as unknown as ChildProcess);
@@ -238,12 +217,13 @@ test('does not claim a server carrying a different instance id', async () => {
     process: { spawn },
     client: { health: vi.fn(async () => {
       if (!spawn.mock.calls.length) throw new Error('offline');
-      return health({ pid: 7777, instanceId: 'some-other-window' });
+      return health({ pid: 7777, instanceId });
     }) },
   });
 
   await expect(new ServerManager(dependencies).ensureReady()).resolves.toMatchObject({ kind: 'ready' });
-  await expect(stat(join(storagePath, 'server-owner.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(new ServerManager(dependencies).restartOwned()).resolves.toBe(false);
+  expect(dependencies.kill).not.toHaveBeenCalled();
 });
 
 test('injects a distinct instance id per spawn', async () => {

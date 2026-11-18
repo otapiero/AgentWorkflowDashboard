@@ -27,7 +27,7 @@ export interface MissionUsage {
 const ZERO: TokenTotals = { input: 0, output: 0, cacheCreate: 0, cacheRead: 0, total: 0 };
 
 /** Case- and separator-insensitive path equality (Windows transcript cwd). */
-export function samePath(a: string, b: string): boolean {
+function samePath(a: string, b: string): boolean {
   const norm = (p: string) => p.replace(/[\\/]+/g, '/').toLowerCase().replace(/\/+$/, '');
   return norm(a) === norm(b);
 }

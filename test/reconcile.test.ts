@@ -252,19 +252,13 @@ describe('gates', () => {
 
 describe('displayPhase and manual override', () => {
 
-  test('a manual override wins for placement', () => {
+  test('a manual override changes placement while keeping the real CI badge', () => {
     const d = reconcile(openPr({ checks: 'failure' }), 'merge');
     expect(d.derivedPhase).toBe('ci');
     expect(d.displayPhase).toBe('merge');
+    expect(d.badges).toContainEqual(expect.objectContaining({ kind: 'ci', tone: 'bad' }));
   });
 
-  test('badges still reflect real facts under an override', () => {
-    // A card parked in Merge must still show its red CI badge.
-    const d = reconcile(openPr({ checks: 'failure' }), 'merge');
-    expect(d.badges).toContainEqual(
-      expect.objectContaining({ kind: 'ci', tone: 'bad' }),
-    );
-  });
 });
 
 describe('badges', () => {

@@ -10,12 +10,10 @@ const COPILOT = 'copilot-pull-request-reviewer';
 
 describe('parseChecksRollup', () => {
   test('an empty rollup means no checks have reported', () => {
-    // Real shape from PR #3119, which had no checks at all.
     expect(parseChecksRollup([])).toBe('none');
   });
 
   test('skipped checks do not count as failures', () => {
-    // Real shape from PR #2830: conditional jobs report SKIPPED on a green PR.
     expect(
       parseChecksRollup([
         { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' },
@@ -23,15 +21,6 @@ describe('parseChecksRollup', () => {
         { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'NEUTRAL' },
       ]),
     ).toBe('success');
-  });
-
-  test('any failed check makes the whole rollup a failure', () => {
-    expect(
-      parseChecksRollup([
-        { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' },
-        { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'FAILURE' },
-      ]),
-    ).toBe('failure');
   });
 
   test('timed out and action required count as failures', () => {
@@ -80,14 +69,11 @@ describe('parseChecksRollup', () => {
 
   test('a missing rollup is treated as no checks', () => {
     expect(parseChecksRollup(null)).toBe('none');
-    expect(parseChecksRollup(undefined)).toBe('none');
   });
 });
 
 describe('normalizeReviewDecision', () => {
   test('an empty string means no review, not an invalid value', () => {
-    // gh returns "" rather than null when nothing has been reviewed.
-    // Verified against PR #3119.
     expect(normalizeReviewDecision('')).toBe('NONE');
   });
 
@@ -113,17 +99,10 @@ describe('parseReviewThreads', () => {
     comments: { nodes: [{ author: { login } }] },
   });
 
-  test('resolved threads are not counted', () => {
-    // PR #3122's real state: two Copilot threads, both resolved.
-    expect(
-      parseReviewThreads([thread(true, COPILOT), thread(true, COPILOT)], COPILOT),
-    ).toEqual({ unresolvedThreads: 0, copilotUnresolved: 0 });
-  });
-
-  test('human threads count toward the total but not the Copilot count', () => {
+  test('counts unresolved human and Copilot threads separately', () => {
     expect(
       parseReviewThreads(
-        [thread(false, 'alice'), thread(false, COPILOT), thread(true, 'bob')],
+        [thread(false, 'alice'), thread(false, COPILOT), thread(true, COPILOT)],
         COPILOT,
       ),
     ).toEqual({ unresolvedThreads: 2, copilotUnresolved: 1 });

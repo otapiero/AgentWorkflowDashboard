@@ -12,7 +12,7 @@ import type { RouteContext } from './route-helpers.ts';
 
 const LAUNCHERS: LauncherKind[] = ['wt', 'vscode', 't3'];
 
-export function isValidLauncher(value: unknown): value is LauncherKind {
+function isValidLauncher(value: unknown): value is LauncherKind {
   return typeof value === 'string' && (LAUNCHERS as string[]).includes(value);
 }
 

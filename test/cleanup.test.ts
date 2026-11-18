@@ -41,29 +41,6 @@ function config(over: Partial<Config['cleanup']> = {}): Config {
   } as unknown as Config;
 }
 
-describe('parseRescuePaths', () => {
-  test('reads the path out of each porcelain line, whatever the status code', () => {
-    const out = ['?? notes.md', ' M src/app.ts', 'A  added.txt', 'MM both.ts'].join('\n');
-    expect(parseRescuePaths(out)).toEqual(['notes.md', 'src/app.ts', 'added.txt', 'both.ts']);
-  });
-
-  test('unquotes a path git had to quote for spaces or specials', () => {
-    // git quotes paths containing spaces or non-ASCII; the leading '?? ' is
-    // followed by the quoted name, which must be unwrapped before use.
-    const out = '?? "backend/# xAPI and Ministry LRS research.md"';
-    expect(parseRescuePaths(out)).toEqual(['backend/# xAPI and Ministry LRS research.md']);
-  });
-
-  test('ignores blank lines rather than yielding empty paths', () => {
-    expect(parseRescuePaths('?? a.txt\n\n  \n?? b.txt\n')).toEqual(['a.txt', 'b.txt']);
-  });
-
-  test('takes the destination of a rename, not the arrow form', () => {
-    // A staged rename reads "R  old -> new"; the file on disk is the new one.
-    expect(parseRescuePaths('R  old/name.ts -> new/name.ts')).toEqual(['new/name.ts']);
-  });
-});
-
 test('NUL status preserves arrows and whitespace and skips rename source records', () => {
   expect(parseRescuePaths('?? notes -> final.md\0??  spaced.md\0R  renamed.md\0old.md\0'))
     .toEqual(['notes -> final.md', ' spaced.md', 'renamed.md']);

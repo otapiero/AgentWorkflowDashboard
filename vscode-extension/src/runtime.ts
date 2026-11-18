@@ -20,8 +20,6 @@ export interface RuntimeDependencies {
   jitter(delayMs: number): number;
   presentConnectionFailure(result: EnsureReadyResult): Promise<'retry' | 'configure' | 'logs' | undefined>;
   log?: (message: string) => void;
-  lastOpenFolderArgsForTests?: () => readonly unknown[] | null;
-  seedTasksForTests?: (tasks: readonly TaskWithDerived[]) => void;
 }
 
 const reconnectDelays = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000] as const;
@@ -50,7 +48,6 @@ export class MissionControlRuntime implements vscode.Disposable {
     if (this.started) this.begin();
   }
 
-  lastOpenFolderArgsForTests(): readonly unknown[] | null { return this.deps.lastOpenFolderArgsForTests?.() ?? null; }
   requestSignal(): AbortSignal | undefined { return this.controller?.signal; }
   mutationTarget(): { client: Pick<MissionControlClient, 'spawn'>; signal: AbortSignal; generation: number } | null {
     if (this.deps.store.snapshot().connection !== 'connected' || !this.client || !this.controller || this.controller.signal.aborted) return null;
@@ -79,7 +76,6 @@ export class MissionControlRuntime implements vscode.Disposable {
     });
   }
   retry(): void { this.abort(); if (this.started) { this.deps.store.setConnection('starting'); this.begin(); } }
-  seedTasksForTests = (tasks: readonly TaskWithDerived[]): void => { this.deps.seedTasksForTests?.(tasks); };
 
   dispose(): void { this.started = false; this.abort(); }
 

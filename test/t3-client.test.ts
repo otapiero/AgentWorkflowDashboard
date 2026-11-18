@@ -34,7 +34,7 @@ const snapshot = {
       projectId: 'p1',
       title: '#3060 plan',
       branch: 'alice/3060-thing',
-      worktreePath: 'C:\\Users\\alice\\.mission-control\\projects\\acme__widgets\\worktrees\\issue-3060',
+      worktreePath: 'C:\\src\\widgets-worktree',
       status: 'running',
       activeRunId: 'run-1',
       activityRunStatus: 'running',
@@ -136,12 +136,12 @@ describe('status', () => {
 describe('fetchSnapshot', () => {
   test('sends the bearer token', async () => {
     const { impl, calls } = fakeServer();
-    await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).fetchSnapshot();
+    const result = await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).fetchSnapshot();
     const snapshotCall = calls.find((c) => c.url.includes('/api/orchestration/shell'));
     const headers = snapshotCall?.init?.headers as Record<string, string>;
     expect(headers.authorization).toBe('Bearer tok-1');
     expect(headers['x-t3-orchestration-protocol']).toBe('2');
-    expect(toT3Fact(await new T3Client({ fetchImpl: impl, credential: 'pair-abc' }).fetchSnapshot(), 'thread-1')).toMatchObject({ sessionStatus: 'running', activeTurnId: 'run-1' });
+    expect(toT3Fact(result, 'thread-1')).toMatchObject({ sessionStatus: 'running', activeTurnId: 'run-1' });
   });
 
   test('T3 not running yields undefined, not a throw', async () => {
@@ -171,18 +171,6 @@ describe('fetchSnapshot', () => {
         body: { ...snapshot, threads: [{ ...snapshot.threads[0], status: 'teleporting' }] },
       },
     });
-    const client = new T3Client({ fetchImpl: impl, credential: 'pair-abc' });
-    await expect(client.fetchSnapshot()).resolves.toBeUndefined();
-  });
-
-  test('a snapshot that is not JSON at all yields undefined and never throws', async () => {
-    const impl = (async (url: string) => {
-      if (String(url).includes('/api/orchestration/shell')) {
-        return new Response('<html>gateway error</html>', { status: 200 });
-      }
-      if (String(url).includes('/oauth/token')) return new Response(JSON.stringify(tokenReply), { status: 200 });
-      return new Response(JSON.stringify(descriptor), { status: 200 });
-    }) as unknown as typeof fetch;
     const client = new T3Client({ fetchImpl: impl, credential: 'pair-abc' });
     await expect(client.fetchSnapshot()).resolves.toBeUndefined();
   });
@@ -287,12 +275,13 @@ test('includes archived runs and maps pending requests and background activity',
   expect(toT3Fact(result, 'thread-1')).toMatchObject({ sessionStatus: 'running', awaitingApproval: true, settled: true });
 });
 
-test('status and launch diagnostics explain HTML and schema failures instead of asking to reconnect', async () => {
+test('an HTML snapshot yields no liveness and reports the API error for status and launch', async () => {
   const base = fakeServer();
   const impl = (async (url, init) => String(url).endsWith('/api/orchestration/shell')
     ? new Response('<html>app</html>', { headers: { 'content-type': 'text/html' } })
     : base.impl(url, init)) as typeof fetch;
   const client = new T3Client({ fetchImpl: impl, credential: 'pair-abc' });
+  await expect(client.fetchSnapshot()).resolves.toBeUndefined();
   await expect(client.status()).resolves.toMatchObject({ ok: false, reason: 'snapshot-unavailable', detail: expect.stringContaining('JSON') });
   await expect(client.requireSnapshot()).rejects.toThrow(/JSON/);
 });

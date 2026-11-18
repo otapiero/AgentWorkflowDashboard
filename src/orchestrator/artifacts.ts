@@ -54,7 +54,7 @@ export function diffFiles(before: string[], after: string[]): string[] {
 }
 
 /** A name not already in `existing`, suffixed `-1`, `-2`, … before the ext. */
-export function uniqueName(existing: string[], base: string): string {
+function uniqueName(existing: string[], base: string): string {
   if (!existing.includes(base)) return base;
   const dot = base.lastIndexOf('.');
   const stem = dot === -1 ? base : base.slice(0, dot);

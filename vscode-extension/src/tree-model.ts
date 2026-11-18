@@ -43,7 +43,7 @@ export function buildChildren(snapshot: TaskStoreSnapshot, currentUri: Workspace
   return [];
 }
 
-export function severityFor(task: TaskWithDerived): Severity {
+function severityFor(task: TaskWithDerived): Severity {
   if (task.integration.checks === 'failure' || task.integration.review.decision === 'CHANGES_REQUESTED') return 'bad';
   if (task.integration.review.unresolvedThreads > 0 || task.integration.review.copilotUnresolved > 0 || task.integration.approvalRequired || task.derived.needsYou) return 'warn';
   return 'normal';

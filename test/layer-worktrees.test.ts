@@ -60,11 +60,13 @@ test.each([false, true])('legacy upgrade preserves files and refuses dirty check
   expect((await execa('git', ['branch', '--show-current'], { cwd: legacy })).stdout).toBe('');
 });
 
-test('reports unpushed commits against the branch currently checked out in the shared folder', async () => {
+test('reports dirty files and unpushed commits in the shared checkout', async () => {
   await ensureLayerWorktree(config, newTask(1, 'Feature', 'alice'), target);
   await execa('git', ['commit', '--allow-empty', '-m', 'Local change'], { cwd: target.worktreePath });
+  writeFileSync(join(target.worktreePath, 'file.txt'), 'Uncommitted edit');
+  writeFileSync(join(target.worktreePath, 'notes.txt'), 'Untracked notes');
   const facts = await gatherGitFacts(config, 1, 'alice/parent');
-  expect(facts.unpushedCommits).toBe(1);
+  expect(facts).toMatchObject({ dirtyFileCount: 2, unpushedCommits: 1 });
 });
 test('refuses wrong-branch and occupied-branch checkouts instead of switching them', async () => {
   mkdirSync(worktreesDir(), { recursive: true });

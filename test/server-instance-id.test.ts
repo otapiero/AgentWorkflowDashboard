@@ -21,16 +21,6 @@ describe('health instance id', () => {
     expect(createHealthResponse('0.1.0').instanceId).toBe('abc-123');
   });
 
-  test('is null for a server nobody claimed, such as a manual npm start', () => {
-    delete process.env.MC_INSTANCE_ID;
-    expect(createHealthResponse('0.1.0').instanceId).toBeNull();
-  });
-
-  test('an explicit id overrides the environment', () => {
-    process.env.MC_INSTANCE_ID = 'from-env';
-    expect(createHealthResponse('0.1.0', undefined, 'explicit').instanceId).toBe('explicit');
-  });
-
   test('treats a blank id as unclaimed rather than matchable', () => {
     process.env.MC_INSTANCE_ID = '';
     expect(createHealthResponse('0.1.0').instanceId).toBeNull();

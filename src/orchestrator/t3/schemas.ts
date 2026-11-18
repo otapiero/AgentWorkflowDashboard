@@ -34,22 +34,6 @@ export const environmentDescriptorSchema = z.object({
 });
 export type EnvironmentDescriptor = z.infer<typeof environmentDescriptorSchema>;
 
-export const authSessionSchema = z.object({
-  authenticated: z.boolean(),
-  auth: z.object({
-    policy: z.enum([
-      'desktop-managed-local',
-      'loopback-browser',
-      'remote-reachable',
-      'unsafe-no-auth',
-    ]),
-    bootstrapMethods: z.array(z.string()).default([]),
-    sessionMethods: z.array(z.string()).default([]),
-    sessionCookieName: z.string().optional(),
-  }),
-});
-export type AuthSession = z.infer<typeof authSessionSchema>;
-
 export const accessTokenSchema = z.object({
   access_token: z.string().min(1),
   issued_token_type: z.string().optional(),

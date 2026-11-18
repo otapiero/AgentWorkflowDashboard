@@ -194,7 +194,7 @@ test('the plan preview drops script from agent-written Markdown', async ({ page 
   }
 });
 
-test('saving a plan still requests exactly one board reconcile', async ({ page }) => {
+test('saving a plan persists the edit and requests exactly one board reconcile', async ({ page }) => {
   const { content } = await (await page.request.get('/api/tasks/102/plan')).json();
   const drawer = await openTask(page, 102);
   await drawer.getByRole('tab', { name: 'Plan', exact: true }).click();
@@ -203,10 +203,13 @@ test('saving a plan still requests exactly one board reconcile', async ({ page }
   const reconciles: string[] = [];
   page.on('request', request => { if (request.url().endsWith('/api/reconcile')) reconciles.push(request.url()); });
   try {
-    await documents.locator('textarea').fill(`${content}\nUpdated widget plan.\n`);
+    const updated = `${content}\nUpdated widget plan.\n`;
+    await documents.locator('textarea').fill(updated);
     await documents.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(documents.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
     await expect.poll(() => reconciles.length).toBe(1);
+    const saved = await page.request.get('/api/tasks/102/plan');
+    expect(await saved.json()).toEqual({ content: updated });
   } finally {
     await page.request.put('/api/tasks/102/plan', { data: { content } });
   }

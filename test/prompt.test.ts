@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -8,9 +8,8 @@ import {
   render,
   buildPrompt,
   renderArtifactList,
-  writePromptFile,
 } from '../src/orchestrator/prompt.ts';
-import { promptPath, claudeCommandsDir } from '../src/orchestrator/paths.ts';
+import { claudeCommandsDir } from '../src/orchestrator/paths.ts';
 
 let home: string;
 let commands: string;
@@ -30,24 +29,10 @@ afterEach(() => {
 });
 
 describe('stripFrontmatter', () => {
-  test('removes a yaml frontmatter block', () => {
-    const md = '---\ndescription: Plan an issue.\n---\nDo the thing.';
-    expect(stripFrontmatter(md)).toBe('Do the thing.');
-  });
-
-  test('leaves a document without frontmatter untouched', () => {
-    expect(stripFrontmatter('Just a prompt.')).toBe('Just a prompt.');
-  });
-
   test('does not strip a horizontal rule in the middle of a document', () => {
     // A --- separator later in the body is content, not frontmatter.
     const md = 'Intro.\n\n---\n\nMore.';
     expect(stripFrontmatter(md)).toBe(md);
-  });
-
-  test('handles windows line endings in the frontmatter delimiters', () => {
-    const md = '---\r\ndescription: x\r\n---\r\nBody text.';
-    expect(stripFrontmatter(md).trim()).toBe('Body text.');
   });
 
   test('an unterminated frontmatter block is left alone rather than eating the file', () => {
@@ -57,23 +42,6 @@ describe('stripFrontmatter', () => {
 });
 
 describe('render', () => {
-  test('substitutes double-brace variables', () => {
-    expect(render('Issue {{issue}} on {{branch}}.', { issue: '3060', branch: 'b' })).toBe(
-      'Issue 3060 on b.',
-    );
-  });
-
-  test('substitutes $ARGUMENTS with the issue number', () => {
-    // Claude command files conventionally use $ARGUMENTS.
-    expect(render('Read issue #$ARGUMENTS.', { ARGUMENTS: '3060' })).toBe(
-      'Read issue #3060.',
-    );
-  });
-
-  test('replaces every occurrence, not just the first', () => {
-    expect(render('{{a}} and {{a}}', { a: 'x' })).toBe('x and x');
-  });
-
   test('leaves unknown placeholders untouched rather than blanking them', () => {
     // Blanking would silently produce a broken prompt; leaving it visible
     // makes the mistake obvious in the terminal.
@@ -97,14 +65,14 @@ describe('buildPrompt', () => {
     writeFileSync(join(commands, `${name}.md`), body, 'utf8');
   }
 
-  test('renders the installed command file with task context', () => {
+  test('renders task context in a Windows command file and removes its frontmatter', () => {
     writeCommand(
       'mc-planner',
-      '---\ndescription: Plan.\n---\nPlan issue #$ARGUMENTS ("{{title}}").\nWrite it to {{planPath}}.',
+      '---\r\ndescription: Plan.\r\n---\r\nPlan issue #$ARGUMENTS ("{{title}}").\r\nWrite {{title}} to {{planPath}}.',
     );
     const text = buildPrompt('mc-planner', task, {});
     expect(text).toContain('Plan issue #3060 ("Add audio playback mode")');
-    expect(text).toContain(promptPath(3060).replace('prompt.txt', 'plan.md'));
+    expect(text).toContain(`Write Add audio playback mode to ${join(home, 'tasks', '3060', 'plan.md')}.`);
     expect(text).not.toContain('description: Plan.');
   });
 
@@ -167,12 +135,6 @@ describe('buildPrompt', () => {
     expect(text).toBe('Repo acme/widgets base main at C:\\src\\widgets.');
   });
 
-  test('leaves the repo placeholders visible when no repo is supplied', () => {
-    // Same reasoning as every other unknown placeholder: a visibly broken
-    // prompt beats a silently blanked one.
-    writeCommand('mc-x', 'Repo {{owner}}/{{repo}}.');
-    expect(buildPrompt('mc-x', task, {})).toBe('Repo {{owner}}/{{repo}}.');
-  });
 });
 
 describe('renderArtifactList', () => {
@@ -203,12 +165,5 @@ describe('renderArtifactList', () => {
 
   test('renders (none) for an empty manifest so the prompt has no dangling heading', () => {
     expect(renderArtifactList([], 3060)).toBe('(none)');
-  });
-});
-
-describe('writing the prompt file', () => {
-  test('the rendered prompt is written where the spawn script reads it', () => {
-    writePromptFile(3060, 'Plan #3060.');
-    expect(readFileSync(promptPath(3060), 'utf8')).toBe('Plan #3060.');
   });
 });

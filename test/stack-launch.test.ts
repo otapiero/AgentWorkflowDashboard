@@ -75,8 +75,24 @@ test.each<LauncherKind>(['wt', 'vscode', 't3'])('%s launches the same selected l
   if (launcher === 't3') {
     expect(boundary.commands[0]).toMatchObject({ workspaceStrategy: { type: 'existing_worktree', branch: 'alice/child', worktreePath: preview.target.worktreePath } });
   } else if (launcher === 'vscode') {
-    const workspace = JSON.parse(readFileSync(join(runDir, 'workspace.code-workspace'), 'utf8'));
+    const workspaceFile = join(runDir, 'workspace.code-workspace');
+    expect(boundary.terminals).toContainEqual({
+      exe: 'code',
+      args: ['--disable-workspace-trust', '--new-window', workspaceFile],
+    });
+    const workspace = JSON.parse(readFileSync(workspaceFile, 'utf8'));
     expect(workspace.folders).toEqual([{ path: preview.target.worktreePath }]);
-    expect(workspace.tasks.tasks[0].args).toContain(join(runDir, 'spawn.json'));
-  } else expect(boundary.terminals.find(t => t.exe === 'wt')?.args).toContain(join(runDir, 'spawn.json'));
+    expect(workspace.tasks.tasks[0]).toMatchObject({
+      runOptions: { runOn: 'folderOpen' },
+      command: 'pwsh',
+      args: ['-NoExit', '-File', runPhaseScript(), '-SpecFile', join(runDir, 'spawn.json'),
+        '-GuardFile', join(runDir, 'vscode-launched')],
+    });
+  } else {
+    expect(boundary.terminals).toContainEqual({
+      exe: 'wt',
+      args: ['new-tab', '--title', '#1 implement', '-d', config.repo.path,
+        'pwsh', '-NoExit', '-File', runPhaseScript(), '-SpecFile', join(runDir, 'spawn.json')],
+    });
+  }
 });

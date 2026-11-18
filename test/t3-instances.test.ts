@@ -3,7 +3,6 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { t3ProviderCachePath } from '../src/orchestrator/t3/paths.ts';
 import { readInstanceReadiness } from '../src/orchestrator/t3/instances.ts';
 
 let home: string;
@@ -11,7 +10,7 @@ let home: string;
 function writeCache(instanceId: string, body: unknown): void {
   mkdirSync(join(home, 'caches'), { recursive: true });
   writeFileSync(
-    t3ProviderCachePath(instanceId),
+    join(home, 'caches', `${instanceId}.json`),
     typeof body === 'string' ? body : JSON.stringify(body),
     'utf8',
   );
@@ -43,6 +42,11 @@ describe('readInstanceReadiness', () => {
     expect(readiness.ready).toBe(true);
     expect(readiness.reason).toBeNull();
     expect(readiness.models).toEqual(['gpt-5.6-sol', 'gpt-5.6-terra']);
+  });
+
+  test('a ready provider without a model list still permits explicit model selection', () => {
+    writeCache('codex', { displayName: 'Codex', enabled: true, installed: true, status: 'ready' });
+    expect(readInstanceReadiness('codex')).toMatchObject({ ready: true, models: [] });
   });
 
   test("reads each model's select knobs, keeping only the ones with values", () => {
@@ -130,14 +134,11 @@ describe('readInstanceReadiness', () => {
 
   test('a corrupt cache file is not launchable rather than a crash', () => {
     writeCache('codex', '{ not json');
-    expect(() => readInstanceReadiness('codex')).not.toThrow();
     expect(readInstanceReadiness('codex').ready).toBe(false);
   });
 
   test('a path-traversing instance id cannot escape the caches directory', () => {
-    // Instance ids come from config.yaml, which is hand-edited; a typo must
-    // not turn into a read of an arbitrary file.
-    const readiness = readInstanceReadiness('../../userdata/server-runtime');
-    expect(readiness.ready).toBe(false);
+    writeCache('../other', { displayName: 'Other', enabled: true, installed: true, status: 'ready', models: [] });
+    expect(readInstanceReadiness('../other').ready).toBe(false);
   });
 });

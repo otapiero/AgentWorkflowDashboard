@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { resolveAgentValues, selectionForAgent, selectionForPhase } from '../src/shared/agent-selection.ts';
+import { selectionForAgent, selectionForPhase } from '../src/shared/agent-selection.ts';
 import type { AgentInfo, BoardConfig, TaskRecord } from '../src/shared/types.ts';
 
 const agents: AgentInfo[] = [
@@ -40,12 +40,6 @@ describe('shared agent resolution', () => {
     launcher: 'vscode',
   };
   const task = { overrides: undefined } as TaskRecord;
-
-  test('uses task, phase, actor, and agent-default precedence', () => {
-    expect(resolveAgentValues(config, task, 'plan')).toEqual({ agent: 'claude', model: null, effort: 'high' });
-    expect(resolveAgentValues(config, { ...task, overrides: { agent: 'codex', model: 'gpt-5.6-sol', effort: 'medium' } }, 'plan'))
-      .toEqual({ agent: 'codex', model: 'gpt-5.6-sol', effort: 'medium' });
-  });
 
   test('turns the resolved values into a capability-safe picker selection', () => {
     expect(selectionForPhase(config, task, 'implement')).toEqual({ agent: 'codex', model: 'gpt-5.6-sol', effort: 'medium' });

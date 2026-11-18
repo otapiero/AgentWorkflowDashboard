@@ -60,7 +60,7 @@ export class MissionControlTreeProvider implements vscode.TreeDataProvider<TreeN
     return [...children];
   }
 
-  applyStoreChange(change: StoreChange): void {
+  private applyStoreChange(change: StoreChange): void {
     if (change.kind === 'full') {
       this.cached.clear();
       this.emitter.fire(undefined);
